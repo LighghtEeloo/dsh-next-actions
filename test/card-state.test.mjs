@@ -3,8 +3,8 @@
  *
  * The React component composes these pure helpers on every render; testing the
  * combinations here catches the cross-state bugs that single-function tests
- * miss (send vs filled, edit/clear vs persisted fill, danger after reload,
- * preview ownership, conflict + send mode). No DOM or React needed.
+ * miss (edit/clear vs persisted fill, danger after reload, preview ownership,
+ * one-marker-per-chip, conflict merging). No DOM or React needed.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -12,9 +12,8 @@ import assert from 'node:assert/strict'
 import {
   deriveActiveFill,
   deriveCardView,
+  deriveChipMarker,
   derivePreviewText,
-  resolveConflictFill,
-  shouldAutoSubmit,
 } from '../lib/view-model.js'
 
 const suggestions = [
@@ -110,13 +109,12 @@ test('deriveCardView hides the filled marker after edit, clear and reload', () =
   assert.equal(restored.statusKey, 'status.filled')
 })
 
-test('deriveCardView follows the status priority dismissed > conflict > sent > filled', () => {
+test('deriveCardView follows the status priority dismissed > conflict > filled', () => {
   const safeFill = { draft: byId('sa').prompt, applied: appliedFor('sa') }
   const dangerFill = { draft: byId('sc').prompt, applied: appliedFor('sc') }
   const cases = [
-    [{ dismissed: true, conflict: true, sent: true, ...safeFill }, 'status.dismissed'],
-    [{ conflict: true, sent: true, ...safeFill }, 'status.conflict'],
-    [{ sent: true, ...safeFill }, 'status.sent'],
+    [{ dismissed: true, conflict: true, ...safeFill }, 'status.dismissed'],
+    [{ conflict: true, ...safeFill }, 'status.conflict'],
     [safeFill, 'status.filled'],
     [dangerFill, 'status.danger'],
     [{}, null],
@@ -124,19 +122,6 @@ test('deriveCardView follows the status priority dismissed > conflict > sent > f
   for (const [state, expected] of cases) {
     assert.equal(deriveCardView({ suggestions, ...state }).statusKey, expected)
   }
-})
-
-test('deriveCardView never shows a sent message as merely filled', () => {
-  const view = deriveCardView({
-    suggestions,
-    draft: byId('sa').prompt,
-    applied: appliedFor('sa'),
-    sent: true,
-  })
-  assert.equal(view.statusKey, 'status.sent')
-  // A sent pick is consumed: the status line says "sent" and the chip must no
-  // longer advertise the consumed fill.
-  assert.equal(view.filledId, null)
 })
 
 test('deriveCardView only reports danger while the dangerous fill is active', () => {
@@ -193,7 +178,7 @@ test('deriveCardView reports an unavailable composer independently of the rememb
   assert.equal(view.filledId, 'sa')
 })
 
-test('deriveCardView maps conflict resolution to a filled/danger marker without a send', () => {
+test('deriveCardView maps conflict resolution to a filled/danger marker', () => {
   const merged = `用户草稿\n\n${byId('sc').prompt}`
   const view = deriveCardView({
     suggestions,
@@ -206,7 +191,7 @@ test('deriveCardView maps conflict resolution to a filled/danger marker without 
 })
 
 // ---------------------------------------------------------------------------
-// derivePreviewText / shouldAutoSubmit / resolveConflictFill
+// derivePreviewText / deriveChipMarker
 // ---------------------------------------------------------------------------
 
 test('derivePreviewText falls back from hover to picked to recommended to first', () => {
@@ -217,18 +202,16 @@ test('derivePreviewText falls back from hover to picked to recommended to first'
   assert.equal(derivePreviewText({ suggestions: [] }), '')
 })
 
-test('shouldAutoSubmit only submits safe picks in the explicit send mode', () => {
-  assert.equal(shouldAutoSubmit({ clickMode: 'fill', danger: false }), false)
-  assert.equal(shouldAutoSubmit({ clickMode: 'send', danger: false }), true)
-  assert.equal(shouldAutoSubmit({ clickMode: 'send', danger: true }), false)
-  assert.equal(shouldAutoSubmit({ clickMode: 'send', danger: false, conflict: true }), false)
-  assert.equal(shouldAutoSubmit({}), false)
-})
-
-test('resolveConflictFill merges the draft and never authorizes a submit', () => {
-  const replace = resolveConflictFill({ draft: '用户草稿', prompt: '建议', mode: 'replace' })
-  assert.deepEqual(replace, { text: '建议', submit: false })
-  const append = resolveConflictFill({ draft: '用户草稿', prompt: '建议', mode: 'append' })
-  assert.deepEqual(append, { text: '用户草稿\n\n建议', submit: false })
-  assert.equal(resolveConflictFill({ draft: '用户草稿', prompt: '建议', mode: 'cancel' }), null)
+test('deriveChipMarker keeps exactly one marker and lets danger win', () => {
+  assert.equal(deriveChipMarker({ suggestion: byId('sc'), filledId: 'sc' }), 'danger')
+  assert.equal(deriveChipMarker({ suggestion: byId('sb'), filledId: 'sb' }), 'filled')
+  assert.equal(deriveChipMarker({ suggestion: byId('sa'), filledId: null }), 'recommended')
+  assert.equal(deriveChipMarker({ suggestion: byId('sb'), filledId: null }), null)
+  // Optional stance is ordering metadata, not a chip marker.
+  assert.equal(
+    deriveChipMarker({ suggestion: { id: 'so', stance: 'optional', prompt: 'p' }, filledId: null }),
+    null,
+  )
+  assert.equal(deriveChipMarker({}), null)
+  assert.equal(deriveChipMarker({ suggestion: null, filledId: 'x' }), null)
 })

@@ -65,17 +65,8 @@ test('clampSettings returns defaults for missing input', () => {
 })
 
 test('clampSettings keeps valid values', () => {
-  assert.deepEqual(
-    clampSettings({ maxPerTurn: 5, clickMode: 'send' }),
-    { maxPerTurn: 5, clickMode: 'send' },
-  )
-})
-
-test('clampSettings validates clickMode', () => {
-  assert.equal(clampSettings({ clickMode: 'send' }).clickMode, 'send')
-  assert.equal(clampSettings({ clickMode: 'fill' }).clickMode, 'fill')
-  assert.equal(clampSettings({ clickMode: 'blast' }).clickMode, 'fill')
-  assert.equal(clampSettings({ clickMode: 1 }).clickMode, 'fill')
+  assert.deepEqual(clampSettings({ maxPerTurn: 5 }), { maxPerTurn: 5 })
+  assert.deepEqual(clampSettings({ maxPerTurn: 'auto' }), { maxPerTurn: 'auto' })
 })
 
 test('clampSettings bounds maxPerTurn to 1..6', () => {
@@ -84,18 +75,19 @@ test('clampSettings bounds maxPerTurn to 1..6', () => {
 })
 
 test('clampSettings rejects non-integer maxPerTurn', () => {
-  assert.equal(clampSettings({ maxPerTurn: 3.5 }).maxPerTurn, 'auto')
-  assert.equal(clampSettings({ maxPerTurn: '4' }).maxPerTurn, 'auto')
+  assert.equal(clampSettings({ maxPerTurn: 3.5 }).maxPerTurn, DEFAULTS.maxPerTurn)
+  assert.equal(clampSettings({ maxPerTurn: '4' }).maxPerTurn, DEFAULTS.maxPerTurn)
   assert.equal(clampSettings({ maxPerTurn: 'auto' }).maxPerTurn, 'auto')
 })
 
-test('clampSettings drops the removed client-side enabled switch', () => {
+test('clampSettings drops the removed client-side enabled switch and legacy click mode', () => {
   assert.deepEqual(clampSettings({ enabled: false }), DEFAULTS)
-  assert.deepEqual(clampSettings({ enabled: true, maxPerTurn: 2 }), { maxPerTurn: 2, clickMode: 'fill' })
+  assert.deepEqual(clampSettings({ enabled: true, maxPerTurn: 2 }), { maxPerTurn: 2 })
   assert.equal('enabled' in clampSettings({ enabled: false }), false)
+  assert.equal('clickMode' in clampSettings({ clickMode: 'send' }), false)
   assert.deepEqual(
     Object.keys(clampSettings({ enabled: false, maxPerTurn: 3, clickMode: 'send' })).sort(),
-    ['clickMode', 'maxPerTurn'],
+    ['maxPerTurn'],
   )
 })
 
@@ -277,16 +269,17 @@ const displayModel = () => ({
   })),
 })
 
-test('buildDisplay slices to a fixed maxPerTurn and counts the rest', () => {
-  const display = buildDisplay(displayModel(), { maxPerTurn: 3 })
+test('buildDisplay defaults to 3 suggestions and counts the rest', () => {
+  const display = buildDisplay(displayModel(), DEFAULTS)
   assert.equal(display.items.length, 3)
   assert.equal(display.moreCount, 2)
   assert.equal(display.totalCount, 5)
+  assert.equal(display.autoCount, false)
   assert.equal(display.context, context)
 })
 
 test('buildDisplay auto mode shows every normalized suggestion', () => {
-  const display = buildDisplay(displayModel(), DEFAULTS)
+  const display = buildDisplay(displayModel(), { maxPerTurn: 'auto' })
   assert.equal(display.autoCount, true)
   assert.equal(display.items.length, 5)
   assert.equal(display.moreCount, 0)
@@ -302,7 +295,7 @@ test('buildDisplay honours a custom maxPerTurn', () => {
 test('buildDisplay ignores a legacy enabled setting', () => {
   // The Host config now owns the global gate: with no tool there is no model,
   // so a stale client-side `enabled: false` must not hide the card.
-  const display = buildDisplay(displayModel(), { enabled: false })
+  const display = buildDisplay(displayModel(), { enabled: false, maxPerTurn: 'auto' })
   assert.notEqual(display, null)
   assert.equal(display.items.length, 5)
 })
@@ -383,22 +376,19 @@ test('decodeSettings parses JSON, objects and defaults', () => {
 })
 
 test('settings round-trip through serializeSettings', () => {
-  const settings = { maxPerTurn: 6, clickMode: 'send' }
+  const settings = { maxPerTurn: 6 }
   assert.deepEqual(decodeSettings(serializeSettings(settings)), settings)
-  assert.deepEqual(
-    decodeSettings(serializeSettings({ maxPerTurn: 'auto' })),
-    { maxPerTurn: 'auto', clickMode: 'fill' },
-  )
+  assert.deepEqual(decodeSettings(serializeSettings({ maxPerTurn: 'auto' })), { maxPerTurn: 'auto' })
 })
 
-test('legacy settings JSON with the removed enabled key decodes without it', () => {
+test('legacy settings JSON with the removed enabled key and clickMode decodes without them', () => {
   const legacy = decodeSettings('{"enabled":false,"maxPerTurn":3,"clickMode":"send"}')
-  assert.deepEqual(legacy, { maxPerTurn: 3, clickMode: 'send' })
+  assert.deepEqual(legacy, { maxPerTurn: 3 })
   assert.equal('enabled' in legacy, false)
+  assert.equal('clickMode' in legacy, false)
   const roundTripped = decodeSettings(serializeSettings({ enabled: false, maxPerTurn: 3, clickMode: 'send' }))
-  assert.deepEqual(roundTripped, { maxPerTurn: 3, clickMode: 'send' })
-  assert.equal('enabled' in roundTripped, false)
-  assert.deepEqual(Object.keys(roundTripped).sort(), ['clickMode', 'maxPerTurn'])
+  assert.deepEqual(roundTripped, { maxPerTurn: 3 })
+  assert.deepEqual(Object.keys(roundTripped), ['maxPerTurn'])
 })
 
 test('decodeTurnState and serializeTurnState round-trip', () => {
@@ -415,15 +405,13 @@ test('turn state persists the last filled suggestion id', () => {
   assert.deepEqual(decodeTurnState({ dismissed: true, filledId: '' }), { dismissed: true, filledId: null })
 })
 
-test('cardStatusKey prioritizes dismissed, conflict, sent, then the active fill', () => {
+test('cardStatusKey prioritizes dismissed and conflict over the active fill', () => {
   assert.equal(cardStatusKey({}), null)
   assert.equal(cardStatusKey({ dismissed: true }), 'status.dismissed')
   assert.equal(cardStatusKey({ conflict: true }), 'status.conflict')
   assert.equal(cardStatusKey({ activeFill: { danger: false } }), 'status.filled')
   assert.equal(cardStatusKey({ activeFill: { danger: true } }), 'status.danger')
-  assert.equal(cardStatusKey({ sent: true, activeFill: { danger: true } }), 'status.sent')
-  assert.equal(cardStatusKey({ dismissed: true, conflict: true, sent: true }), 'status.dismissed')
-  assert.equal(cardStatusKey({ conflict: true, sent: true }), 'status.conflict')
+  assert.equal(cardStatusKey({ dismissed: true, conflict: true }), 'status.dismissed')
 })
 
 test('cardControlMode hides controls after dismissal', () => {
@@ -456,10 +444,7 @@ test('readSettingsFrom returns defaults for empty or corrupt storage', () => {
 test('writeSettingsTo round-trips clamped settings', () => {
   const storage = fakeStorage()
   assert.equal(writeSettingsTo(storage, { maxPerTurn: 99 }), true)
-  assert.deepEqual(readSettingsFrom(storage), {
-    maxPerTurn: 6,
-    clickMode: 'fill',
-  })
+  assert.deepEqual(readSettingsFrom(storage), { maxPerTurn: 6 })
 })
 
 test('writeSettingsTo reports unavailable storage', () => {

@@ -66,11 +66,14 @@ export const STYLES = `
 .dshns-btn.dshns-dismiss,
 .dshns-btn.dshns-restore {
   flex: none;
-  width: 28px;
-  min-width: 28px;
+  width: auto;
+  min-width: 0;
   height: 28px;
-  padding: 0;
+  padding: 0 8px;
+  gap: 4px;
   color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
 }
 .dshns-btn.dshns-dismiss:hover:not(:disabled),
 .dshns-btn.dshns-restore:hover:not(:disabled) {
@@ -90,27 +93,29 @@ export const STYLES = `
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dshns-tag {
-  display: inline-flex;
-  align-items: center;
+/* One inline state marker per chip; text first, color is never the only cue. */
+.dshns-marker {
   flex: none;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
+  margin-left: 2px;
+  color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent));
+  white-space: nowrap;
 }
-.dshns-tag-info { color: var(--dsw-alias-state-business-primary, var(--dsw-alias-label-secondary)); }
-.dshns-tag-warning { color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-label-secondary)); }
+.dshns-btn-primary .dshns-marker { color: inherit; opacity: .78; }
+.dshns-marker-danger { display: inline-flex; align-items: center; gap: 3px; }
+.dshns-warn {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--dsw-alias-state-warn-primary);
+}
+/* On-demand preview: no height is reserved while idle; it appears below the
+ * chips so switching chips cannot move the controls. */
 .dshns-preview {
-  /* Fixed slot: hovering between chips only changes the text, never the layout. */
-  box-sizing: border-box;
-  height: 56px;
-  margin-top: 10px;
-  padding: 8px 12px;
-  border-radius: var(--dsw-radius-md);
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: var(--dsw-radius-sm);
   background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent));
   color: var(--dsw-alias-label-secondary);
   overflow-wrap: anywhere;
@@ -121,12 +126,55 @@ export const STYLES = `
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
+.dshns-preview-label {
+  margin-right: 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+/* Conflict prompt: keep the target instruction and the current draft visible,
+ * then offer an append-first decision row. */
 .dshns-conflict {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   margin-top: 12px;
+}
+.dshns-conflict-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--dsw-radius-sm);
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.dshns-conflict-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+.dshns-conflict-label {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.dshns-conflict-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Conflict keeps the status text and the three actions on one row so the
+ * state is only ~24px taller than a resting card. */
+.dshns-statusbar-conflict {
+  margin-top: 8px;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 .dshns-btn {
   box-sizing: border-box;

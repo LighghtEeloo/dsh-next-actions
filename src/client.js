@@ -52,15 +52,17 @@ window.__ModuleLoader__.load({
       'card.more': 'More ({n})',
       'chip.recommended': 'Recommended',
       'chip.danger': 'Needs confirmation',
-      'chip.optional': 'Optional',
       'chip.filled': 'Filled',
       'status.filled': 'Filled into the input — review and send',
       'status.danger': 'This may be irreversible — review before sending',
       'status.dismissed': 'Dismissed',
       'status.conflict': 'The input already has content',
       'status.unavailable': 'The composer is unavailable',
+      'preview.label': 'Will fill',
+      'conflict.compareTarget': 'Will fill',
+      'conflict.compareDraft': 'Current draft',
+      'conflict.appendPrimary': 'Append to draft',
       'conflict.replace': 'Replace',
-      'conflict.append': 'Append',
       'conflict.cancel': 'Cancel',
       'fallback.context': 'Here are a few natural next steps.',
       'note.invalidArguments': 'The tool arguments were invalid',
@@ -78,11 +80,7 @@ window.__ModuleLoader__.load({
       'settings.hostGate': 'Cards are controlled by the plugin Host config (profile cordis.patch.yml → dsh-next-actions → enabled). Turning it off removes the tool and the prompt guidance.',
       'settings.maxPerTurn': 'Suggestions per reply',
       'settings.auto': 'Auto',
-      'settings.clickMode': 'Clicking a suggestion',
-      'settings.clickFill': 'Fill input',
-      'settings.clickSend': 'Send',
-      'status.sent': 'Sent as your message',
-      'settings.note': 'Clicking a suggestion fills the input; choose Send to submit immediately. Dangerous suggestions always fill only.',
+      'settings.note': 'Clicking a suggestion only fills the input; nothing is sent automatically. Dangerous suggestions are marked “Needs confirmation”.',
       'settings.reset': 'Reset card states',
       'settings.saved': 'Saved',
       'settings.resetDone': 'Card states cleared',
@@ -99,15 +97,17 @@ window.__ModuleLoader__.load({
       'card.more': '还有 {n} 条',
       'chip.recommended': '推荐',
       'chip.danger': '需确认',
-      'chip.optional': '可以不做',
       'chip.filled': '已填入',
       'status.filled': '已填入输入框，可修改后发送',
       'status.danger': '该操作可能不可逆，请确认后发送',
       'status.dismissed': '已忽略',
       'status.conflict': '输入框已有内容',
       'status.unavailable': '输入框暂不可用',
+      'preview.label': '将填入',
+      'conflict.compareTarget': '将填入',
+      'conflict.compareDraft': '当前草稿',
+      'conflict.appendPrimary': '追加到末尾',
       'conflict.replace': '替换',
-      'conflict.append': '追加',
       'conflict.cancel': '取消',
       'fallback.context': '接下来可以：',
       'note.invalidArguments': '工具参数无效',
@@ -125,11 +125,7 @@ window.__ModuleLoader__.load({
       'settings.hostGate': '卡片总开关已移到插件的 Host 配置（profile 的 cordis.patch.yml → dsh-next-actions → enabled）；关闭后不再注册工具与提示词。',
       'settings.maxPerTurn': '每轮建议条数',
       'settings.auto': '自动',
-      'settings.clickMode': '点击建议时',
-      'settings.clickFill': '填入输入框',
-      'settings.clickSend': '直接发送',
-      'status.sent': '已作为你的消息发送',
-      'settings.note': '点击建议默认只填入输入框；选择“直接发送”会立即发出；危险建议始终只填入。',
+      'settings.note': '点击建议只会填入输入框，不会自动发送；危险建议会标记「需确认」。',
       'settings.reset': '重置卡片状态',
       'settings.saved': '已保存',
       'settings.resetDone': '卡片状态已清理',
@@ -270,10 +266,6 @@ window.__ModuleLoader__.load({
         children)
     }
 
-    function Tag({ tone = 'muted', children }) {
-      return h('span', { className: `dshns-tag dshns-tag-${tone}` }, children)
-    }
-
     // -----------------------------------------------------------------------
     // FoldedText — copied algorithm from the official card frame
     // -----------------------------------------------------------------------
@@ -344,7 +336,6 @@ window.__ModuleLoader__.load({
       const [turnState, setTurnState] = React.useState(() => readTurnState(sessionId, turnNumber))
       const [expanded, setExpanded] = React.useState(false)
       const [conflict, setConflict] = React.useState(null)
-      const [sent, setSent] = React.useState(false)
       const [preview, setPreview] = React.useState(null)
       const appliedRef = React.useRef(null)
 
@@ -431,28 +422,24 @@ window.__ModuleLoader__.load({
       const mode = cardControlMode({ dismissed: turnState.dismissed, conflict: conflict !== null })
       // The draft is authoritative for the "filled" marker and the danger
       // warning: a click or a restored id only counts while the composer still
-      // contains exactly what the card wrote. `sent` outranks it so a submitted
-      // message never shows "filled into the input" afterwards.
+      // contains exactly what the card wrote.
       const view = deriveCardView({
         suggestions: model.suggestions,
         draft,
         persistedId: turnState.filledId,
         applied: appliedRef.current,
         preview,
-        sent,
         conflict: conflict !== null,
         dismissed: turnState.dismissed,
         canWrite,
       })
       const status = view.statusKey
-      const previewText = view.previewText
       const items = expanded ? model.suggestions : display.items
       const moreCount = expanded ? 0 : display.moreCount
       const title = t('card.title')
 
-      function applyFill(text, suggestion, owned = true, submit = true) {
+      function applyFill(text, suggestion, owned = true) {
         if (!canWrite) return
-        const mode = readSettings().clickMode
         const danger = suggestion.danger === true
         inputActions.setDraft(text)
         // Keep the exact text we wrote and whether the card owns it: an
@@ -471,21 +458,11 @@ window.__ModuleLoader__.load({
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPreview(null)
-        setSent(false)
-        // Dangerous suggestions and conflict resolution always fill only;
-        // only the explicit Send-mode opt-in may submit a safe pick, and only
-        // when the host actually exposes `submit`.
-        if (submit && typeof inputActions.submit === 'function' && shouldAutoSubmit({ clickMode: mode, danger })) {
-          inputActions.submit()
-          setSent(true)
-          return
-        }
         focusComposer(sessionId)
       }
 
       function onPick(suggestion) {
         if (!canWrite) return
-        setSent(false)
         const applied = appliedRef.current
         const action = resolveDraftAction({
           draft,
@@ -503,13 +480,10 @@ window.__ModuleLoader__.load({
         if (conflict === null) return
         setConflict(null)
         setPreview(null)
-        setSent(false)
         if (choice === 'cancel') return
-        // Conflict resolution is always fill-only, even when the card's click
-        // mode is "send": the user has not seen the merged draft yet.
-        const plan = resolveConflictFill({ draft, prompt: conflict.prompt, mode: choice })
-        if (plan === null) return
-        applyFill(plan.text, conflict, choice === 'replace', plan.submit)
+        const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })
+        if (merged === null) return
+        applyFill(merged, conflict, choice === 'replace')
       }
 
       function onDismiss() {
@@ -518,7 +492,6 @@ window.__ModuleLoader__.load({
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPreview(null)
-        setSent(false)
       }
 
       function onRestore() {
@@ -527,11 +500,19 @@ window.__ModuleLoader__.load({
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPreview(null)
-        setSent(false)
       }
 
       function renderChip(suggestion) {
-        const filled = view.filledId !== null && suggestion.id === view.filledId
+        const marker = deriveChipMarker({ suggestion, filledId: view.filledId })
+        const markerNode = marker === 'danger'
+          ? h('span', { className: 'dshns-marker dshns-marker-danger' },
+            h(WarningIcon, { className: 'dshns-warn' }),
+            t('chip.danger'))
+          : marker === 'filled'
+            ? h('span', { className: 'dshns-marker' }, t('chip.filled'))
+            : marker === 'recommended'
+              ? h('span', { className: 'dshns-marker' }, t('chip.recommended'))
+              : null
         return h(Button, {
           key: suggestion.id,
           variant: suggestion.recommended === true ? 'primary' : 'ghost',
@@ -546,10 +527,7 @@ window.__ModuleLoader__.load({
           onBlur: () => { setPreview(null) },
         },
         h('span', { className: 'dshns-chip-label' }, suggestion.label),
-        filled ? h(Tag, { tone: 'muted' }, t('chip.filled')) : null,
-        suggestion.recommended === true ? h(Tag, { tone: 'info' }, t('chip.recommended')) : null,
-        suggestion.danger === true ? h(Tag, { tone: 'warning' }, t('chip.danger')) : null,
-        suggestion.stance === 'optional' ? h(Tag, { tone: 'muted' }, t('chip.optional')) : null)
+        markerNode)
       }
 
       const controls = mode === 'suggestions'
@@ -573,47 +551,63 @@ window.__ModuleLoader__.load({
             : null)
         : mode === 'conflict'
           ? h('div', { className: 'dshns-conflict' },
-            h(Button, { variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('replace') } }, t('conflict.replace')),
-            h(Button, { variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('append') } }, t('conflict.append')),
-            h(Button, { variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('cancel') } }, t('conflict.cancel')))
+            h('div', { className: 'dshns-conflict-compare', role: 'note' },
+              h('p', { className: 'dshns-conflict-line' },
+                h('span', { className: 'dshns-conflict-label' }, t('conflict.compareTarget')),
+                h('span', { className: 'dshns-conflict-text' }, conflict.prompt)),
+              h('p', { className: 'dshns-conflict-line' },
+                h('span', { className: 'dshns-conflict-label' }, t('conflict.compareDraft')),
+                h('span', { className: 'dshns-conflict-text' }, draft))))
           : null
 
-      // Always mounted with a fixed height: moving the pointer between chips only
-      // swaps the text, so nothing reflows (that reflow was the "zoom" flicker).
-      const previewBlock = mode === 'suggestions'
-        ? h('div', { className: 'dshns-preview', role: 'note' }, previewText)
+      // On-demand preview: nothing occupies space at rest. Showing it below the
+      // chips keeps the chip row still, and switching between chips only swaps
+      // the text inside the same mounted block.
+      const previewBlock = mode === 'suggestions' && preview !== null
+        ? h('div', { className: 'dshns-preview', role: 'note' },
+          h('span', { className: 'dshns-preview-label' }, t('preview.label')),
+          view.previewText)
         : null
 
       const statusText = status === null || status === undefined ? null : t(status)
+      // Conflict actions share the status row: keeping them there instead of a
+      // separate row keeps the conflict card close to the resting card height.
+      const conflictActions = mode === 'conflict'
+        ? [
+          h(Button, { key: 'append', variant: 'primary', size: 'sm', onClick: () => { onConflictChoice('append') } }, t('conflict.appendPrimary')),
+          h(Button, { key: 'replace', variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('replace') } }, t('conflict.replace')),
+          h(Button, { key: 'cancel', variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('cancel') } }, t('conflict.cancel')),
+        ]
+        : null
       // One quiet state toggle at the end of the status row: minus dismisses the
-      // suggestions, plus restores them — the two directions of the same action.
+      // suggestions, plus restores them. The label is visible, not tooltip-only.
       const dismissed = turnState.dismissed === true
-      const stateButton = mode === 'suggestions'
-        ? h(Button, {
+      const stateActions = conflictActions ?? (mode === 'suggestions'
+        ? [h(Button, {
+          key: 'dismiss',
           variant: 'ghost',
           size: 'sm',
           className: 'dshns-dismiss',
           icon: h(MinusIcon, { size: 16 }),
           onClick: onDismiss,
-          title: t('card.dismiss'),
           'aria-label': t('card.dismiss'),
-        })
+        }, t('card.dismiss'))]
         : dismissed
-          ? h(Button, {
+          ? [h(Button, {
+            key: 'restore',
             variant: 'ghost',
             size: 'sm',
             className: 'dshns-restore',
             icon: h(PlusIcon, { size: 16 }),
             onClick: onRestore,
-            title: t('card.restore'),
             'aria-label': t('card.restore'),
-          })
-          : null
-      const statusBar = statusText === null && stateButton === null
+          }, t('card.restore'))]
+          : [])
+      const statusBar = statusText === null && stateActions.length === 0
         ? null
-        : h('div', { className: 'dshns-statusbar' },
+        : h('div', { className: `dshns-statusbar${mode === 'conflict' ? ' dshns-statusbar-conflict' : ''}` },
           statusText === null ? null : h('p', { className: 'dshns-status', role: 'status' }, statusText),
-          stateButton)
+          ...stateActions)
 
       return h('div', {
         className: 'dshns-reveal',
@@ -711,15 +705,6 @@ window.__ModuleLoader__.load({
           onChange: (value) => { update({ maxPerTurn: value }) },
           label: t('settings.maxPerTurn'),
         })),
-        row('clickMode', t('settings.clickMode'), h(SegmentedControl, {
-          value: settings.clickMode,
-          options: [
-            { value: 'fill', label: t('settings.clickFill') },
-            { value: 'send', label: t('settings.clickSend') },
-          ],
-          onChange: (value) => { update({ clickMode: value }) },
-          label: t('settings.clickMode'),
-        })),
         h('p', { className: 'dshns-setting-note' }, t('settings.note')),
         h('div', { className: 'dshns-settings-actions' },
           h(Button, { variant: 'ghost', size: 'sm', onClick: resetStates }, t('settings.reset')),
@@ -779,6 +764,25 @@ window.__ModuleLoader__.load({
         strokeWidth: 1.5,
         strokeLinecap: 'round',
       }))
+    }
+
+    function WarningIcon({ size = 12, className }) {
+      return h('svg', {
+        width: size,
+        height: size,
+        viewBox: '0 0 16 16',
+        fill: 'none',
+        className,
+        'aria-hidden': 'true',
+      },
+      h('path', {
+        d: 'M8 1.8 14.6 13.2H1.4L8 1.8Z',
+        stroke: 'currentColor',
+        strokeWidth: 1.2,
+        strokeLinejoin: 'round',
+      }),
+      h('path', { d: 'M8 6v3.4', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
+      h('circle', { cx: '8', cy: '11.4', r: '.7', fill: 'currentColor' }))
     }
 
     function ChevronDownIcon({ size = 14, className }) {

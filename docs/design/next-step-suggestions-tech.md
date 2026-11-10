@@ -1,9 +1,13 @@
 # 技术方案：DSH「下一步建议」本地插件 `@local/dsh-next-actions`
 
-版本：v1.0（技术方案） ｜ 日期：2026-11-09 ｜ 状态：待审阅（**本阶段不安装、不改 profile**）
-关联文档：产品形态稿 `design/next-step-suggestions-prd.md`（v0.5，行为与形态的唯一基准）
+版本：v1.1（技术方案） ｜ 日期：2026-11-10 ｜ 状态：现行（P1 布局与移除 Send 模式已落地）
+关联文档：产品形态稿 `design/next-step-suggestions-prd.md`（v0.9，行为与形态的唯一基准）
 运行环境：DSH Desktop `0.2.2-rc.1`（`dsh --version`；asar 内 `dsh/package.json` 双重核对）
 工作区：`/Users/arctic/Box/Terrace/deepseek-harness/default-workspace`
+2026-11-10 更新：同步卡片 P1 布局（默认 3 条、按需预览、单内联标记、带文字忽略/恢复、冲突对比）与
+彻底移除 Send 模式的实现；改动集中在 §1、§3.2、§6.3/§6.5/§6.6/§6.8、§9、§10、§13 与附录 A/D/F。
+同日补记：冲突态动作并入状态行（`.dshns-statusbar-conflict`，删除独立 `.dshns-conflict-actions` 行），
+冲突态与默认态高度差 ≤25px（748 列实测 24px）；改动集中在 §5.8、§6.3、§8、§9、§10、§11.3、§13、§14 与附录 A。
 
 证据标记：**【V26】**=在**当前安装的 0.2.2-rc.1** asar/前端产物中直接核对；**【V21】**=本工作区 0.2.1-rc.2 解包语料（`research/app/`、`vendor/`，仅作对照）；**【官方规范】**=官方插件开发 skill 的明文规则；**【推断】**=合理推断，列入 §12 T0 验证。
 
@@ -19,7 +23,8 @@
    `suggest_next_steps`（参数由模型给，`presentationMeta` 把**规范化后的建议**写进会话日志的
    `tool/result.meta`）；Client 半是一个**单文件、无构建依赖**的浏览器 bundle，注册
    `conversation.chat.turnTail` 卡片与 `tool.call.toolview` 过程组行；点击只调用
-   `inputActions.setDraft()` 把指令**填入输入框**（永不 `submit`）；刷新/回放/fork 由会话日志重建；
+   `inputActions.setDraft()` 把指令**填入输入框**（bundle 内不存在 `submit` 调用；2026-11-10 移除 Send
+   模式）；默认只显示 3 条建议、其余收进「还有 N 条」；刷新/回放/fork 由会话日志重建；
    用户状态（已填入/已忽略）只存 localStorage。
 
 2. **六个关键决策**（都有证据支撑，见 §2/§3）：
@@ -49,24 +54,25 @@
 
 ## 1. 范围与约束
 
-### 1.1 In scope（对应形态稿 v0.5 的 P0/P1）
+### 1.1 In scope（对应形态稿 v0.9 的 P0/P1）
 
-- 回答末尾卡片：官方动作卡同款容器/折叠说明/控件/状态行（含右侧减号忽略）；无可见标题，上下文行前置品牌小标；
+- 回答末尾卡片：官方动作卡同款容器/折叠说明/控件/状态行（含右侧带文字忽略/恢复按钮）；无可见标题，上下文行前置品牌小标；
 - 1–2 句上下文说明（防唐突），模型随建议一起生成；
-- 2–5 条可点建议（默认最多 3 条展示，超出「还有 N 条」）；推荐项置顶并带「推荐」；
-- 点击 = 完整指令填入输入框（可改后自己发）；输入框已有内容时「替换/追加/取消」；
-- 危险建议（模型标记 + 本地词表）带「需确认」标记与填入后的警示；
+- 1–6 条建议中默认展示 3 条，其余收进「还有 N 条」；设置可选 Auto（全部显示）或固定 1–6；推荐项用 primary 置顶并带「推荐」内联标记；
+- 点击 = 完整指令填入输入框（不发送）；输入框已有内容时显示「将填入 / 当前草稿」对比 +「追加到末尾（primary）/ 替换 / 取消」；
+- 危险建议（模型标记 + 本地词表）带「⚠ 需确认」内联标记与填入后的警示；
 - 工具过程组一行式调用记录（标题 + 状态 + 摘要；异常可展开原因 +「查看调用」）；
+- 预览默认收起，悬停/聚焦时在按钮行下方出现「将填入」+ 完整指令（两行 clamp）；
 - 刷新/重启/回放/fork 后卡片与状态保留；
-- 状态行右侧减号 → 控件收起、状态行「已忽略」、卡片保留；
+- 状态行右侧「暂不需要」→ 控件收起、状态行「已忽略」、按钮变「恢复建议」、卡片保留；
 - 语言跟随用户对话；界面文案中英；
 - 子代理/团队内部会话默认不渲染；
-- P1：设置页（启用/条数/点击行为）、本地统计（P2，暂不做）。
+- P1：设置页（条数/重置 + Host 门控说明）、P1 布局（默认 3 条、按需预览、带文字忽略/恢复，2026-11-10）、本地统计（P2，暂不做）。
 
 ### 1.2 Out of scope（本版明确不做）
 
 - 不做 Host Session projection（方案 B 的替代路线，留作升级路径）；
-- ~~不做「点击直接发送」偏好~~ **已实现**（设置项，默认关闭；危险建议永远只填）；
+- 不做「点击直接发送」：2026-11-10 起彻底移除 Send 模式（点击行为设置、自动提交判断、冲突提交计划与「已发送」状态全部删除），点击只走 `setDraft`，bundle 内不存在 `submit` 路径；
 - 不做「新会话建议」（形态稿 P2）；
 - 不发布 npm、不提交社区索引；
 - 不做服务端/远程同步（本地插件，单机浏览器状态）；
@@ -80,7 +86,7 @@
 | 工具声明 token | ≤ 370 tokens/请求（v4 实测 364；实测口径：DeepSeek token meter ≈ 4 字符/token；预算明细 §5.7） |
 | 工具往返 token | 调用参数 + 结果渲染文本 ≤ 120 tokens/轮 |
 | 点击延迟 | 从点击到草稿可编辑 ≤ 16ms（纯同步 `setDraft`，无网络） |
-| 自动发送 | 永不调用 `submit()`；危险建议同样只填 |
+| 自动发送 | 无 `submit()` 调用路径（2026-11-10 移除 Send 模式）；点击只写草稿，危险建议同样只填 |
 | 正文污染 | 回答 Markdown 零改动；建议不进入模型可见正文 |
 | 依赖面 | Host 零 `@deepseek-ai/*`/zod import；Client 单文件、无构建依赖、仅 `require('react')` |
 | I/O | Host 工具零 I/O、零网络、零文件；不读凭据/其他会话 |
@@ -181,7 +187,7 @@
 │  ② turnTail 条目（order -10）读 turn.data.get('next-steps') → 渲染官方同款卡片                 │
 │  ③ tool.call.toolview（key: suggest_next_steps）→ 过程组一行式记录                             │
 │  ④ 点击 → inputActions.setDraft(prompt)（+ 可选 shell.focus()）；已填入/已忽略 → localStorage   │
-│  ⑤ P1 settings.section（启用/条数）                                                            │
+│  ⑤ P1 settings.section（条数/重置）                                                            │
 └──────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -197,8 +203,8 @@
 5. turnTail 条目在 `turn.end` 后出现，读 `turn.data.get('next-steps')`：
    - 无数据 / 无 closing 文本 / 子代理会话 / 用户已忽略 → 不渲染；
    - 否则渲染官方同款卡片。
-6. 点击建议 → `inputActions.setDraft`（草稿整段替换；空/本人未编辑时直接替换，否则出「替换/追加/取消」）。
-7. 用户修改后自己发送。卡片状态行与按钮状态更新；减号 → 状态行「已忽略」+ 控件收起。
+6. 点击建议 → `inputActions.setDraft`（草稿整段替换；空/本人未编辑时直接替换，否则出「将填入 / 当前草稿」对比 +「追加到末尾 / 替换 / 取消」，三种选择都只填入）。
+7. 用户修改后自己发送。卡片状态行与按钮状态更新；「暂不需要」→ 状态行「已忽略」+ 控件收起，「恢复建议」还原。
 8. 刷新页面 → 会话日志重放 → Definition 重建 turn data → 卡片与状态恢复（localStorage 补用户态）。
 
 ### 3.3 方案对比与取舍
@@ -232,7 +238,7 @@ plugins/dsh-next-actions/
 ├── index.js                 # Host 半：零 import；注册工具（§5）
 ├── lib/
 │   ├── normalize.js         # 【Host/客户端共享的规范】纯函数：解析、清洗、去重、立场、危险词表、meta 构造
-│   └── view-model.js        # 【客户端纯逻辑】meta→展示模型、args 兜底解析、草稿冲突状态机、hash/存储 key
+│   └── view-model.js        # 【客户端纯逻辑】meta→展示模型、args 兜底解析、草稿冲突状态机、卡片状态派生、hash/存储 key
 ├── src/
 │   ├── client.js            # 客户端 bundle 源模板（无构建依赖，占位符内联 view-model；含 Settings 导航 16px 单色图标）
 │   └── styles.js            # 照抄的 CSS 字符串（官方 Card/ProposeRow/Button/DisclosureRow/shimmer 改写前缀）
@@ -245,8 +251,11 @@ plugins/dsh-next-actions/
 ├── icon.svg                 # 插件图标：官方 36×36 规格（透明底、三条递减建议条 + #67C7FE→#3F77D8 渐变、#41E1AC 星火）
 ├── design/icon-options/     # 图标候选（仅设计存档，不随包发布）
 └── test/
-    ├── normalize.test.mjs   # Host 纯函数单测（node:test，~40 例）
-    ├── view-model.test.mjs  # 客户端纯逻辑单测（~35 例）
+    ├── normalize.test.mjs   # Host 纯函数单测（node:test）
+    ├── tool.test.mjs        # 工具注册、根 agent 门控、常驻提示、Host config
+    ├── view-model.test.mjs  # 客户端纯逻辑单测
+    ├── card-state.test.mjs  # 卡片状态组合（filled/danger/预览/chip 标记/冲突）
+    ├── definition.test.mjs  # native + PTC 的 turn data 折叠
     └── build.test.mjs       # 构建产物与源一致（node:test 调 build --check）
 ```
 
@@ -574,7 +583,7 @@ M1 实测口径（与单测同源）：`JSON.stringify({name, description, param
 
 ### 5.7.1 调用可靠性：常驻 system prompt 提示（2026-11-09）
 
-**现象**：首次会话 compact 后，模型不再主动调用 `suggest_next_steps`（没有卡片，只剩正常回复）。工具声明与参数仍在请求里，`maxPerTurn: auto` 只控制显示、不会自行产生建议；真正丢失的是会话里积累的“每次回复都调用”的使用习惯——compact 把它摘要掉了，而工具 description 只是可选参考材料。
+**现象**：首次会话 compact 后，模型不再主动调用 `suggest_next_steps`（没有卡片，只剩正常回复）。工具声明与参数仍在请求里，`maxPerTurn` 只控制显示、不会自行产生建议；真正丢失的是会话里积累的“每次回复都调用”的使用习惯——compact 把它摘要掉了，而工具 description 只是可选参考材料。
 
 **修法**：Host 走官方 prompt 扩展点注册常驻行为：
 
@@ -674,6 +683,12 @@ v4（2026-11-09）提示词分层后 `tool.test.mjs` 增至 **27 个**（新增�
 P1（2026-11-09）token 门控新增 4 个 Host 用例（根 agent `when`、registry fail-open、`enabled:false` 不注册、
 config 缺省/畸形值）→ `tool.test.mjs` **31**，Host 55 + 31 = **86**；客户端移除 enabled 后
 `view-model.test.mjs` **68**、`build.test.mjs` **11**，全仓 `node --test` **181** 全绿。
+2026-11-10 移除 Send 模式与 P1 布局：`view-model.test.mjs` 删除点击行为/自动提交/冲突提交计划相关用例，
+`card-state.test.mjs` 改为验证状态优先级与 `deriveChipMarker` 单标记（danger > filled > recommended），
+`build.test.mjs` 新增「无 Send 模式、无 `submit` 引用、无胶囊 Tag、无「可以不做」」断言；
+全仓 `node --test` **206** 全绿。
+2026-11-10 冲突态紧凑化：`build.test.mjs` 新增动作与状态同行契约断言（`dshns-statusbar-conflict`、
+无 `dshns-conflict-actions`），全仓 `node --test` **207** 全绿。
 
 ---
 
@@ -717,7 +732,7 @@ window.__ModuleLoader__.load({
       }, ProcessRow))
       // 6) P1 设置（可选服务 uiConversation 不需要；仅 settings.section）
       ctx.slots.inject('settings.section', () => ctx.slots.register({
-        name: 'settings.section', id: PKG, order: 60, label: () => t('settings.section'), locale: NS,
+        name: 'settings.section', id: PKG, order: 60, label: () => t('settings.title'), locale: NS,
       }, SettingsSection))
     }
 
@@ -829,7 +844,7 @@ PTC 预设把工具调用放进 `run_code` 程序：模型直接调用的只有 
 2. `turn.end !== undefined` 且 `turn.data.get('turn-tail')?.closing != null`（官方 ActionCardTail 同规则：
    仅有文本回答结束的回合才显示）；
 3. 子代理会话不渲染：`useSession((s) => s.subagent) == null`（官方 InputBar 同读法；若字段不可用 → T0-6 降级为配置）；
-4. 用户已忽略 → 渲染卡片但控件收起、状态行「已忽略」（不隐藏整卡，同官方 dismiss 后表现）。
+4. 用户已忽略 → 渲染卡片但控件收起、状态行「已忽略」、右侧「恢复建议」（不隐藏整卡，同官方 dismiss 后表现）。
 
 **DOM（与官方卡逐项对齐）**：
 
@@ -839,13 +854,25 @@ section.dshns-card[aria-label=标题][data-next-steps-card]
     <FoldedText context>                    ← 官方同款折叠说明（FOLD_WIDTH=260，CJK 双宽）
       svg.dshns-mark                        ← 16px 品牌小标（列表+星火，实色填充，行首内联）
       text                                  ← 上下文行，13px/1.6 label-secondary
-    div.dshns-controls                      ← 建议按钮（推荐 primary sm / 其余 ghost sm；只显示 maxPerTurn 条）
-      button.dshns-btn-primary/ghost + tag「推荐」「需确认」「可以不做」
-      button.dshns-toggle 「还有 N 条」     ← 官方同款 ghost 小按钮（Card .toggle 样式）
-    div.dshns-statusbar                     ← 一行：左侧状态文字 + 右侧状态切换
-      p.dshns-status[role=status]           ← 已填入/冲突/已忽略/危险警示（无文字时省略）
-      button.dshns-btn-ghost.sm.dshns-dismiss   ← 建议态：16px 减号（aria-label「暂不需要」）
-      button.dshns-btn-ghost.sm.dshns-restore   ← 已忽略态：16px 加号（aria-label「恢复建议」）
+    div.dshns-controls                      ← 建议按钮（推荐 primary sm / 其余 ghost sm；默认 3 条）
+      button.dshns-btn-primary/ghost.dshns-chip
+        span.dshns-chip-label               ← 建议短标签（单行省略）
+        span.dshns-marker                   ← 至多一个内联文本标记（推荐 / 已填入 / ⚠需确认）
+      button.dshns-toggle「还有 N 条」      ← 官方同款 ghost 小按钮（Card .toggle 样式）；展开后显示「收起」
+    div.dshns-preview[role=note]            ← 按需出现：悬停/聚焦时位于控件行下方
+      span.dshns-preview-label「将填入」
+      text                                  ← 该条完整指令，2 行 clamp
+    div.dshns-conflict                      ← 仅冲突态：替代 controls + preview，只放对比框
+      div.dshns-conflict-compare[role=note]
+        p.dshns-conflict-line               ← span 标签「将填入」 + span 目标指令（单行省略）
+        p.dshns-conflict-line               ← span 标签「当前草稿」 + span 草稿（单行省略）
+    div.dshns-statusbar[.dshns-statusbar-conflict]  ← 一行：左侧状态文字 + 右侧状态动作
+      p.dshns-status[role=status]           ← 已填入/冲突/已忽略/危险警示/输入框不可用（无文字时省略）
+      button.dshns-btn-primary.sm「追加到末尾」  ← 仅冲突态；与状态文字同一行（窄列可换行）
+      button.dshns-btn-ghost.sm「替换」          ← 仅冲突态
+      button.dshns-btn-ghost.sm「取消」          ← 仅冲突态
+      button.dshns-btn-ghost.sm.dshns-dismiss   ← 建议态：16px「−」图标 + 12px「暂不需要」（高 28px）
+      button.dshns-btn-ghost.sm.dshns-restore   ← 已忽略态：16px「+」图标 + 12px「恢复建议」
 ```
 
 > **2026-11-09 卡片改版（实机反馈）**：去掉可见标题 `strong.dshns-title`（`aria-label` 仍为「下一步建议」），
@@ -859,53 +886,99 @@ section.dshns-card[aria-label=标题][data-next-steps-card]
 > **2026-11-09 第三轮改版（v0.8）**：减号的对偶操作——已忽略态在同一位置显示 28×28 加号
 > （`dshns-restore`，`aria-label`「恢复建议」），点击把 `dismissed` 写回 `false`，控件、预览与状态恢复；
 > 状态文字「已忽略」不消失，直到用户恢复。两个图标共用同一组 `.dshns-dismiss` / `.dshns-restore` 尺寸样式。
+>
+> **2026-11-10 第四轮改版（v0.9 / P1 布局）**：默认只显示 3 条（`DEFAULTS.maxPerTurn = 3`），其余进
+> 「还有 N 条」；预览改为按需（`preview !== null` 才渲染，位于控件行下方，带 `preview.label`，2 行 clamp），
+> 不再保留 56px 固定槽；chip 内状态收敛为 `deriveChipMarker` 的单标记（danger > filled > recommended，
+> 移除 `dshns-tag` 与「可以不做」）；忽略/恢复改为 12px 文字 ghost 按钮（`width:auto`、`padding:0 8`）；
+> 冲突态改为「将填入 / 当前草稿」对比框 + `appendPrimary`（追加到末尾，primary）；危险标记改用
+> `--dsw-alias-state-warn-primary` 的 12px 警告图标（文字仍为 label-secondary）。Send 模式及其设置、
+> 自动提交判断、冲突提交计划、「已发送」状态一并删除。
+>
+> **2026-11-10 冲突态紧凑化**：删除独立 `.dshns-conflict-actions` 行；冲突态的「追加到末尾（primary）/
+> 替换 / 取消」由 `conflictActions` 交给 `.dshns-statusbar` 渲染，与状态文字「输入框已有内容」同一行
+> （`.dshns-statusbar-conflict { margin-top:8px; flex-wrap:wrap; row-gap:8px }`），`.dshns-conflict`
+> 只保留对比框。宽列 748px 实测默认 134px → 冲突 158px（差 24px，验收 ≤25px）；窄列换行情况待视觉证据实测。
 
 **交互**：
 
 ```js
-function onPick(index) {
-  const s = model.suggestions[index]
-  const draft = useInput((x) => x.draft)          // 响应式读取
-  if (draft.trim() === '') return fill(s)          // 空 → 直接填入
-  if (lastApplied.current !== null && draft === lastApplied.current.prompt) return fill(s)  // 是我们填的且未改 → 直接替换
-  setConflict(s)                                   // 否则：替换/追加/取消
+function onPick(suggestion) {
+  if (!canWrite) return
+  const applied = appliedRef.current
+  const action = resolveDraftAction({
+    draft,
+    appliedPrompt: applied !== null && applied.owned === true ? applied.text : '',
+  })
+  if (action.kind === 'conflict') { setConflict(suggestion); setPreview(null); return }
+  applyFill(suggestion.prompt, suggestion)          // 空草稿 / 本人未编辑 → 直接替换
 }
-function fill(s) {
-  inputActions.setDraft(s.prompt)                  // 公开动作；不调用 submit
-  lastApplied.current = { prompt: s.prompt, rev: captureRev() }
-  focusComposer()                                  // ctx.get('conversation')?.input.shell(sessionId)?.focus()，可选/容错
-  setStatus(s.danger ? 'filledDanger' : 'filled')
+function applyFill(text, suggestion, owned = true) {
+  if (!canWrite) return
+  const danger = suggestion.danger === true
+  inputActions.setDraft(text)                       // 只填草稿；bundle 内不存在 submit 调用
+  appliedRef.current = { id: suggestion.id, text, prompt: suggestion.prompt, danger, owned }
+  const next = { ...turnState, filledId: suggestion.id }
+  setTurnState(next); writeTurnState(sessionId, turnNumber, next)
+  setConflict(null); setPreview(null)
+  focusComposer(sessionId)                          // ctx.get('conversation')?.input.shell(sessionId)?.focus()，可选/容错
 }
-function onReplace(s) { fill(s) }
-function onAppend(s) { const joined = `${currentDraft.trimEnd()}\n\n${s.prompt}`; inputActions.setDraft(joined); lastApplied.current = { prompt: joined }; ... }
-function onCancel() { setConflict(null) }
-function dismiss() { store.setDismissed(true); setStatus('dismissed') }
+function onConflictChoice(choice) {
+  if (conflict === null) return
+  setConflict(null); setPreview(null)
+  if (choice === 'cancel') return
+  const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })  // append: draft.trimEnd() + '\n\n' + prompt
+  if (merged === null) return
+  applyFill(merged, conflict, choice === 'replace')  // 追加产生的合并草稿 owned=false，下次重新确认
+}
+function dismiss() {
+  const next = { ...turnState, dismissed: true }
+  setTurnState(next); writeTurnState(sessionId, turnNumber, next)
+  setConflict(null); setPreview(null)
+}
+function restore() {
+  const next = { ...turnState, dismissed: false }
+  setTurnState(next); writeTurnState(sessionId, turnNumber, next)
+  setConflict(null); setPreview(null)
+}
 ```
 
 细节：
-- **草稿归属判定**用字符串相等（`draft === lastApplied.prompt`），`draftRev` 作为辅助（T0-4 实测语义）；
-  用户编辑过 → 草稿不相等 → 走冲突确认（不静默覆盖）；
-- 点击默认只 `setDraft`、不 `submit()`；设置项可切「直接发送」→ `setDraft` 后调用 `inputActions.submit()`
-  （固定 queue 语义，运行中会排队）；**危险建议即使在该模式下也只填不送**；
-- 危险建议：带「需确认」小标；填入后状态行显示「该操作可能不可逆，请确认后发送」；
-- 防连点：填入是同步动作，天然幂等；同一条重复点击只更新状态；
-- **固定高度预览槽**：按钮行下方常驻一个 2 行高的只读预览（默认显示推荐项/首条的完整 prompt）；
-  hover/focus 只替换文字、不增删节点，因此卡片高度恒定，不会在选项间移动鼠标时抖动
-  （曾出现「鼠标在选项间移动时页面元素瞬时缩放」）；预览槽不是按钮，点击不触发填入；键盘 Tab 即可。
-- 卡片不渲染时返回 `null`（不占空间）；
-- 历史轮次：同一组件按 turn 重新挂载，数据来自日志，状态来自 localStorage。
+- **草稿归属判定**用字符串相等（`draft === applied.text`），`draftRev` 作为辅助（T0-4 实测语义）；
+  用户编辑过 → 草稿不相等 → 走冲突确认（不静默覆盖）。追加产生的合并草稿 `owned === false`，
+  下次点击重新确认（不静默覆盖用户内容）。
+- **点击永远只填入**：`applyFill` 只调用 `inputActions.setDraft` + `focusComposer`；bundle 内不存在
+  `submit` 调用路径（2026-11-10 移除 Send 模式与点击行为设置，`build.test.mjs` 断言）。
+- 危险建议：带「⚠ 需确认」内联标记；填入后状态行显示「该操作可能不可逆，请确认后发送」。
+- **单内联标记**：`deriveChipMarker({ suggestion, filledId })` 按 danger > filled > recommended 只返回
+  一个标记；`optional` stance 只影响排序，不生成标记；`dshns-tag` 胶囊与「可以不做」文案已移除。
+- **按需预览**：只有 `mode === 'suggestions' && preview !== null` 时渲染 `div.dshns-preview[role=note]`，
+  位于控件行下方；`preview` 由 chip 的 mouseenter/focus 设为该条 prompt、mouseleave/blur 清空，填入/
+  冲突/忽略时也会清空。预览不是按钮，点击不触发填入；触屏无悬停，点建议直接填入。
+- **默认 3 条 + 「还有 N 条」**：`DEFAULTS.maxPerTurn = 3`，`buildDisplay` 切片并给出 `moreCount`；
+  「还有 N 条」展开为模型给的全部建议（最多 6），再点「收起」还原。
+- 状态行右侧按钮：建议态「− 暂不需要」（忽略），已忽略态「+ 恢复建议」；两个方向都把 `dismissed`
+  写入 localStorage 的 turn 状态，卡片保留。
+- **冲突态**：`div.dshns-conflict` 只放对比框（目标指令与当前草稿各一行省略）；三个动作
+  `appendPrimary`（primary）/`replace`/`cancel` 由状态行渲染（`conflictActions`），与「输入框已有内容」
+  同一行（`.dshns-statusbar-conflict`，窄列可换行）；选择经 `mergeDraft` 合并后同样走 `applyFill`，只填入。
+- 输入框不可写（`inputActions.setDraft` 缺失/禁用）时按钮禁用，状态行「输入框暂不可用」。
+- 卡片不渲染时返回 `null`（不占空间）；历史轮次：同一组件按 turn 重新挂载，数据来自日志，状态来自 localStorage。
 
 M3 实现注记（均可单测或代码审查）：
-- **追加后的草稿视为用户内容**：`追加` 只是本次填入，下一次点击不再"静默替换"，而是重新走冲突确认；
+- **追加后的草稿视为用户内容**：`追加到末尾` 只是本次填入，下一次点击不再"静默替换"，而是重新走冲突确认；
   只有空草稿填入 / 纯替换（以及建议原样未改）才算"我们的草稿"。
 - 输入框不可写（`inputActions.setDraft` 缺失或禁用）时，按钮禁用且状态行显示"输入框暂不可用"。
-- 状态行优先级：已忽略 > 冲突 > 已发送 > 已填入/危险警示 > 不可用；忽略后卡片保留但控件与底部按钮收起（同官方 dismiss）。
-- **「已填入」/危险警示按草稿派生（2026-11-10 P0 修复）**：只有草稿仍等于本卡本次写入的文本，或刷新后仍等于该建议的 prompt 时，
-  才显示 filled 标记与危险警示；编辑、清空、刷新后不保留误报。危险标记取自建议数据，因此持久化的 filledId + 匹配草稿在重载后仍能显示警示。
-  send 模式提交后状态行优先显示「已作为你的消息发送」；草稿冲突的「替换/追加」总是只填入（`resolveConflictFill().submit === false`），
-  不因 send 模式自动提交。对应纯逻辑集中在 `lib/view-model.js` 的 `deriveActiveFill` / `deriveCardView` / `shouldAutoSubmit` / `resolveConflictFill`，
-  状态组合由 `test/card-state.test.mjs` 覆盖。
-- 首屏只显示 `maxPerTurn` 条（默认 3）；「还有 N 条」就地展开为完整 6 条，再点收起。
+- **状态行优先级（2026-11-10 修订）**：输入框不可用 > 已忽略 > 冲突 > 已填入/危险警示；
+  忽略后卡片保留但控件收起（同官方 dismiss），状态行右侧换成「恢复建议」。
+- **冲突态高度（2026-11-10 紧凑化）**：动作与状态同行、无独立动作行；748 列实测默认 134px → 冲突
+  158px（差 24px，验收 ≤25px）；窄列换行情况待视觉证据实测。
+- **「已填入」/危险警示按草稿派生（2026-11-10 P0 修复）**：只有草稿仍等于本卡本次写入的文本，或刷新后
+  仍等于该建议的 prompt 时，才显示 filled 标记与危险警示；编辑、清空、刷新后不保留误报。危险标记取自建议
+  数据，因此持久化的 filledId + 匹配草稿在重载后仍能显示警示。对应纯逻辑集中在 `lib/view-model.js` 的
+  `deriveActiveFill` / `deriveCardView` / `deriveChipMarker`，状态组合由 `test/card-state.test.mjs` 覆盖。
+- 首屏默认显示 3 条（`DEFAULTS.maxPerTurn = 3`）；「还有 N 条」就地展开为完整 6 条，再点「收起」；
+  设置选 Auto 时全部显示，不出现该入口。
 
 **FoldedText**：照抄官方实现（`Intl.Segmenter` grapheme + 宽字形双宽 + 260 预算 + `…` + ghost 展开/收起），
 类名改写为 `dshns-text/ dshns-toggle`。
@@ -954,36 +1027,37 @@ M5 实现注记：
 
 ### 6.5 设置页（P1，紧随 MVP 之后）
 
-**已实现（M6）**：`settings.section`（root scope，`id`=包名，`order:60`，`label` 走 locale）渲染：
-每轮条数（**自动 / 1–6** 分段控件；自动=显示模型本轮给出的全部有效建议，默认）、
-点击行为（**填入输入框 / 直接发送** 分段控件；危险建议始终只填）、
-重置卡片状态（清理 `dsh-next-actions:v1:turn:*`）、"只填入不发送"说明，以及 P1 起顶部的只读
-Host 门控提示（`settings.hostGate`：卡片总开关在插件 Host config，关闭后不注册工具与提示词）。
-控件使用抄自官方的 SegmentedControl 的 markup/CSS（`dshns-segmented`）；M6 的 Switch 随客户端
-`enabled` 一并移除。设置写入 localStorage（`dsh-next-actions:v1:settings`），下一轮生效；重置只清
-卡片状态，不动设置。设置分区无 session kit，因此不依赖会话作用域。
+**已实现（M6，2026-11-10 更新）**：`settings.section`（root scope，`id`=包名，`order:60`，`label` 走 locale）
+渲染：每轮条数（**自动 / 1–6** 分段控件；默认 3，自动=显示模型本轮给出的全部有效建议）、
+重置卡片状态（清理 `dsh-next-actions:v1:turn:*`）、"点击建议只会填入输入框，不会自动发送；危险建议会标记
+「需确认」"说明，以及 P1 起顶部的只读 Host 门控提示（`settings.hostGate`：卡片总开关在插件 Host config，
+关闭后不注册工具与提示词）。控件使用抄自官方的 SegmentedControl 的 markup/CSS（`dshns-segmented`）；
+M6 的 Switch、点击行为行随客户端 `enabled` / Send 模式一并移除。设置写入 localStorage
+（`dsh-next-actions:v1:settings`），下一轮生效；重置只清卡片状态，不动设置。设置分区无 session kit，
+因此不依赖会话作用域。
 
 
-注册 `{name:'settings.section', id:'@local/dsh-next-actions', order:60, label:()=>t('settings.section'), locale:NS}`；
+注册 `{name:'settings.section', id:'@local/dsh-next-actions', order:60, label:()=>t('settings.title'), locale:NS}`；
 root scope，只有 `{close}`，没有 session kit。
 
 行（P1 后）：
 | 行 | 控件 | 存储 |
 |---|---|---|
 | Host 门控提示 | 只读 `p.dshns-setting-note`（指向 profile patch 的 `enabled`） | —（Host config） |
-| 每轮条数 | SegmentedControl 1–6（或原生 select，按官方样式改写） | localStorage `maxPerTurn` |
+| 每轮条数 | SegmentedControl「自动 + 1–6」（默认 3） | localStorage `maxPerTurn` |
 | 重置卡片状态 | 文案按钮（清「已填入/已忽略」） | localStorage |
-| 说明文字 | `p`（"点击建议只会填入输入框，不会自动发送"） | — |
+| 说明文字 | `p`（"点击建议只会填入输入框，不会自动发送；危险建议会标记「需确认」"） | — |
 
 - 偏好纯 client-local（不跨浏览器）；设置变更**下一轮**生效（Host 返回值始终 1–6，客户端只做展示裁剪）；
-- 控件样式必须从官方 primitive 抄（Switch/SegmentedControl/Tag 的 CSS 尚未提取 → T0-7 提取后再写）。
+- 控件样式从官方 primitive 抄（SegmentedControl 已落地；Switch 随客户端 `enabled` 移除、Tag 随 chip 胶囊移除，不再需要提取）。
 
 ### 6.6 i18n
 
 `ctx.locale.register('nextSteps', { en, zh })` 在 `apply` 的 effect 中注册（en/zh 为 baseline，成对必需）；
-slot 注册 `locale:NS` 后组件拿到 `t`。词表（§附录 D）：卡片 `aria-label`（不做可见标题）、更多/收起、暂不需要、已忽略、
-已填入/冲突/危险提示、推荐/需确认/可以不做、行状态（正在准备建议/正在生成建议/已生成/未显示/已中断）、
-查看调用、设置页文案、兜底上下文句。包 `locale/{en,zh}.json` 仅放 `meta.title`/`meta.description`。
+slot 注册 `locale:NS` 后组件拿到 `t`。词表（§附录 D）：卡片 `aria-label`（不做可见标题）、更多/收起、暂不需要/恢复建议、
+已填入/冲突/危险提示、「将填入」预览前缀、「将填入 / 当前草稿」对比标签、追加到末尾/替换/取消、推荐/已填入/需确认、
+行状态（正在准备建议/正在生成建议/已生成/未显示/已中断）、查看调用、设置页文案、兜底上下文句。
+包 `locale/{en,zh}.json` 仅放 `meta.title`/`meta.description`。
 
 ### 6.7 样式注入
 
@@ -1006,12 +1080,13 @@ function injectStyles(css) {
 ### 6.8 本地状态（localStorage）
 
 ```text
-dsh-next-actions:v1:settings            → { maxPerTurn:'auto', clickMode:'fill' }   (legacy `enabled` 被忽略)
-dsh-next-actions:v1:turn:<sid>:<turn>   → { dismissed?:true, filledHash?:string, updatedAt:number }
+dsh-next-actions:v1:settings            → { maxPerTurn: 3 }   (合法值 'auto' | 1–6；旧 `enabled` / 点击行为字段读取时丢弃)
+dsh-next-actions:v1:turn:<sid>:<turn>   → { dismissed:boolean, filledId?:string }
 dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed, since }   (P2)
 ```
 
-- 卡片总开关不在 localStorage（P1 移到 Host config，见 §5.7.2）；key 含 sessionId + turn，内容寻址 hash 用建议 `id`；只存小 JSON；
+- 卡片总开关不在 localStorage（P1 移到 Host config，见 §5.7.2）；key 含 sessionId + turn，状态只记建议 `id` 与 dismissed；只存小 JSON；
+- `clampSettings` 只返回 `{ maxPerTurn }`：旧 JSON 里的 `enabled` 与点击行为字段在读取时被丢弃，下一次写入后不再存在（2026-11-10）；
 - 读写 try/catch（隐私模式/配额）；版本前缀 `v1`，升级时清旧；
 - 多标签页：`window.addEventListener('storage', ...)` 同步「已忽略」（P1）；
 - 每会话最多保留 200 轮状态（LRU 裁剪）；不存任何建议正文/模型文本（meta 在会话日志里）。
@@ -1047,6 +1122,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 - `model` = 解析后的 meta：`{shown, context?, suggestions?, note?}`；
 - turnTail props：`{turn: TurnLocation, seq, openFile}` + 19 标准 props（§2.2）；
 - toolview props：`{phase, block, callId, toolName, inspect, ...}`；`block.meta` 可取；
+- 客户端设置：`{ maxPerTurn: 3 | 'auto' | 1–6 }`；点击行为设置已不存在（2026-11-10）；
 - localStorage schema 见 §6.8。
 
 ---
@@ -1064,13 +1140,13 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | `uiConversation` 服务不可用 | Definition 不注册；卡片不可用；**过程行仍工作**（toolview 不依赖它） | console.warn 一次 |
 | `conversation` 服务不可用 | 仍可 `inputActions.setDraft`（标准 prop）；无自动聚焦 | 提示用户手动点输入框 |
 | `inputActions` 缺失（非 session 作用域/异常宿主） | 卡片按钮禁用并提示 | 不应发生（turnTail 为 session scope） |
-| 输入框已有内容 | 不覆盖，出「替换/追加/取消」 | 取消 = 不改 |
+| 输入框已有内容 | 不覆盖，显示「将填入 / 当前草稿」对比；「追加到末尾/替换/取消」与状态文字同一行（无独立动作行） | 取消 = 不改；三种选择都只填入；冲突态高度差超预算时查 `.dshns-statusbar-conflict` 是否生效/是否换行 |
 | 草稿被用户在别处修改 | 字符串比对发现不一致 → 冲突确认 | 同上 |
 | 子代理会话 | 不渲染卡片 | 过程行仍显示 |
 | 回合无文本回答/中断 | 不渲染卡片（closing 判定） | — |
-| 用户点状态行减号 | 控件收起、状态行「已忽略」、卡片保留 | localStorage 记录；重置入口在设置页 |
-| 建议超过设置条数 | 客户端只显示前 N 条，其余折叠 | Host 始终 ≤6 |
-| 危险建议 | 「需确认」标记；填入后警示；永不自动发送 | — |
+| 用户点状态行「暂不需要」 | 控件收起、状态行「已忽略」、按钮变「恢复建议」、卡片保留 | localStorage 记录；重置入口在设置页 |
+| 建议超过设置条数 | 客户端默认显示前 3 条，其余「还有 N 条」；Auto 时全部显示 | Host 始终 ≤6 |
+| 危险建议 | 「⚠ 需确认」内联标记（警告图标用 `--dsw-alias-state-warn-primary`）；填入后警示；永不自动发送 | — |
 | 内存/性能：长会话 | 每轮最多一张卡；Definition 仅折叠本工具事件（O(事件数)） | 卡片随轮次渲染，无全表重排 |
 | 重启后「已忽略/已填入」标记 | 2026-11-09 实机：**设置项跨重启保留成功**（GUI URL 端口虽变化，Electron 页面分区仍保留了 localStorage）；卡片标记的跨重启复验未单独进行 | 若后续发现标记丢失：改用 Host 侧存储/自定义 RPC，或接受该限制 |
 | 模板/构建漂移 | `test/build.test.mjs` 在 CI/提交前失败 | 跑 `node scripts/build-client.mjs` |
@@ -1079,7 +1155,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 
 ## 9. 安全与隐私
 
-1. **零自动发送**：代码路径中不存在 `submit()` 调用；点击只写草稿 → 用户发送前必有人工确认。
+1. **零自动发送**：2026-11-10 起 Send 模式与点击行为设置已删除，bundle 内不存在 `submit` 引用（`build.test.mjs` 断言）；点击只写草稿 → 用户发送前必有人工确认。冲突态的三个动作（「追加到末尾 / 替换 / 取消」）同样只走 `setDraft`，紧凑布局不改变安全边界。
 2. **零网络/零文件/零凭据**：Host 工具是纯函数；Client 不 fetch、不读 cookie/localStorage 之外的数据。
 3. **模型输出不可信**：所有字段 trim/截断/白名单校验；danger 词表兜底；建议不进正文、不执行。
 4. **注入面**：建议文本可能受不可信内容（网页/文件）影响；由于只填入草稿、不自动发送、不自动执行，
@@ -1098,22 +1174,23 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | 文件 | 覆盖 |
 |---|---|
 | `test/normalize.test.mjs` | §5.6 全部规则；meta/execute 一致性；id 稳定性；边界（6 条上限、空、坏类型） |
-| `test/view-model.test.mjs` | `parseMeta` 防御（缺字段/超大/多余字段）；`modelFromArgs` 兜底；`buildDisplay`（条数裁剪/推荐顺序/optional 压尾）；草稿冲突状态机（空/本人草稿/用户编辑/追加）；storage key/hash；危险词表 |
+| `test/view-model.test.mjs` | `parseMeta` 防御（缺字段/超大/多余字段）；`modelFromArgs` 兜底；`buildDisplay`（默认 3 条/Auto/推荐顺序/optional 压尾）；草稿冲突状态机（空/本人草稿/用户编辑/追加）；`deriveChipMarker`；设置 clamp（无点击行为项）；storage key/hash；危险词表 |
+| `test/card-state.test.mjs` | 卡片状态组合：filled 标记按草稿派生、danger 只在生效填入时出现、状态行优先级、预览回退、单标记优先级、冲突合并 |
 | `test/definition.test.mjs` | Conversation Definition：native `tool/call`+`tool/result` 与 PTC `tool/ptc-dispatch-*` 两条链路的 match/fold/turn location；meta 优先与 args 兜底；空 state 守卫 |
-| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在 |
+| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在；无 Send 模式/`submit` 引用/胶囊 Tag/「可以不做」；冲突动作与状态同一行（`dshns-statusbar-conflict`，无 `dshns-conflict-actions`） |
 
 ### 10.2 手工 E2E（装插件后逐条执行，对应形态稿 §12）
 
 1. 普通问答 → 过程组一行「下一步建议 · 已生成」；卡片出现在回答下方、官方卡上方；
-2. 卡片与官方卡并排比较：宽度/圆角/描边/说明字号/说明折叠/按钮尺寸/状态行（两卡差异在标题、footer/减号、预览槽三处）；
-3. 点击建议 → 只填入输入框、不发送；光标在末尾；状态行「已填入输入框，可修改后发送」；
-4. 输入框已有文字 → 点击出「替换/追加/取消」；三种都验证；
+2. 卡片与官方卡并排比较：宽度/圆角/描边/说明字号/说明折叠/按钮尺寸/状态行（两卡差异在标题、footer/状态行文字切换、按需预览三处）；
+3. 点击建议 → 只填入输入框、不发送；光标在末尾；状态行「已填入输入框，可修改后发送」，chip 显示单个「已填入」标记；
+4. 输入框已有文字 → 点击出「将填入 / 当前草稿」对比，状态行同一行出现「追加到末尾/替换/取消」；三种都验证且都只填入；量测冲突态与默认态高度差（748 列参考 24px，验收 ≤25px）；
 5. 连续点不同建议（未编辑）→ 直接替换不询问；编辑后再点 → 出确认；
-6. 危险建议 → 标记 + 填入后警示；任何操作都不会发送；
-7. 「还有 N 条」展开/收起；推荐在首位；「可以不做」压尾；
-8. hover/focus 预览全文；点击预览不填入；
+6. 危险建议 → 「⚠ 需确认」标记 + 填入后警示；任何操作都不会发送；
+7. 默认显示 3 条，「还有 N 条」展开/收起；推荐在首位；可跳过类建议压尾但不显示标记；
+8. hover/focus 出现「将填入」预览、移开收起，chip 行不位移；点击预览不填入；
 9. 过程组行：折叠过程组后卡片仍可见；「未显示」可展开原因 +「查看调用」；
-10. 状态行右侧减号 → 控件收起 + 状态行「已忽略」+ 减号变加号 + 卡片保留；再点加号 → 控件与状态恢复；
+10. 状态行右侧「− 暂不需要」→ 控件收起 + 状态行「已忽略」+ 按钮变「+ 恢复建议」+ 卡片保留；再点它 → 控件与状态恢复；
 11. 刷新页面/重启 DSH → 卡片、状态保留；
 12. fork 会话 → 历史建议随历史显示；
 13. 子代理/团队任务 → 内部轮次不显示卡片；
@@ -1134,7 +1211,15 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
   官方 `.text` 13px/1.7 secondary、margin-top 8 / 本卡 `.text` 13px/1.6、margin 0（品牌小标行首内联）；
 - `.toggle` 展开按钮：height auto、min-height 24、padding-inline 0、font-size 12（两边相同）；
 - 官方 `.status` 12px/1.6、margin-top 12；本卡 `.statusbar` 一行（margin-top 12、min-height 28），
-  文字 12px/1.6、margin 0，右端 28×28 状态切换（建议态 `.dshns-dismiss` 减号 / 忽略态 `.dshns-restore` 加号，16px 图标）；
+  文字 12px/1.6、margin 0，右端 28px 高带文字切换（建议态 `.dshns-dismiss`「− 暂不需要」/ 忽略态
+  `.dshns-restore`「+ 恢复建议」，12px 文字 + 16px 图标，padding 0 8）；
+- 本卡扩展：`.dshns-marker` 11px/18、label-secondary（primary chip 内 inherit + opacity .78），
+  `.dshns-warn` 12×12、`--dsw-alias-state-warn-primary`；`.dshns-preview` 12px/1.6、radius-sm、
+  module 底、padding 6 10、2 行 clamp；`.dshns-conflict-compare` 12px/1.6、radius-sm、module 底、padding 8 10；
+  对比框标签与预览前缀 11px、label-tertiary；
+- 冲突态高度：748px 宽列用夹具/实机量 border-box 高度，默认 134px、冲突 158px（差 24px，验收 ≤25px）；
+  `.dshns-statusbar-conflict` 生效（margin-top 8、flex-wrap wrap）、无独立 `.dshns-conflict-actions` 行；
+  窄列（约 390px）动作换行后的高度按同一口径单独测量；
 - 官方 `.footer` `justify-content:flex-end; gap:12px; margin-top:12px`；本卡已删除 footer；
 - Button sm：height 28、font-size 12、padding 0 10、radius `--dsw-radius-sm`；primary/ghost 颜色 token 同官方；
 - 过程行：row 高 `24px + var(--dsh-content-font-delta,0px)`、gap 8、margin-left 8、font-size 12；
@@ -1178,6 +1263,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | 过程行不出现/回退成通用行 | key 拼写/工具名是否一致（key 域开放，typo 不报错只是不渲染） |
 | 填入无反应 | `inputActions` 是否拿到（session scope）；`setDraft` 是否被 frozen phase 拒绝 |
 | 样式错位 | 类名前缀冲突、CSS 是否在 apply 中注入、token 是否存在 |
+| 冲突态偏高/超出预算 | `.dshns-statusbar-conflict` 是否生效（margin-top 8、flex-wrap wrap）；动作是否换行；是否残留独立 `.dshns-conflict-actions` 行 |
 | 模型不调用工具 | description 是否够清晰；Auto review 是否拦截；模型是否已有相似工具 |
 
 ---
@@ -1194,7 +1280,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | T0-4 | `setDraft` 后 `draft`/`draftRev` 语义（是否 ours、编辑后变化） | [静态已证] 字段存在、rev 规则 | 点击 → 读 useInput；输入一个字符再读 | `draft===prompt` 且 rev 变化符合预期 | 仅用字符串相等判定（已实现） |
 | T0-5 | 默认权限模式不弹审批 | [静态已证] 默认 allow；唯一 ask 源=Auto | 默认模式发一轮调用工具 | 无审批卡、无 `approval/asked` | 若弹：查 listeners；Auto 模式属预期 |
 | T0-6 | 子代理会话识别 | [静态已证] `useSession(s=>s.subagent)` 官方读法 | 在子代理会话观察 | 卡片不渲染 | 改为设置开关/默认渲染 |
-| T0-7 | 官方卡/过程行视觉比对（含 Switch/Tag/Pill 缺省样式） | 样式值已提取；Tag/Pill 未提取 | DevTools 对比 + 截图 | 肉眼一致 | 先补提取（同 live-asar 方法）再对齐 |
+| T0-7 | 官方卡/过程行视觉比对（含 SegmentedControl 与状态行文字按钮的缺省样式） | 样式值已提取；卡片已按 2026-11-10 P1 布局复核 | DevTools 对比 + 截图 | 肉眼一致 | 先补提取（同 live-asar 方法）再对齐 |
 | T0-8 | token 实测（声明+往返） | 预算见 §5.7 | token meter 前后对比 | ≤370/请求（v4 实测 364）、≤120/轮 | 优先压缩 schema 描述/引导文案 |
 | T0-9 | 构建脚本与产物一致 | 待写 | `node --test test/build.test.mjs` | 通过 | — |
 | T0-10 | 模型调用率与上下文质量 | 待装 | 20 轮普通任务统计 | 调用率 ≥90%，context 通顺、按钮可用 | 调 description / 加 system-prompt 短句（P2 备选） |
@@ -1212,7 +1298,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | M4 | 点击填入 + 冲突 + 暂不需要 + 状态行 + 预览 | 形态稿 §12 的 3/4/5/6/7/8/10 条通过 |
 | M5 | 过程组一行 + 样式 | 过程行与官方同构；异常可展开 |
 | M6 | 场景过滤 + 持久化 + 语言 | 子代理/刷新/fork/中英文通过 |
-| M7 | 设置页（P1） | 启用/条数/点击行为生效 |
+| M7 | 设置页（P1） | 条数/重置生效（点击行为 2026-11-10 移除） |
 | M8 | E2E 全清单 + 预算测量 + README/交付说明 | §10.2 全绿，T0-8 达标 |
 
 > **实现进度（2026-11-09，收尾）**：M0–M6、M8 完成；M7（Host 侧跨重启存储）**取消**——实机复验显示
@@ -1235,6 +1321,18 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 >
 > **2026-11-09 卡片 v0.8**：加号恢复（`dshns-restore`、`PlusIcon`、`card.restore`），减号/加号互为逆操作；
 > 构建断言扩展为同时校验两枚图标与「无 footer」。
+>
+> **2026-11-10 P1 布局 + 移除 Send**：默认展示 3 条 + 「还有 N 条」（`DEFAULTS.maxPerTurn = 3`，设置保留
+> Auto）；删除 Send 模式、点击行为设置、自动提交与冲突提交判断、「已发送」状态及 `submit` 调用；新增
+> `deriveChipMarker` 单内联标记（danger > filled > recommended，移除 Tag 胶囊与「可以不做」）；预览改为按需
+> （`preview.label`、「将填入」、2 行 clamp，不再固定 56px）；忽略/恢复改带文字 ghost 按钮；冲突态改为
+> 「将填入 / 当前草稿」对比 +「追加到末尾」primary；危险 token 修正为 `--dsw-alias-state-warn-primary`
+> （警告图标用该色，文字仍 label-secondary）。`node --test` **206** 全绿，`scripts/build-client.mjs --check` 通过。
+>
+> **2026-11-10 冲突态紧凑化**：删除独立 `.dshns-conflict-actions` 行，冲突动作（`conflictActions`）与
+> 状态文字同排（`.dshns-statusbar-conflict { margin-top:8px; flex-wrap:wrap; row-gap:8px }`）；宽列 748px
+> 实测默认 134px → 冲突 158px（差 24px，验收 ≤25px），窄列待视觉证据实测。`build.test.mjs` 新增
+> 「冲突动作与状态同一行」契约断言；`node --test` **207** 全绿，`scripts/build-client.mjs --check` 通过。
 
 ---
 
@@ -1252,6 +1350,9 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | R8 | 单文件 bundle + 内联构建漂移 | 低 | `build --check` 测试 |
 | R9 | link: 安装下 Host import 解析失败 | 已规避 | Host 零 import |
 | R10 | 与官方卡同屏拥挤 | 中 | order -10 + 组数上限；视觉比对 |
+| R11 | 按需预览在触屏不可见（无 hover；点击即填入） | 低 | 触屏以填入为主路径；预览定位为鼠标/键盘辅助；需要时可加常驻摘要 |
+| R12 | 默认 3 条让 4–6 条建议需多点一次「还有 N 条」 | 低 | 默认高度稳定优先；设置 Auto 可恢复全显示 |
+| R13 | 窄列（约 390px）冲突态动作换行，高度差可能超过 25px | 低 | 窄列按同一口径实测并更新视觉证据；超预算时压缩对比框行距或调整动作顺序 |
 
 ---
 
@@ -1307,11 +1408,14 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 .dshns-btn.dshns-dismiss,
 .dshns-btn.dshns-restore {
   flex: none;
-  width: 28px;
-  min-width: 28px;
+  width: auto;
+  min-width: 0;
   height: 28px;
-  padding: 0;
+  padding: 0 8px;
+  gap: 4px;
   color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
 }
 .dshns-btn.dshns-dismiss:hover:not(:disabled),
 .dshns-btn.dshns-restore:hover:not(:disabled) {
@@ -1323,6 +1427,30 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 `FOLD_WIDTH = 260`；宽字形正则
 `/^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-｠￠-￦]/u`；
 `Intl.Segmenter(undefined, { granularity: 'grapheme' })`；超宽截断 + `'…'`；展开/收起用 ghost sm 按钮。
+
+本插件在官方卡框之外扩展的样式（2026-11-10，同样只用 `--dsw-*` token）：
+
+```css
+.dshns-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.dshns-chip { max-width: 100%; text-align: left; }
+.dshns-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 每个 chip 至多一个内联标记；文字在前，颜色不是唯一线索 */
+.dshns-marker { flex: none; margin-left: 2px; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 18px; white-space: nowrap; }
+.dshns-btn-primary .dshns-marker { color: inherit; opacity: .78; }
+.dshns-marker-danger { display: inline-flex; align-items: center; gap: 3px; }
+.dshns-warn { flex: none; width: 12px; height: 12px; color: var(--dsw-alias-state-warn-primary); }
+/* 按需预览：闲时不占位，出现在控件行下方 */
+.dshns-preview { margin-top: 8px; padding: 6px 10px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent)); color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.dshns-preview-label { margin-right: 4px; color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.6; white-space: nowrap; }
+/* 冲突：控件区只放目标指令 + 当前草稿对比；动作并入状态行 */
+.dshns-conflict { margin-top: 12px; }
+.dshns-conflict-compare { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent)); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }
+.dshns-conflict-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 0; }
+.dshns-conflict-label { flex: none; color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.6; white-space: nowrap; }
+.dshns-conflict-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 冲突态状态行：状态文字与「追加到末尾/替换/取消」同一行，收紧上边距，冲突卡只比默认卡高约 24px */
+.dshns-statusbar-conflict { margin-top: 8px; flex-wrap: wrap; row-gap: 8px; }
+```
 
 ## 附录 B：官方过程行与 primitive CSS（原样抄录）
 
@@ -1451,18 +1579,25 @@ shell 内 symbol；内联等价、且避免依赖冻结模块表）。
 | key | en | zh |
 |---|---|---|
 | card.title | Suggested next steps | 下一步建议 |
-| card.more | `${n} more` | 还有 ${n} 条 |
+| card.dismiss | Not now | 暂不需要 |
 | card.restore | Restore suggestions | 恢复建议 |
+| card.more | More ({n}) | 还有 {n} 条 |
+| card.expand | Show more | 展开 |
+| card.collapse | Show less | 收起 |
+| chip.recommended | Recommended | 推荐 |
+| chip.danger | Needs confirmation | 需确认 |
+| chip.filled | Filled | 已填入 |
+| preview.label | Will fill | 将填入 |
 | status.filled | Filled into the input — review and send | 已填入输入框，可修改后发送 |
 | status.danger | This may be irreversible — review before sending | 该操作可能不可逆，请确认后发送 |
 | status.conflict | The input already has content | 输入框已有内容 |
 | status.dismissed | Dismissed | 已忽略 |
+| status.unavailable | The composer is unavailable | 输入框暂不可用 |
+| conflict.compareTarget | Will fill | 将填入 |
+| conflict.compareDraft | Current draft | 当前草稿 |
+| conflict.appendPrimary | Append to draft | 追加到末尾 |
 | conflict.replace | Replace | 替换 |
-| conflict.append | Append | 追加 |
 | conflict.cancel | Cancel | 取消 |
-| chip.recommended | Recommended | 推荐 |
-| chip.danger | Needs confirmation | 需确认 |
-| chip.optional | Optional | 可以不做 |
 | row.title | Suggested next steps | 下一步建议 |
 | row.preparing | Preparing suggestions | 正在准备建议 |
 | row.running | Writing suggestions | 正在生成建议 |
@@ -1471,11 +1606,16 @@ shell 内 symbol；内联等价、且避免依赖冻结模块表）。
 | row.stopped | Interrupted | 已中断 |
 | row.inspect (reuse) | Inspect call | 查看调用 |
 | fallback.context | Here are a few natural next steps. | 接下来可以： |
-| settings.section | Next steps | 下一步建议 |
+| settings.title | Next steps | 下一步建议 |
 | settings.hostGate | Cards are controlled by the plugin Host config (profile cordis.patch.yml → dsh-next-actions → enabled). Turning it off removes the tool and the prompt guidance. | 卡片总开关已移到插件的 Host 配置（profile 的 cordis.patch.yml → dsh-next-actions → enabled）；关闭后不再注册工具与提示词。 |
 | settings.maxPerTurn | Suggestions per reply | 每轮建议条数 |
+| settings.auto | Auto | 自动 |
+| settings.note | Clicking a suggestion only fills the input; nothing is sent automatically. Dangerous suggestions are marked “Needs confirmation”. | 点击建议只会填入输入框，不会自动发送；危险建议会标记「需确认」。 |
 | settings.reset | Reset card states | 重置卡片状态 |
-| settings.note | Clicking a suggestion only fills the input; it never sends. | 点击建议只会填入输入框，不会自动发送。 |
+| settings.saved | Saved | 已保存 |
+| settings.resetDone | Card states cleared | 卡片状态已清理 |
+| settings.resetEmpty | Nothing to clear | 没有可清理的状态 |
+| settings.storageUnavailable | Could not save in this browser | 当前浏览器无法保存 |
 
 包元数据 `locale/en.json` / `zh.json`：
 
@@ -1522,5 +1662,5 @@ shell 内 symbol；内联等价、且避免依赖冻结模块表）。
 2. `useSession((s)=>s.subagent)` 是否覆盖"团队任务内部会话"（T0-6）；
 3. Auto review 模式下用户可见行为（仅文档说明，不阻断）；
 4. 压缩策略是否会修剪 `tool/call.arguments`（影响兜底路径，E2E 造长会话验证）；
-5. ~~是否需要把「点击直接发送」偏好加回~~ **已实现**（设置项，默认填入）；
-6. 官方 `Tag/Switch` 精确样式（T0-7 补提取）。
+5. ~~是否需要把「点击直接发送」偏好加回~~ **已否决并移除**（2026-11-10）：点击永远只填入，不提供直发路径；
+6. ~~官方 `Tag/Switch` 精确样式~~ 不再需要（2026-11-10：Tag 随 chip 胶囊移除，Switch 随客户端 `enabled` 移除）。

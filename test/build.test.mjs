@@ -36,28 +36,56 @@ test('client.js carries the one-line process row', () => {
   }
 })
 
-test('card keeps a fixed preview slot and injects the conversation service', () => {
+test('card renders an on-demand preview and injects the conversation service', () => {
   const source = readFileSync(clientPath, 'utf8')
   assert.ok(source.includes('dshns-preview'))
+  assert.ok(source.includes('preview.label'))
   assert.ok(source.includes("'uiConversation'"))
-  // Preview and filled/danger state are derived from the live draft, and state
-  // combinations live in the inlined view model.
-  for (const symbol of ['deriveCardView', 'derivePreviewText', 'deriveActiveFill', 'shouldAutoSubmit', 'resolveConflictFill']) {
+  // The preview only exists while hovered/focused, and the filled/danger state
+  // is derived from the live draft inside the inlined view model.
+  for (const symbol of ['deriveCardView', 'derivePreviewText', 'deriveActiveFill', 'deriveChipMarker']) {
     assert.ok(source.includes(symbol), `expected client.js to inline ${symbol}`)
+  }
+  assert.match(source, /mode === 'suggestions' && preview !== null/)
+})
+
+test('card wires the draft-derived state and conflict compare UI', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  // The view derivation is the single source of the filled/danger markers and
+  // the status line; the conflict block must keep the target and the draft.
+  assert.match(source, /deriveCardView\(\{/)
+  assert.match(source, /deriveChipMarker\(\{ suggestion, filledId: view\.filledId \}\)/)
+  assert.match(source, /mergeDraft\(\{ mode: choice, draft, prompt: conflict\.prompt \}\)/)
+  assert.match(source, /applyFill\(merged, conflict, choice === 'replace'\)/)
+  for (const symbol of ['dshns-conflict-compare', 'dshns-conflict-label', 'conflict.compareTarget', 'conflict.compareDraft', 'conflict.appendPrimary']) {
+    assert.ok(source.includes(symbol), `expected client.js to include ${symbol}`)
   }
 })
 
-test('card wires the draft-derived state into the click and conflict paths', () => {
+test('clicking a suggestion only fills: no send mode and no submit path', () => {
   const source = readFileSync(clientPath, 'utf8')
-  // The view derivation is the single source of the filled/danger markers and
-  // the status line; the handlers must pass the safety-relevant flags through.
-  assert.match(source, /deriveCardView\(\{/)
-  assert.match(source, /resolveConflictFill\(\{ draft, prompt: conflict\.prompt, mode: choice \}\)/)
-  assert.match(source, /applyFill\(plan\.text, conflict, choice === 'replace', plan\.submit\)/)
-  assert.match(source, /shouldAutoSubmit\(\{ clickMode: mode, danger \}\)/)
-  assert.match(source, /typeof inputActions\.submit === 'function'/)
-  // A submitted message must be able to outrank the filled marker.
-  assert.match(source, /sent,\n\s+conflict: conflict !== null,/)
+  assert.equal(source.includes('clickMode'), false)
+  assert.equal(source.includes('shouldAutoSubmit'), false)
+  assert.equal(source.includes("'status.sent'"), false)
+  assert.equal(source.includes('inputActions.submit'), false)
+})
+
+test('chips use one inline marker instead of tag pills', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  assert.ok(source.includes('dshns-marker'))
+  assert.ok(source.includes('dshns-marker-danger'))
+  assert.ok(source.includes('dshns-warn'))
+  assert.equal(source.includes('dshns-tag'), false)
+  assert.equal(source.includes("'chip.optional'"), false)
+})
+
+test('conflict actions share the status row to keep the card compact', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  // The conflict state must stay close to the resting card height: status text
+  // and the three actions share one row, and no separate actions row exists.
+  assert.match(source, /dshns-statusbar-conflict/)
+  assert.match(source, /const conflictActions = mode === 'conflict'/)
+  assert.equal(source.includes('dshns-conflict-actions'), false)
 })
 
 test('card reveals a live turn-tail mount instead of inserting it in one frame', () => {
@@ -77,7 +105,7 @@ test('card toggles dismiss/restore from the status row (minus and plus, no foote
 
 test('client.js carries the settings section', () => {
   const source = readFileSync(clientPath, 'utf8')
-  for (const symbol of ['SettingsSection', 'dshns-setting-note', 'dshns-segmented', 'settings.section', 'settings.hostGate', 'readSettingsFrom', 'clickMode', 'status.sent']) {
+  for (const symbol of ['SettingsSection', 'dshns-setting-note', 'dshns-segmented', 'settings.section', 'settings.hostGate', 'readSettingsFrom', 'settings.note']) {
     assert.ok(source.includes(symbol), `expected client.js to inline ${symbol}`)
   }
 })
