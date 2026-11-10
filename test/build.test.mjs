@@ -101,6 +101,16 @@ test('chips use one inline marker instead of tag pills', () => {
   assert.equal(source.includes("'chip.optional'"), false)
 })
 
+test('chip accessible names keep the visible label first', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  // WCAG 2.5.3 (Label in Name): the visible chip label has to be part of the
+  // accessible name, so the prompt is appended instead of replacing the label.
+  assert.match(source, /const accessibleName = suggestion\.prompt === suggestion\.label/)
+  assert.match(source, /`\$\{suggestion\.label\}：\$\{suggestion\.prompt\}`/)
+  assert.match(source, /'aria-label': accessibleName,/)
+  assert.equal(source.includes("'aria-label': suggestion.prompt"), false)
+})
+
 test('conflict actions share the status row to keep the card compact', () => {
   const source = readFileSync(clientPath, 'utf8')
   // The conflict state must stay close to the resting card height: status text
@@ -108,6 +118,26 @@ test('conflict actions share the status row to keep the card compact', () => {
   assert.match(source, /dshns-statusbar-conflict/)
   assert.match(source, /const conflictActions = mode === 'conflict'/)
   assert.equal(source.includes('dshns-conflict-actions'), false)
+})
+
+test('expanded conflict text is a capped, scrollable region with a pinned toggle', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  // Long drafts are not length-capped, so the expanded lines scroll inside a
+  // 240px region while the collapse button stays outside it. The region becomes
+  // a focusable group only when it actually scrolls, so keyboard users can read
+  // the hidden lines.
+  for (const symbol of [
+    'dshns-conflict-lines',
+    'conflict.scrollRegion',
+    'scrollable',
+    'overscroll-behavior',
+    'max-height: 240px',
+    'overflow-y: auto',
+  ]) {
+    assert.ok(source.includes(symbol), `expected client.js to include ${symbol}`)
+  }
+  assert.match(source, /tabIndex: scrollable \? 0 : undefined/)
+  assert.match(source, /'aria-label': scrollable \? t\('conflict\.scrollRegion'\) : undefined/)
 })
 
 test('card reveals a live turn-tail mount instead of inserting it in one frame', () => {

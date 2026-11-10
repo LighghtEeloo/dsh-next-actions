@@ -66,6 +66,7 @@ window.__ModuleLoader__.load({
       'conflict.cancel': 'Cancel',
       'conflict.expand': 'Expand full text',
       'conflict.collapse': 'Collapse full text',
+      'conflict.scrollRegion': 'Target instruction and current draft',
       'fallback.context': 'Here are a few natural next steps.',
       'note.invalidArguments': 'The tool arguments were invalid',
       'note.missingContext': 'No context was provided',
@@ -113,6 +114,7 @@ window.__ModuleLoader__.load({
       'conflict.cancel': '取消',
       'conflict.expand': '展开全文',
       'conflict.collapse': '收起全文',
+      'conflict.scrollRegion': '目标指令与当前草稿',
       'fallback.context': '接下来可以：',
       'note.invalidArguments': '工具参数无效',
       'note.missingContext': '缺少上下文说明',
@@ -332,12 +334,19 @@ window.__ModuleLoader__.load({
      * when text actually overflows and swapping in/out changes height only
      * after an explicit click. This keeps the default conflict card compact and
      * never ties height changes to pointer movement.
+     *
+     * Expanded content can be much taller than the card (a draft is not capped),
+     * so the two lines sit in a region capped at 240px with `overflow-y: auto`;
+     * the toggle stays outside it and the region becomes a focusable group only
+     * when it really scrolls, so keyboard users can reach the hidden lines.
      */
     function ConflictCompare({ prompt, draft, t }) {
       const id = React.useId()
       const [expanded, setExpanded] = React.useState(false)
       const [overflow, setOverflow] = React.useState(false)
+      const [scrollable, setScrollable] = React.useState(false)
       const compareRef = React.useRef(null)
+      const linesRef = React.useRef(null)
       React.useLayoutEffect(() => {
         const root = compareRef.current
         if (root === null || expanded) return undefined
@@ -360,6 +369,27 @@ window.__ModuleLoader__.load({
         }
         return undefined
       }, [prompt, draft, expanded])
+      React.useLayoutEffect(() => {
+        const element = linesRef.current
+        if (element === null || !expanded) {
+          setScrollable(false)
+          return undefined
+        }
+        const measure = () => {
+          try {
+            setScrollable(element.scrollHeight > element.clientHeight + 1)
+          } catch {
+            setScrollable(false)
+          }
+        }
+        measure()
+        if (typeof ResizeObserver === 'function') {
+          const observer = new ResizeObserver(measure)
+          observer.observe(element)
+          return () => { observer.disconnect() }
+        }
+        return undefined
+      }, [expanded, prompt, draft])
       return h('div', {
         id,
         ref: compareRef,
@@ -367,12 +397,19 @@ window.__ModuleLoader__.load({
         role: 'note',
         'data-expanded': expanded ? '' : undefined,
       },
+      h('div', {
+        ref: linesRef,
+        className: 'dshns-conflict-lines',
+        role: scrollable ? 'group' : undefined,
+        tabIndex: scrollable ? 0 : undefined,
+        'aria-label': scrollable ? t('conflict.scrollRegion') : undefined,
+      },
       h('p', { className: 'dshns-conflict-line' },
         h('span', { className: 'dshns-conflict-label' }, t('conflict.compareTarget')),
         h('span', { className: 'dshns-conflict-text' }, prompt)),
       h('p', { className: 'dshns-conflict-line' },
         h('span', { className: 'dshns-conflict-label' }, t('conflict.compareDraft')),
-        h('span', { className: 'dshns-conflict-text' }, draft)),
+        h('span', { className: 'dshns-conflict-text' }, draft))),
       overflow || expanded
         ? h(Button, {
           variant: 'ghost',
@@ -588,6 +625,11 @@ window.__ModuleLoader__.load({
 
       function renderChip(suggestion) {
         const marker = deriveChipMarker({ suggestion, filledId: view.filledId })
+        // WCAG 2.5.3: the accessible name has to contain the visible label, so
+        // the full prompt is appended after it instead of replacing it.
+        const accessibleName = suggestion.prompt === suggestion.label
+          ? suggestion.label
+          : `${suggestion.label}：${suggestion.prompt}`
         const markerNode = marker === 'danger'
           ? h('span', { className: 'dshns-marker dshns-marker-danger' },
             h(WarningIcon, { className: 'dshns-warn' }),
@@ -602,7 +644,7 @@ window.__ModuleLoader__.load({
           variant: suggestion.recommended === true ? 'primary' : 'ghost',
           size: 'sm',
           className: 'dshns-chip',
-          'aria-label': suggestion.prompt,
+          'aria-label': accessibleName,
           disabled: !canWrite,
           onClick: () => { onPick(suggestion) },
           onMouseEnter: () => { setPeek(suggestion.prompt) },

@@ -5,9 +5,20 @@
  * 0.2.2-rc.1 (design/next-step-suggestions-tech.md appendix A/B). Classes are
  * renamed under the `dshns-` prefix and only theme tokens are referenced, per
  * the official external-plugin guidance. Additions for our own controls
- * (controls row, tags, prompt preview, conflict row) reuse the same tokens and
- * spacing scale. M9 adds the reveal wrapper: the script owns the height/opacity
- * transition, the stylesheet only guarantees reduced-motion safety.
+ * (controls row, inline markers, compact conflict row, measured clamps) reuse
+ * the same tokens and spacing scale. M9 adds the reveal wrapper: the script
+ * owns the height/opacity transition, the stylesheet only guarantees
+ * reduced-motion safety.
+ *
+ * Accessibility contract (2026-11-10 polish round):
+ *   - every clickable control inside the card targets >=32px height;
+ *   - text is never styled with a token below WCAG AA 4.5:1 on its own
+ *     surface in either theme (label-tertiary and link are therefore not used
+ *     for peek/label/toggle text);
+ *   - the warning icon mixes amber toward label-primary so the 12px glyph
+ *     clears the 3:1 non-text threshold on light cards while keeping its hue;
+ *   - the expanded conflict compare caps its scrollable lines at 240px and the
+ *     toggle stays outside that scroll region.
  */
 export const STYLES = `
 .dshns-card {
@@ -51,7 +62,7 @@ export const STYLES = `
 }
 .dshns-toggle {
   height: auto;
-  min-height: 24px;
+  min-height: 32px;
   margin: 8px 0 0;
   padding-inline: 0;
   font-size: 12px;
@@ -61,7 +72,7 @@ export const STYLES = `
   align-items: center;
   gap: 12px;
   margin-top: 12px;
-  min-height: 28px;
+  min-height: 32px;
   display: flex;
 }
 .dshns-status {
@@ -75,13 +86,16 @@ export const STYLES = `
   font-size: 12px;
   line-height: 1.6;
 }
-.dshns-status-peek { color: var(--dsw-alias-label-tertiary); }
+/* Peek keeps the resting status color: label-tertiary missed AA at 12px in the
+ * light theme (3.71:1). The "将填入" prefix, not a lighter gray, marks it as
+ * transient. */
+.dshns-status-peek { color: var(--dsw-alias-label-secondary); }
 .dshns-btn.dshns-dismiss,
 .dshns-btn.dshns-restore {
   flex: none;
   width: auto;
   min-width: 0;
-  height: 28px;
+  height: 32px;
   padding: 0 8px;
   gap: 4px;
   color: var(--dsw-alias-label-secondary);
@@ -117,12 +131,17 @@ export const STYLES = `
 }
 .dshns-btn-primary .dshns-marker { color: inherit; opacity: .78; }
 .dshns-marker-danger { display: inline-flex; align-items: center; gap: 3px; }
+/* Amber-600 alone is 2.79:1 on the white card; mixing it 65/35 toward
+ * label-primary yields 5.43:1 (light) / 8.06:1 (dark) while still reading as
+ * warning amber. On a primary chip the marker inherits the button foreground,
+ * which already has AA contrast in both themes. */
 .dshns-warn {
   flex: none;
   width: 12px;
   height: 12px;
-  color: var(--dsw-alias-state-warn-primary);
+  color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary));
 }
+.dshns-btn-primary .dshns-warn { color: inherit; }
 /* Conflict prompt: keep the target instruction and the current draft visible,
  * then offer an append-first decision row. */
 .dshns-conflict {
@@ -139,6 +158,20 @@ export const STYLES = `
   font-size: 12px;
   line-height: 1.6;
 }
+/* The expandable lines live in their own wrapper so the expanded state can cap
+ * its height and scroll without scrolling the toggle out of reach. Collapsed it
+ * is a plain stack and adds no visible box. */
+.dshns-conflict-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dshns-conflict-compare[data-expanded] .dshns-conflict-lines {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .dshns-conflict-line {
   display: flex;
   align-items: baseline;
@@ -146,9 +179,11 @@ export const STYLES = `
   min-width: 0;
   margin: 0;
 }
+/* Labels carry meaning, so they use the same AA-safe secondary as the text
+ * (label-tertiary was 3.42:1 on the light module surface). */
 .dshns-conflict-label {
   flex: none;
-  color: var(--dsw-alias-label-tertiary);
+  color: var(--dsw-alias-label-secondary);
   font-size: 11px;
   line-height: 1.6;
   white-space: nowrap;
@@ -165,18 +200,24 @@ export const STYLES = `
   overflow: visible;
   text-overflow: clip;
 }
+/* The toggle stays outside the capped scroll region. Link blue missed AA on the
+ * light module surface (3.91:1); secondary + underline keeps the link cue and
+ * reaches 5.36:1. */
 .dshns-btn.dshns-conflict-toggle {
   align-self: flex-end;
-  height: 24px;
+  height: 32px;
   padding: 0;
   border-radius: 0;
   background: none;
-  color: var(--dsw-alias-link);
+  color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 1.6;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
+.dshns-btn.dshns-conflict-toggle:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
 /* Conflict keeps the status text and the three actions on one row so the
- * state is only ~24px taller than a resting card. */
+ * state stays within the 25px height budget over a resting card. */
 .dshns-statusbar-conflict {
   margin-top: 8px;
   flex-wrap: wrap;
@@ -199,7 +240,7 @@ export const STYLES = `
 }
 .dshns-btn:disabled { cursor: not-allowed; opacity: .4; }
 .dshns-btn-sm {
-  height: 28px;
+  height: 32px;
   font-size: 12px;
   line-height: 18px;
   padding: 0 10px;
@@ -345,7 +386,7 @@ export const STYLES = `
   box-sizing: border-box;
   position: relative;
   z-index: 1;
-  height: 28px;
+  height: 32px;
   padding: 0 10px;
   border: 0;
   border-radius: var(--dsw-radius-sm);

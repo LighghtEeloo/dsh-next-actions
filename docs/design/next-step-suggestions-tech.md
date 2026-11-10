@@ -1,16 +1,20 @@
 # 技术方案：DSH「下一步建议」本地插件 `@local/dsh-next-actions`
 
-版本：v1.1（技术方案） ｜ 日期：2026-11-10 ｜ 状态：现行（P1 布局与移除 Send 模式已落地）
+版本：v1.2（技术方案） ｜ 日期：2026-11-10 ｜ 状态：现行（P1 布局、方案 A 与可访问性打磨已落地）
 关联文档：产品形态稿 `design/next-step-suggestions-prd.md`（v0.9，行为与形态的唯一基准）
 运行环境：DSH Desktop `0.2.2-rc.1`（`dsh --version`；asar 内 `dsh/package.json` 双重核对）
 工作区：`/Users/arctic/Box/Terrace/deepseek-harness/default-workspace`
 2026-11-10 更新：同步卡片 P1 布局（默认 3 条、按需预览、单内联标记、带文字忽略/恢复、冲突对比）与
 彻底移除 Send 模式的实现；改动集中在 §1、§3.2、§6.3/§6.5/§6.6/§6.8、§9、§10、§13 与附录 A/D/F。
 同日补记：冲突态动作并入状态行（`.dshns-statusbar-conflict`，删除独立 `.dshns-conflict-actions` 行），
-冲突态与默认态高度差 ≤25px（748 列实测 24.5px）；改动集中在 §5.8、§6.3、§8、§9、§10、§11.3、§13、§14 与附录 A。
+冲突态与默认态高度差 ≤25px（748 列实测 24.5px；可访问性打磨轮复测 20.0px，见后）；改动集中在 §5.8、§6.3、§8、§9、§10、§11.3、§13、§14 与附录 A。
 方案 A（2026-11-10）：删除 hover 预览块，改为状态行单行 peek；`context` 上限 120→240，FoldedText 改为
 2 行 clamp + DOM 溢出测量 + 点击展开（删除 FOLD_WIDTH）；冲突对比框长内容可展开全文。改动集中在 §1、§5.3、
 §5.5/§5.6/§5.7、§6.3、§6.6、§10、§13 与附录 A/D。
+可访问性打磨（2026-11-10）：卡片控件统一 32px；状态行 peek、冲突对比标签与展开链接改用 AA 安全 token，
+⚠ 图标改 65/35 混色；冲突展开态对比文本封顶 240px 滚动、「收起全文」固定在滚动区外且仅真的滚动时可聚焦
+（`role="group"`）；chip 可访问名改为「可见标签：完整指令」；上下文展开不封顶。改动集中在 §1.1、§5.8、
+§6.3/§6.6、§8、§10、§11.3、§13、§14 与附录 A/B/D；测试与度量见 §5.8/§10。
 
 证据标记：**【V26】**=在**当前安装的 0.2.2-rc.1** asar/前端产物中直接核对；**【V21】**=本工作区 0.2.1-rc.2 解包语料（`research/app/`、`vendor/`，仅作对照）；**【官方规范】**=官方插件开发 skill 的明文规则；**【推断】**=合理推断，列入 §12 T0 验证。
 
@@ -66,7 +70,10 @@
 - 危险建议（模型标记 + 本地词表）带「⚠ 需确认」内联标记与填入后的警示；
 - 工具过程组一行式调用记录（标题 + 状态 + 摘要；异常可展开原因 +「查看调用」）；
 - hover/focus 只在状态行内显示单行「将填入 · 指令」peek（省略号截断），不插入预览块、卡片高度不变；
-- 冲突对比框目标/草稿各一行省略，长内容可「展开全文/收起全文」；
+- 冲突对比框目标/草稿各一行省略，长内容可「展开全文/收起全文」；展开态对比文本封顶 240px 滚动、
+  「收起全文」固定在滚动区外，仅真的滚动时滚动区可聚焦；
+- 可访问性（2026-11-10 打磨）：卡片内所有可点击控件 ≥32px 高；状态行 peek / 冲突对比标签 / 展开链接
+  在浅深主题均达 WCAG 2.2 AA 文字对比度，⚠ 图标达非文本 3:1；chip 可访问名包含可见标签；
 - 刷新/重启/回放/fork 后卡片与状态保留；
 - 状态行右侧「暂不需要」→ 控件收起、状态行「已忽略」、按钮变「恢复建议」、卡片保留；
 - 语言跟随用户对话；界面文案中英；
@@ -260,6 +267,7 @@ plugins/dsh-next-actions/
     ├── view-model.test.mjs  # 客户端纯逻辑单测
     ├── card-state.test.mjs  # 卡片状态组合（filled/danger/chip 标记/冲突）
     ├── definition.test.mjs  # native + PTC 的 turn data 折叠
+    ├── a11y.test.mjs        # 样式可访问性契约（AA 对比度 / 32px 目标 / 240px 封顶）
     └── build.test.mjs       # 构建产物与源一致（node:test 调 build --check）
 ```
 
@@ -699,6 +707,11 @@ config 缺省/畸形值）→ `tool.test.mjs` **31**，Host 55 + 31 = **86**；�
 2026-11-10 方案 A：`card-state.test.mjs` 移除预览组合用例、`normalize.test.mjs` 增加 context 240 上限用例、
 `build.test.mjs` 改为断言 hover 无预览块 + measured clamp + `ConflictCompare` 展开控件；
 全仓 `node --test` **207** 全绿。
+2026-11-10 可访问性打磨：新增 `test/a11y.test.mjs` **6 个契约用例**（peek / 冲突标签 / toggle 的 AA 对比度、
+⚠ 混色非文本对比度、32px 目标高度、240px 滚动封顶；主题 token 取自 0.2.2-rc.1 的 light/dark 解析值）；
+`build.test.mjs` 新增 2 个契约用例（chip 可访问名「可见标签在前」、冲突滚动区 `dshns-conflict-lines` /
+`conflict.scrollRegion` / `tabIndex: scrollable ? 0 : undefined`），现 18 个用例；全仓 `node --test`
+**215** 全绿（207 → 215），`scripts/build-client.mjs --check` 通过，`client.js` 重建为 **92,220 字符**。
 
 ---
 
@@ -861,27 +874,32 @@ PTC 预设把工具调用放进 `run_code` 程序：模型直接调用的只有 
 ```text
 section.dshns-card[aria-label=标题][data-next-steps-card]
   div.dshns-body
-    <FoldedText context>                    ← 说明：默认 2 行 clamp（.dshns-text-clamped）；实测溢出才显示 ghost「展开/收起」
+    <FoldedText context>                    ← 说明：默认 2 行 clamp（.dshns-text-clamped）；实测溢出才显示 ghost「展开/收起」（min-height 32）
       svg.dshns-mark                        ← 16px 品牌小标（列表+星火，实色填充，行首内联）
-      text                                  ← 上下文行，13px/1.6 label-secondary；展开后换行全文
+      text                                  ← 上下文行，13px/1.6 label-secondary；展开后换行全文（不封顶）
     div.dshns-controls                      ← 建议按钮（推荐 primary sm / 其余 ghost sm；默认 3 条）
-      button.dshns-btn-primary/ghost.dshns-chip
+      button.dshns-btn-primary/ghost.dshns-chip[aria-label="可见标签：完整指令"]
         span.dshns-chip-label               ← 建议短标签（单行省略）
         span.dshns-marker                   ← 至多一个内联文本标记（推荐 / 已填入 / ⚠需确认）
-      button.dshns-toggle「还有 N 条」      ← 官方同款 ghost 小按钮（Card .toggle 样式）；展开后显示「收起」
+      button.dshns-toggle「还有 N 条」      ← 官方同款 ghost 小按钮（Card .toggle 样式；min-height 32）；展开后显示「收起」
     div.dshns-conflict                      ← 仅冲突态：只放对比框（ConflictCompare）
       div.dshns-conflict-compare[role=note][data-expanded]
-        p.dshns-conflict-line               ← span 标签「将填入」 + span 目标指令（默认单行省略；展开后换行全文）
-        p.dshns-conflict-line               ← span 标签「当前草稿」 + span 草稿（默认单行省略；展开后换行全文）
-        button.dshns-btn-ghost.sm.dshns-conflict-toggle「展开全文/收起全文」  ← 仅溢出或已展开时
-    div.dshns-statusbar[.dshns-statusbar-conflict]  ← 一行：左侧状态文字 + 右侧状态动作
-      p.dshns-status[role=status]           ← 状态；hover/focus 时加 .dshns-status-peek，显示单行「将填入 · 指令」
+        div.dshns-conflict-lines            ← 两行文本 wrapper；[data-expanded] 时 max-height:240px + overflow-y:auto
+          p.dshns-conflict-line             ← span 标签「将填入」 + span 目标指令（默认单行省略；展开后换行全文）
+          p.dshns-conflict-line             ← span 标签「当前草稿」 + span 草稿（默认单行省略；展开后换行全文）
+        button.dshns-btn-ghost.sm.dshns-conflict-toggle「展开全文/收起全文」  ← 仅溢出或已展开时；在滚动区外，高 32px
+    div.dshns-statusbar[.dshns-statusbar-conflict]  ← 一行：左侧状态文字 + 右侧状态动作（min-height 32）
+      p.dshns-status[role=status]           ← 状态；hover/focus 时加 .dshns-status-peek，显示单行「将填入 · 指令」（不参与 role=status）
       button.dshns-btn-primary.sm「追加到末尾」  ← 仅冲突态；与状态文字同一行（窄列可换行）
       button.dshns-btn-ghost.sm「替换」          ← 仅冲突态
       button.dshns-btn-ghost.sm「取消」          ← 仅冲突态
-      button.dshns-btn-ghost.sm.dshns-dismiss   ← 建议态：16px「−」图标 + 12px「暂不需要」（高 28px）
-      button.dshns-btn-ghost.sm.dshns-restore   ← 已忽略态：16px「+」图标 + 12px「恢复建议」
+      button.dshns-btn-ghost.sm.dshns-dismiss   ← 建议态：16px「−」图标 + 12px「暂不需要」（高 32px）
+      button.dshns-btn-ghost.sm.dshns-restore   ← 已忽略态：16px「+」图标 + 12px「恢复建议」（高 32px）
 ```
+
+> `.dshns-conflict-lines` 只在展开后真的滚动（`scrollHeight > clientHeight + 1`）时才获得
+> `role="group" tabindex="0" aria-label="目标指令与当前草稿"`（locale `conflict.scrollRegion`）；
+> 「收起全文」是 wrapper 的兄弟节点，始终留在滚动区外。
 
 > **2026-11-09 卡片改版（实机反馈）**：去掉可见标题 `strong.dshns-title`（`aria-label` 仍为「下一步建议」），
 > 上下文成为第一行、行首内联 16px 品牌小标；上下文样式由 13px/1.7、`margin-top:8px` 调整为 13px/1.6、无上边距，
@@ -915,6 +933,23 @@ section.dshns-card[aria-label=标题][data-next-steps-card]
 > 实际溢出测量 + 点击「展开/收起」。冲突对比改为 `ConflictCompare`：目标/草稿默认各一行省略，
 > 溢出时显示 `.dshns-conflict-toggle`「展开全文/收起全文」，展开后在 `[data-expanded]` 下换行显示全文；
 > 748 列短内容冲突卡 158.5px（默认 134px，差 24.5px，验收 ≤25px）。新增 locale `conflict.expand/collapse`。
+>
+> **2026-11-10 可访问性打磨（WCAG 2.2 AA + 32px 目标；高度数据取代上文 134 / 158.5px 记录）**：卡片内所有可点击控件统一 32px 高（`.dshns-btn-sm`、
+> `.dshns-statusbar` min-height、`.dshns-dismiss`/`.dshns-restore`、`.dshns-toggle`、`.dshns-conflict-toggle`、
+> `.dshns-segmented-tab`；设置分段容器因此为 40 = 4 + 32 + 4）。文字色改用 AA 安全 token：状态行 peek、
+> 冲突对比标签（`.dshns-conflict-label`）从 `label-tertiary` 改为 `label-secondary`，冲突「展开全文/收起全文」
+> 从 `link` 改为 `label-secondary` + 下划线（hover `label-primary`）；浅色实测 3.71 / 3.42 / 3.91 →
+> 5.80 / 5.36 / 5.36，深色 10.42 / 8.03 / 8.03。危险标记的 12px ⚠ 图标改用
+> `color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary))`（浅色 `#955D22`
+> 5.43 卡片 / 5.02 module，深色 `#E7AF73` 8.06 / 6.21；旧 `state-warn-primary` 浅色 2.15 未达非文本 3:1），
+> primary chip 内 `color: inherit` 继承按钮前景色（18.90 / 18.08）。冲突展开态新增 `div.dshns-conflict-lines`
+> 包住两行文本，`[data-expanded]` 下 `max-height:240px; overflow-y:auto; overscroll-behavior:contain`；
+> toggle 不在滚动区内；真的滚动时 wrapper 补 `role="group" tabindex="0" aria-label="目标指令与当前草稿"`
+> （locale `conflict.scrollRegion`），未到上限的展开态不产生焦点站。chip 可访问名改为
+> `${label}：${prompt}`（label 等于 prompt 时只留 prompt），修 WCAG 2.5.3；内联标记文字仍不进入可访问名。
+> 上下文展开**有意不封顶**：`context` 上游已截到 240 字符，390 窄列最坏约 9 行，属可一次读完的长度，
+> 加 cap 只会把最后一行藏起来。高度复测：748 列默认 142.0 / 冲突短 162.0（+20.0，验收 ≤25）、封顶展开
+> ⑮ 395.5；390 列 162.5 / 183.0（+20.5）、⑮ 416.5，对比框恒为 290 = 8 + 240 + 2 + 32 + 8。
 
 **交互**：
 
@@ -986,9 +1021,17 @@ const statusText = peekText ?? (status === null || status === undefined ? null :
 - **上下文 2 行 clamp（2026-11-10 方案 A）**：`LIMITS.context` 120→240；`FoldedText` 用 CSS
   `.dshns-text-clamped` 限 2 行，`ResizeObserver` + `scrollHeight > clientHeight` 测量实际溢出，
   仅溢出（或已展开）时渲染 ghost「展开/收起」；点击显式展开全文，不再使用 `FOLD_WIDTH` 字符预算。
-- **冲突全文**：`ConflictCompare` 保持目标/草稿两行（默认各一行省略），用 `scrollWidth > clientWidth`
-  判断溢出；溢出或已展开时显示 `.dshns-conflict-toggle`「展开全文/收起全文」，`[data-expanded]` 时
-  文本 `white-space: pre-wrap` 换行完整显示；短内容不显示 toggle，默认高度不变。
+- **冲突全文（2026-11-10 打磨轮加 cap 与焦点）**：`ConflictCompare` 保持目标/草稿两行（默认各一行省略），
+  用 `scrollWidth > clientWidth` 判断溢出；溢出或已展开时显示 `.dshns-conflict-toggle`「展开全文/收起全文」；
+  `[data-expanded]` 时文本换行完整显示，并包在 `.dshns-conflict-lines` 内封顶 240px 滚动
+  （`max-height:240px; overflow-y:auto; overscroll-behavior:contain`），toggle 在滚动区外；仅
+  `scrollHeight > clientHeight + 1` 时 wrapper 补 `role="group"`/`tabindex="0"`/`aria-label`
+  （`conflict.scrollRegion`）；短内容不显示 toggle，默认高度不变。
+- **chip 可访问名（2026-11-10 打磨）**：`accessibleName = prompt === label ? label : label + '：' + prompt`
+  （可见标签在前，满足 WCAG 2.5.3 Label in Name）；内联标记文字不并入可访问名。
+- **32px 目标（2026-11-10 打磨）**：`.dshns-btn-sm`、`.dshns-statusbar`（min-height）、`.dshns-dismiss` /
+  `.dshns-restore`、`.dshns-toggle`（min-height）、`.dshns-conflict-toggle`、`.dshns-segmented-tab` 均为
+  32px；设置分段容器为 40px。
 - **默认 3 条 + 「还有 N 条」**：`DEFAULTS.maxPerTurn = 3`，`buildDisplay` 切片并给出 `moreCount`；
   「还有 N 条」展开为模型给的全部建议（最多 6），再点「收起」还原。
 - 状态行右侧按钮：建议态「− 暂不需要」（忽略），已忽略态「+ 恢复建议」；两个方向都把 `dismissed`
@@ -1006,11 +1049,12 @@ M3 实现注记（均可单测或代码审查）：
 - 输入框不可写（`inputActions.setDraft` 缺失或禁用）时，按钮禁用且状态行显示"输入框暂不可用"。
 - **状态行优先级（2026-11-10 修订）**：输入框不可用 > 已忽略 > 冲突 > 已填入/危险警示；
   忽略后卡片保留但控件收起（同官方 dismiss），状态行右侧换成「恢复建议」。
-- **冲突态高度（2026-11-10 紧凑化）**：动作与状态同行、无独立动作行；748 列实测默认 134px → 冲突
-  158.5px（差 24.5px，验收 ≤25px）；窄列换行情况待视觉证据实测。
-- **方案 A 高度预算（2026-11-10）**：hover/focus 只换状态行文字，卡片高度前后差为 0；748 列实测默认卡
-  134px、冲突卡（短内容）158.5px（差 24.5px，验收 ≤25px）；上下文/冲突的全文展开只在点击后增加高度，
-  再次点击恢复。390px 窄列按同一口径测量。
+- **冲突态高度（2026-11-10 紧凑化，可访问性打磨轮复测）**：动作与状态同行、无独立动作行；748 列实测默认
+  142.0px → 冲突短内容 162.0px（差 20.0px，验收 ≤25px）；390 列 162.5px → 183.0px（差 20.5px），两列均未换行。
+- **高度预算（2026-11-10 可访问性打磨轮）**：hover/focus 只换状态行文字，卡片高度前后差为 0（748 列
+  141.5 vs 142.0 的 0.5px 为 0.5px 描边量化），390 列同为 162.5；默认 142.0 / 162.5，短冲突 +20.0 / +20.5；
+  上下文展开 202.5 → 265.0（748）/ 203.0 → 348.5（390），不封顶；冲突展开未到上限 235.0 / 313.0，
+  极长文本封顶后 395.5 / 416.5（对比框恒 290 = 8 + 240 + 2 + 32 + 8，高度有界）。
 - **「已填入」/危险警示按草稿派生（2026-11-10 P0 修复）**：只有草稿仍等于本卡本次写入的文本，或刷新后
   仍等于该建议的 prompt 时，才显示 filled 标记与危险警示；编辑、清空、刷新后不保留误报。危险标记取自建议
   数据，因此持久化的 filledId + 匹配草稿在重载后仍能显示警示。对应纯逻辑集中在 `lib/view-model.js` 的
@@ -1020,9 +1064,16 @@ M3 实现注记（均可单测或代码审查）：
 
 **FoldedText（2026-11-10 方案 A 重写）**：不再使用官方 `FOLD_WIDTH` 字符预算（260 拉丁字宽在 240 字
 上限下不可达）；改为 CSS 2 行 clamp（`.dshns-text-clamped`）+ `ResizeObserver`/`scrollHeight` 实测
-溢出 + ghost「展开/收起」点击显式展开。类名 `dshns-text/ dshns-toggle`。
-**ConflictCompare（2026-11-10 方案 A）**：对比框两行默认单行省略，`scrollWidth > clientWidth` 实测溢出后
-渲染 `.dshns-conflict-toggle`「展开全文/收起全文」；`[data-expanded]` 下文本换行完整显示，短内容不显示 toggle。
+溢出 + ghost「展开/收起」点击显式展开。类名 `dshns-text / dshns-toggle`（toggle min-height 32）。
+**上下文展开不封顶（有意）**：上游 `context` 已截到 240 字符；748 列展开约 5 行（265.0）、390 列约 9 行
+（348.5），均属可一次读完的长度，封顶只会隐藏末行且不减少信息量。
+**ConflictCompare（2026-11-10 方案 A；可访问性打磨轮加 cap/焦点）**：对比框两行默认单行省略，
+`scrollWidth > clientWidth` 实测溢出后渲染 `.dshns-conflict-toggle`「展开全文/收起全文」（高 32px、
+`label-secondary` + 下划线，hover `label-primary`）；`[data-expanded]` 下文本换行完整显示，短内容不显示 toggle。
+两行文本包在 `.dshns-conflict-lines` 内，展开态 `max-height:240px; overflow-y:auto; overscroll-behavior:contain`，
+toggle 是 wrapper 的兄弟节点（固定在滚动区下方）；只有展开后 `scrollHeight > clientHeight + 1` 真的滚动时，
+wrapper 才获得 `role="group" tabindex="0" aria-label="目标指令与当前草稿"`（`conflict.scrollRegion`），
+未到上限的展开态不产生额外焦点站。
 
 ### 6.4 过程组一行（`tool.call.toolview`）
 
@@ -1097,7 +1148,7 @@ root scope，只有 `{close}`，没有 session kit。
 `ctx.locale.register('nextSteps', { en, zh })` 在 `apply` 的 effect 中注册（en/zh 为 baseline，成对必需）；
 slot 注册 `locale:NS` 后组件拿到 `t`。词表（§附录 D）：卡片 `aria-label`（不做可见标题）、更多/收起、暂不需要/恢复建议、
 已填入/冲突/危险提示、「将填入」peek 前缀（`preview.label`）、「将填入 / 当前草稿」对比标签、
-展开全文/收起全文（`conflict.expand`/`conflict.collapse`）、
+展开全文/收起全文（`conflict.expand`/`conflict.collapse`）、冲突滚动区可访问名（`conflict.scrollRegion`）、
 追加到末尾/替换/取消、推荐/已填入/需确认、
 行状态（正在准备建议/正在生成建议/已生成/未显示/已中断）、查看调用、设置页文案、兜底上下文句。
 包 `locale/{en,zh}.json` 仅放 `meta.title`/`meta.description`。
@@ -1184,12 +1235,13 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | `conversation` 服务不可用 | 仍可 `inputActions.setDraft`（标准 prop）；无自动聚焦 | 提示用户手动点输入框 |
 | `inputActions` 缺失（非 session 作用域/异常宿主） | 卡片按钮禁用并提示 | 不应发生（turnTail 为 session scope） |
 | 输入框已有内容 | 不覆盖，显示「将填入 / 当前草稿」对比；「追加到末尾/替换/取消」与状态文字同一行（无独立动作行） | 取消 = 不改；三种选择都只填入；冲突态高度差超预算时查 `.dshns-statusbar-conflict` 是否生效/是否换行 |
+| 冲突目标/草稿极长（已展开） | 对比文本在 240px 滚动区内滚动，「收起全文」固定在滚动区外；只有真的滚动时滚动区才可聚焦 | 未滚动不产生额外焦点站；滚动区 `role=group`/`tabindex=0` 由源码测量补加 |
 | 草稿被用户在别处修改 | 字符串比对发现不一致 → 冲突确认 | 同上 |
 | 子代理会话 | 不渲染卡片 | 过程行仍显示 |
 | 回合无文本回答/中断 | 不渲染卡片（closing 判定） | — |
 | 用户点状态行「暂不需要」 | 控件收起、状态行「已忽略」、按钮变「恢复建议」、卡片保留 | localStorage 记录；重置入口在设置页 |
 | 建议超过设置条数 | 客户端默认显示前 3 条，其余「还有 N 条」；Auto 时全部显示 | Host 始终 ≤6 |
-| 危险建议 | 「⚠ 需确认」内联标记（警告图标用 `--dsw-alias-state-warn-primary`）；填入后警示；永不自动发送 | — |
+| 危险建议 | 「⚠ 需确认」内联标记（12px 图标用 65/35 混色 `state-warn-label` → `label-primary`，两主题过非文本 3:1；primary chip 继承前景色）；填入后警示；永不自动发送 | — |
 | 内存/性能：长会话 | 每轮最多一张卡；Definition 仅折叠本工具事件（O(事件数)） | 卡片随轮次渲染，无全表重排 |
 | 重启后「已忽略/已填入」标记 | 2026-11-09 实机：**设置项跨重启保留成功**（GUI URL 端口虽变化，Electron 页面分区仍保留了 localStorage）；卡片标记的跨重启复验未单独进行 | 若后续发现标记丢失：改用 Host 侧存储/自定义 RPC，或接受该限制 |
 | 模板/构建漂移 | `test/build.test.mjs` 在 CI/提交前失败 | 跑 `node scripts/build-client.mjs` |
@@ -1220,14 +1272,15 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | `test/view-model.test.mjs` | `parseMeta` 防御（缺字段/超大/多余字段）；`modelFromArgs` 兜底；`buildDisplay`（默认 3 条/Auto/推荐顺序/optional 压尾）；草稿冲突状态机（空/本人草稿/用户编辑/追加）；`deriveChipMarker`；设置 clamp（无点击行为项）；storage key/hash；危险词表 |
 | `test/card-state.test.mjs` | 卡片状态组合：filled 标记按草稿派生、danger 只在生效填入时出现、状态行优先级、单标记优先级、冲突合并 |
 | `test/definition.test.mjs` | Conversation Definition：native `tool/call`+`tool/result` 与 PTC `tool/ptc-dispatch-*` 两条链路的 match/fold/turn location；meta 优先与 args 兜底；空 state 守卫 |
-| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在；无 Send 模式/`submit` 引用/胶囊 Tag/「可以不做」；冲突动作与状态同一行（`dshns-statusbar-conflict`，无 `dshns-conflict-actions`）；hover 不插入预览块（`dshns-status-peek`、无 `dshns-preview`）、measured clamp（`ResizeObserver`/`scrollHeight`）、`ConflictCompare` 展开控件与 `conflict.expand/collapse` |
+| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在；无 Send 模式/`submit` 引用/胶囊 Tag/「可以不做」；冲突动作与状态同一行（`dshns-statusbar-conflict`，无 `dshns-conflict-actions`）；hover 不插入预览块（`dshns-status-peek`、无 `dshns-preview`）、measured clamp（`ResizeObserver`/`scrollHeight`）、`ConflictCompare` 展开控件与 `conflict.expand/collapse`；chip 可访问名含可见标签（`accessibleName`）；冲突展开滚动区（`dshns-conflict-lines`、`conflict.scrollRegion`、`tabIndex: scrollable ? 0 : undefined`） |
+| `test/a11y.test.mjs` | 样式可访问性契约：peek / 冲突标签 / toggle 的 AA 对比度（light/dark 的 token 解析值）；⚠ 混色图标 ≥3:1；32px 目标高度；展开态 240px 滚动封顶 |
 
 ### 10.2 手工 E2E（装插件后逐条执行，对应形态稿 §12）
 
 1. 普通问答 → 过程组一行「下一步建议 · 已生成」；卡片出现在回答下方、官方卡上方；
 2. 卡片与官方卡并排比较：宽度/圆角/描边/说明字号/说明折叠/按钮尺寸/状态行（两卡差异在标题、footer/状态行文字切换、hover 状态行 peek 三处）；
 3. 点击建议 → 只填入输入框、不发送；光标在末尾；状态行「已填入输入框，可修改后发送」，chip 显示单个「已填入」标记；
-4. 输入框已有文字 → 点击出「将填入 / 当前草稿」对比，状态行同一行出现「追加到末尾/替换/取消」；三种都验证且都只填入；短内容不出现「展开全文」，长内容出现且可展开/收起；量测冲突态与默认态高度差（748 列参考 24.5px，验收 ≤25px）；
+4. 输入框已有文字 → 点击出「将填入 / 当前草稿」对比，状态行同一行出现「追加到末尾/替换/取消」；三种都验证且都只填入；短内容不出现「展开全文」，长内容出现且可展开/收起；量测冲突态与默认态高度差（748 列参考 20.0px、390 列 20.5px，验收 ≤25px）；
 5. 连续点不同建议（未编辑）→ 直接替换不询问；编辑后再点 → 出确认；
 6. 危险建议 → 「⚠ 需确认」标记 + 填入后警示；任何操作都不会发送；
 7. 默认显示 3 条，「还有 N 条」展开/收起；推荐在首位；可跳过类建议压尾但不显示标记；
@@ -1244,9 +1297,12 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 18. 长会话 100+ 轮 → 滚动与渲染无明显卡顿；
 19. PTC 预设会话：模型通过 `run_code` 调用 `suggest_next_steps` → `run_code` 过程组内出现「下一步建议 · 已生成」，回答下方出现卡片；刷新后卡片保留；
 20. 分别用 native 与 PTC 预设的新会话各跑一轮 → 两种链路的卡片行为一致（内容、点击、忽略/恢复）；
-21. 长上下文（>2 行、≤240 字符）：默认 2 行 clamp，仅实际溢出时出现「展开/收起」；点击展开全文、再点收起；悬停不展开、高度不变；
-22. 冲突对比框：短内容无「展开全文」；目标/草稿溢出时出现，点击后两行换行完整显示，再点「收起全文」恢复紧凑高度；
-23. 748px 与 390px 两列分别验证：hover 前后卡片高度差为 0、peek 单行省略；冲突态与默认态高度差 ≤25px（748 列参考 158.5 vs 134、差 24.5px）；上下文/冲突展开均只由点击触发。
+21. 长上下文（>2 行、≤240 字符）：默认 2 行 clamp，仅实际溢出时出现「展开/收起」；点击展开全文、再点收起；悬停不展开、高度不变；展开态不封顶（390 列最坏约 9 行），确认属有意设计；
+22. 冲突对比框：短内容无「展开全文」；目标/草稿溢出时出现，点击后两行换行完整显示，再点「收起全文」恢复紧凑高度；极长文本（475/375 字符）展开后对比文本封顶 240px 在框内滚动、「收起全文」固定在下、高度有界（748: 395.5、390: 416.5）；
+23. 748px 与 390px 两列分别验证：hover 前后卡片高度差为 0、peek 单行省略；冲突态与默认态高度差 ≤25px（748 列 142.0 vs 162.0、差 20.0px；390 列 162.5 vs 183.0、差 20.5px）；上下文/冲突展开均只由点击触发。
+24. 可访问名（读屏/DevTools）：每个 chip 的 accessible name 以可见标签开头并含完整指令（`可见标签：完整指令`）；标记文字（推荐/已填入/需确认）不在可访问名内；
+25. 32px 目标：量 chip、状态行切换、上下文/冲突展开按钮、冲突动作按钮与设置分段 tab 高度均 ≥32px（分段容器 40px），触屏/键盘命中稳定；
+26. 双主题 AA：用对比度工具核对 peek / 冲突标签 / 展开链接 ≥4.5:1（5.80/10.42、5.36/8.03），⚠ 图标 ≥3:1（5.43/8.06）；键盘 Tab 在极长冲突展开态可进入滚动区（role=group/方向键滚动），未到上限的展开态不出现该焦点站。
 
 ### 10.3 视觉一致性核对（官方卡是活体基准，三处有意差异见 §6.3 注）
 
@@ -1255,24 +1311,29 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
   `background: var(--dsw-alias-bg-layer-1)`、`margin: 16px 0`、`overflow: hidden`、`font-family: var(--dsw-font-family)`；
 - 官方 `.body` 内边距 `12px 20px 20px` / 本卡 `14px 20px 18px`；官方 `.title` 16px/500/1.5 / 本卡无标题；
   官方 `.text` 13px/1.7 secondary、margin-top 8 / 本卡 `.text` 13px/1.6、margin 0（品牌小标行首内联）；
-- `.toggle` 展开按钮：height auto、min-height 24、padding-inline 0、font-size 12（两边相同）；
-- 官方 `.status` 12px/1.6、margin-top 12；本卡 `.statusbar` 一行（margin-top 12、min-height 28），
-  文字 12px/1.6、margin 0，右端 28px 高带文字切换（建议态 `.dshns-dismiss`「− 暂不需要」/ 忽略态
+- `.toggle` 展开按钮：本卡 height auto、min-height **32**（可访问性打磨轮由 24 提高）、padding-inline 0、font-size 12；
+- 官方 `.status` 12px/1.6、margin-top 12；本卡 `.statusbar` 一行（margin-top 12、min-height **32**），
+  文字 12px/1.6、margin 0，右端 **32px** 高带文字切换（建议态 `.dshns-dismiss`「− 暂不需要」/ 忽略态
   `.dshns-restore`「+ 恢复建议」，12px 文字 + 16px 图标，padding 0 8）；
 - 本卡扩展：`.dshns-marker` 11px/18、label-secondary（primary chip 内 inherit + opacity .78），
-  `.dshns-warn` 12×12、`--dsw-alias-state-warn-primary`；`.dshns-text-clamped` 2 行 clamp；
-  `.dshns-status` 单行省略（flex `0 1 auto`、`min-width:0`、`nowrap`），`.dshns-status-peek` label-tertiary；
-  `.dshns-conflict-compare` 12px/1.6、radius-sm、module 底、padding 8 10；`[data-expanded]` 下文本
-  `white-space: pre-wrap` + `overflow-wrap: anywhere`；`.dshns-conflict-toggle` 24px 高、link 色、右对齐；
-  对比框标签 11px、label-tertiary；
+  `.dshns-warn` 12×12、65/35 混色（primary chip 内 inherit）；`.dshns-text-clamped` 2 行 clamp；
+  `.dshns-status` 单行省略（flex `0 1 auto`、`min-width:0`、`nowrap`），`.dshns-status-peek` **label-secondary**
+  （5.80 / 10.42）；`.dshns-conflict-compare` 12px/1.6、radius-sm、module 底、padding 8 10；
+  `[data-expanded]` 下文本 `white-space: pre-wrap` + `overflow-wrap: anywhere`，两行包进 `.dshns-conflict-lines`
+  （展开态 max-height 240、overflow-y auto、overscroll-behavior contain；`scrollHeight > clientHeight + 1`
+  时 wrapper 补 `role=group`/`tabindex=0`/aria-label）；`.dshns-conflict-toggle` **32px** 高、
+  **label-secondary + 下划线**（hover label-primary）、右对齐；对比框标签 11px、**label-secondary**（5.36 / 8.03）；
 - hover/focus 高度：748/390 两列分别量 hover 前后卡片 border-box 高度，差必须为 0；状态行为单行 peek（省略号）；
 - 上下文 clamp：748/390 两列分别验证默认 2 行 clamp；仅实际溢出时出现「展开/收起」，点击后高度增加、再点恢复；
-- 冲突态高度：748px 宽列用夹具/实机量 border-box 高度，默认 134px、冲突 158.5px（差 24.5px，验收 ≤25px）；
-  `.dshns-statusbar-conflict` 生效（margin-top 8、flex-wrap wrap）、无独立 `.dshns-conflict-actions` 行；
-  短内容不出现 `.dshns-conflict-toggle`，长内容出现且展开后文本换行；
-  窄列（约 390px）动作换行后的高度按同一口径单独测量；
+- 冲突态高度：748/390 两列用夹具量 border-box 高度，默认 142.0 / 162.5px、冲突短内容 162.0 / 183.0px
+  （差 20.0 / 20.5px，验收 ≤25px）；`.dshns-statusbar-conflict` 生效（margin-top 8、flex-wrap wrap）、
+  无独立 `.dshns-conflict-actions` 行；短内容不出现 `.dshns-conflict-toggle`，长内容出现且展开后文本换行；
+  极长展开封顶后 395.5 / 416.5px（对比框恒 290px），仅滚动时滚动区可聚焦；
+- 32px 目标：chip（`.dshns-btn-sm`）、状态行切换、上下文 toggle、冲突 toggle、冲突动作、设置分段 tab
+  声明值与截图实测均 ≥32px（设置分段容器 40px）；
 - 官方 `.footer` `justify-content:flex-end; gap:12px; margin-top:12px`；本卡已删除 footer；
-- Button sm：height 28、font-size 12、padding 0 10、radius `--dsw-radius-sm`；primary/ghost 颜色 token 同官方；
+- Button sm：height **32**（打磨轮由 28 提高，属有意偏离官方 28px）、font-size 12、padding 0 10、
+  radius `--dsw-radius-sm`；primary/ghost 颜色 token 同官方；
 - 过程行：row 高 `24px + var(--dsh-content-font-delta,0px)`、gap 8、margin-left 8、font-size 12；
   原因框 `--dsw-radius-lg` + `--dsw-alias-bg-layer-1` + padding 12 + 12px；inspect 链接 `--dsw-alias-link`。
 
@@ -1281,8 +1342,16 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 - token：在 DSH token meter / 会话统计里对比"启用 vs 禁用"插件前后同一提示的请求 token；
 - 延迟：DevTools Performance 记录点击 → 输入框出现文本；
 - meta 体积：会话日志 `tool/result.meta`（native）或 `tool/ptc-dispatch.meta`（PTC）序列化长度（常规 <1.5KB）；
-- 卡片高度：748/390 两列量 border-box 高度；hover 前后差为 0，默认 vs 冲突差 ≤25px（748 列参考 24.5px）；
-  上下文/冲突展开后的高度增加属显式点击操作。
+- 卡片高度：748/390 两列量 border-box 高度，实测记录如下（border-box，±0.5px；全部 15 个状态见
+  `docs/design/ui-review-2026-11-10/notes-visual.md`「卡片总高」）：
+
+  | 状态（748 / 390 列） | ① 默认 | ② peek | ③ 已填入 | ④ 冲突短 | ⑥ 冲突展开（未到上限） | ⑮ 冲突展开（封顶） | ⑪ 已忽略 | ⑬ 上下文展开 |
+  |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+  | 748 列 | 142.0 | 141.5 | 141.5 | 162.0 | 235.0 | 395.5 | 97.5 | 265.0 |
+  | 390 列 | 162.5 | 162.5 | 202.5 | 183.0 | 313.0 | 416.5 | 98.0 | 348.5 |
+
+  契约：hover 前后差为 0（748 的 0.5px 为描边量化）；默认 vs 冲突短内容差 20.0 / 20.5px（≤25px）；
+  上下文与冲突的展开增高属显式点击操作；封顶展开 ⑮ 有界（对比框恒 290 = 8 + 240 + 2 + 32 + 8）。
 
 ---
 
@@ -1317,6 +1386,9 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | 填入无反应 | `inputActions` 是否拿到（session scope）；`setDraft` 是否被 frozen phase 拒绝 |
 | 样式错位 | 类名前缀冲突、CSS 是否在 apply 中注入、token 是否存在 |
 | 冲突态偏高/超出预算 | `.dshns-statusbar-conflict` 是否生效（margin-top 8、flex-wrap wrap）；动作是否换行；是否残留独立 `.dshns-conflict-actions` 行 |
+| 冲突展开态高度无上限 /「收起全文」被滚走 | `.dshns-conflict-compare[data-expanded] .dshns-conflict-lines` 的 max-height 240 / overflow-y auto 是否生效；`.dshns-conflict-toggle` 是否是 wrapper 的兄弟节点（不在滚动区内） |
+| 键盘无法进入冲突滚动区 | 只有 `scrollHeight > clientHeight + 1` 时 wrapper 才有 `role=group tabindex=0`；确认内容是否真的超过 240px |
+| chip 可访问名缺少可见标签 | `accessibleName` 是否为 `label + '：' + prompt`（label === prompt 时只留 label）；`aria-label` 是否绑定该值 |
 | 模型不调用工具 | description 是否够清晰；Auto review 是否拦截；模型是否已有相似工具 |
 
 ---
@@ -1333,7 +1405,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | T0-4 | `setDraft` 后 `draft`/`draftRev` 语义（是否 ours、编辑后变化） | [静态已证] 字段存在、rev 规则 | 点击 → 读 useInput；输入一个字符再读 | `draft===prompt` 且 rev 变化符合预期 | 仅用字符串相等判定（已实现） |
 | T0-5 | 默认权限模式不弹审批 | [静态已证] 默认 allow；唯一 ask 源=Auto | 默认模式发一轮调用工具 | 无审批卡、无 `approval/asked` | 若弹：查 listeners；Auto 模式属预期 |
 | T0-6 | 子代理会话识别 | [静态已证] `useSession(s=>s.subagent)` 官方读法 | 在子代理会话观察 | 卡片不渲染 | 改为设置开关/默认渲染 |
-| T0-7 | 官方卡/过程行视觉比对（含 SegmentedControl 与状态行文字按钮的缺省样式） | 样式值已提取；卡片已按 2026-11-10 P1 布局复核 | DevTools 对比 + 截图 | 肉眼一致 | 先补提取（同 live-asar 方法）再对齐 |
+| T0-7 | 官方卡/过程行视觉比对（含 SegmentedControl 与状态行文字按钮的缺省样式） | 样式值已提取；卡片已按 2026-11-10 P1 布局与可访问性打磨复核（32px / AA 对比度 / 240px 滚动） | DevTools 对比 + 截图 | 肉眼一致；32px 目标、AA 安全文字色、⚠ 混色属有意偏离 | 先补提取（同 live-asar 方法）再对齐 |
 | T0-8 | token 实测（声明+往返） | 预算见 §5.7 | token meter 前后对比 | ≤370/请求（v4 实测 364）、≤120/轮 | 优先压缩 schema 描述/引导文案 |
 | T0-9 | 构建脚本与产物一致 | 待写 | `node --test test/build.test.mjs` | 通过 | — |
 | T0-10 | 模型调用率与上下文质量 | 待装 | 20 轮普通任务统计 | 调用率 ≥90%，context 通顺、按钮可用 | 调 description / 加 system-prompt 短句（P2 备选） |
@@ -1395,6 +1467,14 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 > locale `conflict.expand/collapse`。`card-state.test.mjs` 移除预览组合用例、`normalize.test.mjs`
 > 增加 context 240 用例、`build.test.mjs` 新增 measured clamp/peek/ConflictCompare 断言；
 > `node --test` **207** 全绿，`scripts/build-client.mjs --check` 通过。
+>
+> **2026-11-10 可访问性打磨**：所有卡片控件统一 32px（含设置分段 tab；容器 40px）；peek / 冲突标签 /
+> 展开链接改用 `label-secondary`（+下划线），⚠ 图标改 65/35 混色；冲突展开态加 `.dshns-conflict-lines`
+> 240px 封顶滚动 + 滚动区外固定 toggle + 仅真的滚动时 `role=group` 可聚焦；chip 可访问名改为
+> 「可见标签：完整指令」。新增 `test/a11y.test.mjs`（6 个样式契约用例），`build.test.mjs` 新增 2 个契约
+> 用例（现 18 个）；全仓 `node --test` **215** 全绿（207 → 215），`scripts/build-client.mjs --check` 通过，
+> `client.js` 重建为 **92,220 字符**。夹具复测高度：748 列默认 142.0 / 冲突短 162.0（+20.0）、390 列
+> 162.5 / 183.0（+20.5），封顶展开 ⑮ 395.5 / 416.5 有界。
 
 ---
 
@@ -1414,14 +1494,22 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | R10 | 与官方卡同屏拥挤 | 中 | order -10 + 组数上限；视觉比对 |
 | R11 | 单行 peek 在触屏不可见，且只能看到指令开头 | 低 | 触屏以填入为主路径，完整指令在输入框阅读；peek 定位为鼠标/键盘辅助；需要时可加长 peek 或常驻摘要 |
 | R12 | 默认 3 条让 4–6 条建议需多点一次「还有 N 条」 | 低 | 默认高度稳定优先；设置 Auto 可恢复全显示 |
-| R13 | 窄列（约 390px）冲突态动作换行，高度差可能超过 25px | 低 | 窄列按同一口径实测并更新视觉证据；超预算时压缩对比框行距或调整动作顺序 |
+| R13 | 窄列（约 390px）冲突态动作换行，高度差可能超过 25px | 低（已缓解） | 390 列实测差 20.5px 且未换行；更窄列或文案变长时按同一口径复测，超预算时压缩对比框行距或调整动作顺序 |
 | R14 | context 上限 240 后长说明更常见，窄列可能默认出现「展开/收起」或展开后卡片更高 | 低 | 默认 2 行 clamp 保持稳定高度；展开只由点击触发；748/390 视觉证据复核按钮出现时机 |
+| R15 | 32px 目标仍低于移动端 44/48px 建议值 | 低 | 产品定位桌面鼠标/键盘；移动端布局单独立项时再放大 |
+| R16 | 焦点管理未覆盖：`Esc` 取消冲突、状态切换后的焦点归还未实现，实机键盘链路未复核 | 中低 | 已知缺口；下一轮补实现并在运行中 DSH 复验 Tab/focus-visible |
+| R17 | 浅色主题 chip hover 填充（1.11:1）与卡片描边（1.26:1）偏弱 | 低 | 官方卡原语继承项，不属 WCAG 文字要求；作为观察项，不自行发明新视觉 |
 
 ---
 
-## 附录 A：官方 Card 卡框 CSS（原样抄录，改写前缀 `dshns-`）
+## 附录 A：卡片 CSS（官方卡框抄录 + 本项目扩展；2026-11-10 同步）
 
-来源：`P/dsh-client-ui-action-cards/lib/client.js:379`（CSS 字符串），0.2.2-rc.1。
+来源：卡框抄录自 `P/dsh-client-ui-action-cards/lib/client.js:379`（CSS 字符串），0.2.2-rc.1；本项目对
+`dshns-` 规则的扩展与可访问性打磨修改以 `src/styles.js` 为唯一源（下称「2026-11-10 更新」）。与官方原值的
+有意差异：`.toggle` min-height 24、`.statusbar` min-height 28、`.dismiss/.restore` 与 Button sm 高 28 一律
+改为 **32px**；⚠ 图标由单 token 改为 65/35 `color-mix`；冲突展开链接由 `link` 改为 `label-secondary` +
+下划线；冲突展开态新增 `.dshns-conflict-lines` 240px 滚动上限。以下为当前发布值摘录；完整规则（含设置页、
+过程行、shimmer）见 `src/styles.js`。
 
 ```css
 .dshns-card {
@@ -1449,7 +1537,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 }
 .dshns-toggle {
   height: auto;
-  min-height: 24px;
+  min-height: 32px;
   margin: 8px 0 0;
   padding-inline: 0;
   font-size: 12px;
@@ -1459,7 +1547,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
   align-items: center;
   gap: 12px;
   margin-top: 12px;
-  min-height: 28px;
+  min-height: 32px;
   display: flex;
 }
 .dshns-status {
@@ -1478,7 +1566,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
   flex: none;
   width: auto;
   min-width: 0;
-  height: 28px;
+  height: 32px;
   padding: 0 8px;
   gap: 4px;
   color: var(--dsw-alias-label-secondary);
@@ -1505,24 +1593,36 @@ grapheme 切；超宽截断 + `'…'` + ghost 展开/收起。`FOLD_WIDTH` 常�
 .dshns-marker { flex: none; margin-left: 2px; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 18px; white-space: nowrap; }
 .dshns-btn-primary .dshns-marker { color: inherit; opacity: .78; }
 .dshns-marker-danger { display: inline-flex; align-items: center; gap: 3px; }
-.dshns-warn { flex: none; width: 12px; height: 12px; color: var(--dsw-alias-state-warn-primary); }
+/* 2026-11-10 更新：⚠ 图标不是单一 token，混 65/35 后浅色 5.43:1 / 深色 8.06:1（非文本 3:1）；primary chip 继承前景色 */
+.dshns-warn { flex: none; width: 12px; height: 12px; color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary)); }
+.dshns-btn-primary .dshns-warn { color: inherit; }
 /* 上下文默认 2 行 clamp；只在 DOM 实测溢出时由脚本渲染 ghost「展开/收起」 */
 .dshns-text-clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-/* hover/focus 的指令 peek 复用状态行，单行省略 */
-.dshns-status-peek { color: var(--dsw-alias-label-tertiary); }
+/* 2026-11-10 更新：hover/focus 的指令 peek 复用状态行，单行省略；label-secondary 5.80 / 10.42 达 AA */
+.dshns-status-peek { color: var(--dsw-alias-label-secondary); }
 /* 冲突：控件区只放目标指令 + 当前草稿对比；动作并入状态行 */
 .dshns-conflict { margin-top: 12px; }
 .dshns-conflict-compare { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent)); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }
+/* 2026-11-10 更新：可展开文本单独包一层；展开态封顶 240px 并在框内滚动，toggle 留在滚动区外 */
+.dshns-conflict-lines { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dshns-conflict-compare[data-expanded] .dshns-conflict-lines { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
 .dshns-conflict-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 0; }
-.dshns-conflict-label { flex: none; color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.6; white-space: nowrap; }
+/* 2026-11-10 更新：标签同样用 label-secondary（5.36 / 8.03），不再用 label-tertiary */
+.dshns-conflict-label { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.6; white-space: nowrap; }
 .dshns-conflict-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dshns-conflict-compare[data-expanded] .dshns-conflict-text { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; }
-.dshns-btn.dshns-conflict-toggle { align-self: flex-end; height: 24px; padding: 0; border-radius: 0; background: none; color: var(--dsw-alias-link); font-size: 12px; line-height: 1.6; }
-/* 冲突态状态行：状态文字与「追加到末尾/替换/取消」同一行，收紧上边距，冲突卡只比默认卡高约 24.5px */
+/* 2026-11-10 更新：32px 高、label-secondary + 下划线（hover label-primary），不再用 link 色 */
+.dshns-btn.dshns-conflict-toggle { align-self: flex-end; height: 32px; padding: 0; border-radius: 0; background: none; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; text-decoration: underline; text-underline-offset: 2px; }
+.dshns-btn.dshns-conflict-toggle:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
+/* 冲突态状态行：状态文字与「追加到末尾/替换/取消」同一行，收紧上边距，冲突卡只比默认卡高约 20px */
 .dshns-statusbar-conflict { margin-top: 8px; flex-wrap: wrap; row-gap: 8px; }
+/* 设置页分段控件：2026-11-10 更新为 tab 32px，容器 4 + 32 + 4 = 40px */
+.dshns-segmented { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 4px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-interactive-bg-hover); }
+.dshns-segmented-tab { box-sizing: border-box; position: relative; z-index: 1; height: 32px; padding: 0 10px; border: 0; border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; line-height: 20px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: color .12s ease; }
+.dshns-segmented-tab[aria-selected=true], .dshns-segmented-tab:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
 ```
 
-## 附录 B：官方过程行与 primitive CSS（原样抄录）
+## 附录 B：官方过程行与 primitive CSS（抄录；Button sm 按本项目 32px 规格调整）
 
 **ProposeRow**（`P/dsh-client-ui-action-cards/lib/client.js:555`）：
 
@@ -1543,7 +1643,8 @@ grapheme 切；超宽截断 + `'…'` + ghost 展开/收起。`FOLD_WIDTH` 常�
 }
 ```
 
-**Button**（`SH:123/132` + `CSS` 中 `_button_1ulci_2` 等规则）：
+**Button**（`SH:123/132` + `CSS` 中 `_button_1ulci_2` 等规则；2026-11-10 更新：`.dshns-btn-sm` 由 28 提到
+32px，属有意偏离官方值，卡内所有按钮统一 32px）：
 
 ```css
 .dshns-btn {
@@ -1553,7 +1654,7 @@ grapheme 切；超宽截断 + `'…'` + ghost 展开/收起。`FOLD_WIDTH` 常�
   background: transparent; padding: 0 14px;
 }
 .dshns-btn:disabled { cursor: not-allowed; opacity: .4; }
-.dshns-btn-sm { height: 28px; font-size: 12px; line-height: 18px; padding: 0 10px; border-radius: var(--dsw-radius-sm); }
+.dshns-btn-sm { height: 32px; font-size: 12px; line-height: 18px; padding: 0 10px; border-radius: var(--dsw-radius-sm); }
 .dshns-btn-primary { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
 .dshns-btn-primary:hover:not(:disabled) { background: var(--dsw-alias-button-primary-hover); }
 .dshns-btn-ghost:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
@@ -1668,6 +1769,7 @@ shell 内 symbol；内联等价、且避免依赖冻结模块表）。
 | conflict.appendPrimary | Append to draft | 追加到末尾 |
 | conflict.expand | Expand full text | 展开全文 |
 | conflict.collapse | Collapse full text | 收起全文 |
+| conflict.scrollRegion | Target instruction and current draft | 目标指令与当前草稿 |
 | conflict.replace | Replace | 替换 |
 | conflict.cancel | Cancel | 取消 |
 | row.title | Suggested next steps | 下一步建议 |
