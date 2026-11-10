@@ -11,7 +11,7 @@
  * `run_code` call, which is the only record naming the turn.
  * M3: the card renders the official action-card frame (copied markup/CSS, no
  * Harness Client imports), fills the input draft on click, and owns the
- * conflict / dismiss / preview states.
+ * conflict / dismiss / hover-peek states.
  * M9: a live turn-tail card reveals itself with a short height/opacity
  * transition. DSH 0.2.2's default completion-time fold mounts the card in the
  * same frame that collapses the turn's work rows, so a full-height insert moves
@@ -63,7 +63,7 @@ const DEFAULTS = Object.freeze({
 const LIMITS = Object.freeze({
   maxSuggestions: 6,
   maxPerTurn: 6,
-  context: 120,
+  context: 240,
   label: 40,
   labelDisplay: 20,
   prompt: 500,
@@ -410,67 +410,31 @@ function deriveActiveFill({ suggestions, draft, persistedId, applied } = {}) {
   }
 }
 
-/** Prompt of a normalized suggestion id, or '' when the id is unknown. */
-function promptOfSuggestion(suggestions, id) {
-  if (typeof id !== 'string' || id === '') return ''
-  const list = Array.isArray(suggestions) ? suggestions : []
-  const suggestion = list.find((item) => isRecord(item) && item.id === id)
-  return suggestion === undefined ? '' : asText(suggestion.prompt)
-}
-
-/**
- * The preview line under the controls.
- *
- * Hover/focus wins; otherwise the last suggestion this card picked (and which
- * therefore still owns the preview even after the draft is edited), then the
- * restored suggestion id, then the recommended/first suggestion. Keeping the
- * picked prompt ahead of the recommended one is what stops the preview from
- * jumping back to the recommended item after a non-recommended click.
- * @param {{ suggestions?: Array, preview?: string|null, pickedPrompt?: string }} input
- * @returns {string}
- */
-function derivePreviewText({ suggestions, preview, pickedPrompt } = {}) {
-  const hovered = asText(preview)
-  if (hovered !== '') return hovered
-  const picked = asText(pickedPrompt)
-  if (picked !== '') return picked
-  const list = Array.isArray(suggestions) ? suggestions : []
-  const fallback = list.find((item) => isRecord(item) && item.recommended === true)
-    ?? list.find((item) => isRecord(item) && asText(item.prompt) !== '')
-  return fallback === undefined ? '' : asText(fallback.prompt)
-}
-
 /**
  * Derive everything the card renders that depends on mutable UI state, so the
  * state combinations can be tested without React. `filledId` is null unless
  * the draft really contains the fill; `statusKey` obeys the documented
- * priority; `previewText` never snaps back to the recommendation after a
- * non-recommended pick.
+ * priority.
  * @param {object} input
- * @returns {{ activeFill: object|null, filledId: string|null, statusKey: string|null, previewText: string }}
+ * @returns {{ activeFill: object|null, filledId: string|null, statusKey: string|null }}
  */
 function deriveCardView({
   suggestions,
   draft,
   persistedId,
   applied,
-  preview,
   conflict = false,
   dismissed = false,
   canWrite = true,
 } = {}) {
   const list = Array.isArray(suggestions) ? suggestions : []
   const activeFill = deriveActiveFill({ suggestions: list, draft, persistedId, applied })
-  const appliedPrompt = isRecord(applied) ? asText(applied.prompt) : ''
-  const persistedPrompt = promptOfSuggestion(list, persistedId)
-  const pickedPrompt = appliedPrompt !== '' ? appliedPrompt : persistedPrompt
   return {
     activeFill,
     filledId: activeFill === null ? null : activeFill.id,
     statusKey: canWrite === false
       ? 'status.unavailable'
       : cardStatusKey({ dismissed, conflict, activeFill }),
-    previewText: derivePreviewText({ suggestions: list, preview, pickedPrompt }),
   }
 }
 
@@ -687,6 +651,13 @@ const STYLES = `
   vertical-align: -3px;
   margin-right: 6px;
 }
+/* Folded context: two-line clamp; the toggle is rendered only on measured overflow. */
+.dshns-text-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .dshns-toggle {
   height: auto;
   min-height: 24px;
@@ -703,11 +674,17 @@ const STYLES = `
   display: flex;
 }
 .dshns-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--dsw-alias-label-secondary);
   margin: 0 auto 0 0;
   font-size: 12px;
   line-height: 1.6;
 }
+.dshns-status-peek { color: var(--dsw-alias-label-tertiary); }
 .dshns-btn.dshns-dismiss,
 .dshns-btn.dshns-restore {
   flex: none;
@@ -755,29 +732,6 @@ const STYLES = `
   height: 12px;
   color: var(--dsw-alias-state-warn-primary);
 }
-/* On-demand preview: no height is reserved while idle; it appears below the
- * chips so switching chips cannot move the controls. */
-.dshns-preview {
-  margin-top: 8px;
-  padding: 6px 10px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent));
-  color: var(--dsw-alias-label-secondary);
-  overflow-wrap: anywhere;
-  font-size: 12px;
-  line-height: 1.6;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.dshns-preview-label {
-  margin-right: 4px;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 1.6;
-  white-space: nowrap;
-}
 /* Conflict prompt: keep the target instruction and the current draft visible,
  * then offer an append-first decision row. */
 .dshns-conflict {
@@ -813,6 +767,22 @@ const STYLES = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dshns-conflict-compare[data-expanded] .dshns-conflict-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}
+.dshns-btn.dshns-conflict-toggle {
+  align-self: flex-end;
+  height: 24px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--dsw-alias-link);
+  font-size: 12px;
+  line-height: 1.6;
 }
 /* Conflict keeps the status text and the three actions on one row so the
  * state is only ~24px taller than a resting card. */
@@ -1114,6 +1084,8 @@ button.dshns-disc-leading { cursor: pointer; }
       'conflict.appendPrimary': 'Append to draft',
       'conflict.replace': 'Replace',
       'conflict.cancel': 'Cancel',
+      'conflict.expand': 'Expand full text',
+      'conflict.collapse': 'Collapse full text',
       'fallback.context': 'Here are a few natural next steps.',
       'note.invalidArguments': 'The tool arguments were invalid',
       'note.missingContext': 'No context was provided',
@@ -1159,6 +1131,8 @@ button.dshns-disc-leading { cursor: pointer; }
       'conflict.appendPrimary': '追加到末尾',
       'conflict.replace': '替换',
       'conflict.cancel': '取消',
+      'conflict.expand': '展开全文',
+      'conflict.collapse': '收起全文',
       'fallback.context': '接下来可以：',
       'note.invalidArguments': '工具参数无效',
       'note.missingContext': '缺少上下文说明',
@@ -1317,28 +1291,46 @@ button.dshns-disc-leading { cursor: pointer; }
     }
 
     // -----------------------------------------------------------------------
-    // FoldedText — copied algorithm from the official card frame
+    // FoldedText — two-line clamp with a measured expand/collapse
     // -----------------------------------------------------------------------
 
-    const WIDE_GRAPHEME = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-｠￠-￦]/u
-    const FOLD_WIDTH = 260
-
+    /**
+     * Long text is clamped to two lines. The toggle renders only when the
+     * rendered text actually overflows (DOM measurement, not a character
+     * budget), so card-width and font changes cannot leave a dead or missing
+     * affordance. Expanding is always an explicit click: hovering never
+     * changes the card height.
+     */
     function FoldedText({ text, lead, expandLabel, collapseLabel }) {
       const id = React.useId()
       const [expanded, setExpanded] = React.useState(false)
-      const preview = React.useMemo(() => {
-        const compact = text.replace(/\s+/g, ' ').trim()
-        const characters = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(compact), (part) => part.segment)
-        let width = 0
-        for (const [index, character] of characters.entries()) {
-          width += WIDE_GRAPHEME.test(character) ? 2 : 1
-          if (width > FOLD_WIDTH) return `${characters.slice(0, index).join('').trimEnd()}…`
+      const [overflow, setOverflow] = React.useState(false)
+      const textRef = React.useRef(null)
+      React.useLayoutEffect(() => {
+        const element = textRef.current
+        if (element === null || expanded) return undefined
+        const measure = () => {
+          try {
+            setOverflow(element.scrollHeight > element.clientHeight + 1)
+          } catch {
+            setOverflow(false)
+          }
+        }
+        measure()
+        if (typeof ResizeObserver === 'function') {
+          const observer = new ResizeObserver(measure)
+          observer.observe(element)
+          return () => { observer.disconnect() }
         }
         return undefined
-      }, [text])
+      }, [text, expanded])
       return h(React.Fragment, null,
-        h('p', { id, className: 'dshns-text' }, lead ?? null, expanded || preview === undefined ? text : preview),
-        preview !== undefined
+        h('p', {
+          id,
+          ref: textRef,
+          className: expanded ? 'dshns-text' : 'dshns-text dshns-text-clamped',
+        }, lead ?? null, text),
+        overflow || expanded
           ? h(Button, {
             variant: 'ghost',
             size: 'sm',
@@ -1348,6 +1340,69 @@ button.dshns-disc-leading { cursor: pointer; }
             onClick: () => { setExpanded((value) => !value) },
           }, expanded ? collapseLabel : expandLabel)
           : null)
+    }
+
+    // -----------------------------------------------------------------------
+    // ConflictCompare — target + current draft, expandable on click
+    // -----------------------------------------------------------------------
+
+    /**
+     * The compact conflict decision block. Target prompt and current draft are
+     * each clamped to one line while collapsed; the expand control appears only
+     * when text actually overflows and swapping in/out changes height only
+     * after an explicit click. This keeps the default conflict card compact and
+     * never ties height changes to pointer movement.
+     */
+    function ConflictCompare({ prompt, draft, t }) {
+      const id = React.useId()
+      const [expanded, setExpanded] = React.useState(false)
+      const [overflow, setOverflow] = React.useState(false)
+      const compareRef = React.useRef(null)
+      React.useLayoutEffect(() => {
+        const root = compareRef.current
+        if (root === null || expanded) return undefined
+        const measure = () => {
+          try {
+            let next = false
+            for (const element of root.querySelectorAll('.dshns-conflict-text')) {
+              if (element.scrollWidth > element.clientWidth + 1) next = true
+            }
+            setOverflow(next)
+          } catch {
+            setOverflow(false)
+          }
+        }
+        measure()
+        if (typeof ResizeObserver === 'function') {
+          const observer = new ResizeObserver(measure)
+          observer.observe(root)
+          return () => { observer.disconnect() }
+        }
+        return undefined
+      }, [prompt, draft, expanded])
+      return h('div', {
+        id,
+        ref: compareRef,
+        className: 'dshns-conflict-compare',
+        role: 'note',
+        'data-expanded': expanded ? '' : undefined,
+      },
+      h('p', { className: 'dshns-conflict-line' },
+        h('span', { className: 'dshns-conflict-label' }, t('conflict.compareTarget')),
+        h('span', { className: 'dshns-conflict-text' }, prompt)),
+      h('p', { className: 'dshns-conflict-line' },
+        h('span', { className: 'dshns-conflict-label' }, t('conflict.compareDraft')),
+        h('span', { className: 'dshns-conflict-text' }, draft)),
+      overflow || expanded
+        ? h(Button, {
+          variant: 'ghost',
+          size: 'sm',
+          className: 'dshns-conflict-toggle',
+          'aria-expanded': expanded,
+          'aria-controls': id,
+          onClick: () => { setExpanded((value) => !value) },
+        }, expanded ? t('conflict.collapse') : t('conflict.expand'))
+        : null)
     }
 
     /**
@@ -1386,7 +1441,7 @@ button.dshns-disc-leading { cursor: pointer; }
       const [turnState, setTurnState] = React.useState(() => readTurnState(sessionId, turnNumber))
       const [expanded, setExpanded] = React.useState(false)
       const [conflict, setConflict] = React.useState(null)
-      const [preview, setPreview] = React.useState(null)
+      const [peek, setPeek] = React.useState(null)
       const appliedRef = React.useRef(null)
 
       const draft = typeof useInput === 'function'
@@ -1478,7 +1533,6 @@ button.dshns-disc-leading { cursor: pointer; }
         draft,
         persistedId: turnState.filledId,
         applied: appliedRef.current,
-        preview,
         conflict: conflict !== null,
         dismissed: turnState.dismissed,
         canWrite,
@@ -1507,7 +1561,7 @@ button.dshns-disc-leading { cursor: pointer; }
         setTurnState(next)
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
-        setPreview(null)
+        setPeek(null)
         focusComposer(sessionId)
       }
 
@@ -1520,7 +1574,7 @@ button.dshns-disc-leading { cursor: pointer; }
         })
         if (action.kind === 'conflict') {
           setConflict(suggestion)
-          setPreview(null)
+          setPeek(null)
           return
         }
         applyFill(suggestion.prompt, suggestion)
@@ -1529,7 +1583,7 @@ button.dshns-disc-leading { cursor: pointer; }
       function onConflictChoice(choice) {
         if (conflict === null) return
         setConflict(null)
-        setPreview(null)
+        setPeek(null)
         if (choice === 'cancel') return
         const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })
         if (merged === null) return
@@ -1541,7 +1595,7 @@ button.dshns-disc-leading { cursor: pointer; }
         setTurnState(next)
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
-        setPreview(null)
+        setPeek(null)
       }
 
       function onRestore() {
@@ -1549,7 +1603,7 @@ button.dshns-disc-leading { cursor: pointer; }
         setTurnState(next)
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
-        setPreview(null)
+        setPeek(null)
       }
 
       function renderChip(suggestion) {
@@ -1571,10 +1625,10 @@ button.dshns-disc-leading { cursor: pointer; }
           'aria-label': suggestion.prompt,
           disabled: !canWrite,
           onClick: () => { onPick(suggestion) },
-          onMouseEnter: () => { setPreview(suggestion.prompt) },
-          onMouseLeave: () => { setPreview(null) },
-          onFocus: () => { setPreview(suggestion.prompt) },
-          onBlur: () => { setPreview(null) },
+          onMouseEnter: () => { setPeek(suggestion.prompt) },
+          onMouseLeave: () => { setPeek(null) },
+          onFocus: () => { setPeek(suggestion.prompt) },
+          onBlur: () => { setPeek(null) },
         },
         h('span', { className: 'dshns-chip-label' }, suggestion.label),
         markerNode)
@@ -1601,25 +1655,22 @@ button.dshns-disc-leading { cursor: pointer; }
             : null)
         : mode === 'conflict'
           ? h('div', { className: 'dshns-conflict' },
-            h('div', { className: 'dshns-conflict-compare', role: 'note' },
-              h('p', { className: 'dshns-conflict-line' },
-                h('span', { className: 'dshns-conflict-label' }, t('conflict.compareTarget')),
-                h('span', { className: 'dshns-conflict-text' }, conflict.prompt)),
-              h('p', { className: 'dshns-conflict-line' },
-                h('span', { className: 'dshns-conflict-label' }, t('conflict.compareDraft')),
-                h('span', { className: 'dshns-conflict-text' }, draft))))
+            h(ConflictCompare, {
+              key: conflict.id,
+              prompt: conflict.prompt,
+              draft,
+              t,
+            }))
           : null
 
-      // On-demand preview: nothing occupies space at rest. Showing it below the
-      // chips keeps the chip row still, and switching between chips only swaps
-      // the text inside the same mounted block.
-      const previewBlock = mode === 'suggestions' && preview !== null
-        ? h('div', { className: 'dshns-preview', role: 'note' },
-          h('span', { className: 'dshns-preview-label' }, t('preview.label')),
-          view.previewText)
+      // Hover/focus only swaps text inside the existing status row. Nothing is
+      // inserted, so pointer movement can never change the card's geometry.
+      const peekText = canWrite && mode === 'suggestions' && peek !== null
+        ? `${t('preview.label')} · ${peek}`
         : null
-
-      const statusText = status === null || status === undefined ? null : t(status)
+      const statusText = peekText !== null
+        ? peekText
+        : (status === null || status === undefined ? null : t(status))
       // Conflict actions share the status row: keeping them there instead of a
       // separate row keeps the conflict card close to the resting card height.
       const conflictActions = mode === 'conflict'
@@ -1656,7 +1707,13 @@ button.dshns-disc-leading { cursor: pointer; }
       const statusBar = statusText === null && stateActions.length === 0
         ? null
         : h('div', { className: `dshns-statusbar${mode === 'conflict' ? ' dshns-statusbar-conflict' : ''}` },
-          statusText === null ? null : h('p', { className: 'dshns-status', role: 'status' }, statusText),
+          statusText === null ? null : h('p', {
+            className: peekText === null ? 'dshns-status' : 'dshns-status dshns-status-peek',
+            // The peek is a transient visual hint; keep it out of the polite
+            // live region so focus/pointer movement does not make a screen
+            // reader announce the prompt on every chip.
+            role: peekText === null ? 'status' : undefined,
+          }, statusText),
           ...stateActions)
 
       return h('div', {
@@ -1677,7 +1734,6 @@ button.dshns-disc-leading { cursor: pointer; }
           collapseLabel: t('card.collapse'),
         }),
         controls,
-        previewBlock,
         statusBar)))
     }
 

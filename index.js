@@ -91,7 +91,7 @@ const PARAMETERS = {
   properties: {
     context: {
       type: 'string',
-      description: '≤120 chars: what was completed, then the options; never restate the answer.',
+      description: '≤240 chars: what was completed, then the options; never restate the answer.',
     },
     suggestions: {
       type: 'array',

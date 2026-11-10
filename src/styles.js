@@ -42,6 +42,13 @@ export const STYLES = `
   vertical-align: -3px;
   margin-right: 6px;
 }
+/* Folded context: two-line clamp; the toggle is rendered only on measured overflow. */
+.dshns-text-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .dshns-toggle {
   height: auto;
   min-height: 24px;
@@ -58,11 +65,17 @@ export const STYLES = `
   display: flex;
 }
 .dshns-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--dsw-alias-label-secondary);
   margin: 0 auto 0 0;
   font-size: 12px;
   line-height: 1.6;
 }
+.dshns-status-peek { color: var(--dsw-alias-label-tertiary); }
 .dshns-btn.dshns-dismiss,
 .dshns-btn.dshns-restore {
   flex: none;
@@ -110,29 +123,6 @@ export const STYLES = `
   height: 12px;
   color: var(--dsw-alias-state-warn-primary);
 }
-/* On-demand preview: no height is reserved while idle; it appears below the
- * chips so switching chips cannot move the controls. */
-.dshns-preview {
-  margin-top: 8px;
-  padding: 6px 10px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent));
-  color: var(--dsw-alias-label-secondary);
-  overflow-wrap: anywhere;
-  font-size: 12px;
-  line-height: 1.6;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.dshns-preview-label {
-  margin-right: 4px;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 1.6;
-  white-space: nowrap;
-}
 /* Conflict prompt: keep the target instruction and the current draft visible,
  * then offer an append-first decision row. */
 .dshns-conflict {
@@ -168,6 +158,22 @@ export const STYLES = `
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dshns-conflict-compare[data-expanded] .dshns-conflict-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}
+.dshns-btn.dshns-conflict-toggle {
+  align-self: flex-end;
+  height: 24px;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--dsw-alias-link);
+  font-size: 12px;
+  line-height: 1.6;
 }
 /* Conflict keeps the status text and the three actions on one row so the
  * state is only ~24px taller than a resting card. */

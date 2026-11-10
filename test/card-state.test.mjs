@@ -3,8 +3,8 @@
  *
  * The React component composes these pure helpers on every render; testing the
  * combinations here catches the cross-state bugs that single-function tests
- * miss (edit/clear vs persisted fill, danger after reload, preview ownership,
- * one-marker-per-chip, conflict merging). No DOM or React needed.
+ * miss (edit/clear vs persisted fill, danger after reload, one-marker-per-chip,
+ * conflict merging). No DOM or React needed.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -13,7 +13,6 @@ import {
   deriveActiveFill,
   deriveCardView,
   deriveChipMarker,
-  derivePreviewText,
 } from '../lib/view-model.js'
 
 const suggestions = [
@@ -90,7 +89,7 @@ test('deriveActiveFill accepts an appended draft as written text but not as the 
 })
 
 // ---------------------------------------------------------------------------
-// deriveCardView — status and preview combinations
+// deriveCardView — status combinations
 // ---------------------------------------------------------------------------
 
 test('deriveCardView hides the filled marker after edit, clear and reload', () => {
@@ -98,7 +97,6 @@ test('deriveCardView hides the filled marker after edit, clear and reload', () =
   const edited = deriveCardView({ suggestions, draft: `${picked.text} 再改一下`, applied: picked })
   assert.equal(edited.filledId, null)
   assert.equal(edited.statusKey, null)
-  assert.equal(edited.previewText, picked.prompt, 'the preview keeps the picked prompt, not the recommendation')
 
   const reloaded = deriveCardView({ suggestions, draft: '', persistedId: 'sb', applied: null })
   assert.equal(reloaded.filledId, null)
@@ -139,34 +137,6 @@ test('deriveCardView only reports danger while the dangerous fill is active', ()
   )
 })
 
-test('deriveCardView keeps the preview on the last picked suggestion after edits', () => {
-  const picked = appliedFor('sb')
-
-  // Hover/focus wins while it is active.
-  assert.equal(
-    deriveCardView({ suggestions, draft: picked.text, applied: picked, preview: 'h' }).previewText,
-    'h',
-  )
-  // Picked non-recommended beat the recommended default, even after the draft
-  // no longer matches (the old bug snapped back to `sa`).
-  assert.equal(
-    deriveCardView({ suggestions, draft: 'edited', applied: picked }).previewText,
-    byId('sb').prompt,
-  )
-  // Nothing picked yet: the recommended item is the resting preview.
-  assert.equal(deriveCardView({ suggestions, draft: '' }).previewText, byId('sa').prompt)
-  // Restored state still prefers the restored suggestion over the recommendation.
-  assert.equal(
-    deriveCardView({ suggestions, draft: '', persistedId: 'sb', applied: null }).previewText,
-    byId('sb').prompt,
-  )
-  // A stale/unknown id falls back to the recommendation.
-  assert.equal(
-    deriveCardView({ suggestions, draft: '', persistedId: 'gone', applied: null }).previewText,
-    byId('sa').prompt,
-  )
-})
-
 test('deriveCardView reports an unavailable composer independently of the remembered fill', () => {
   const view = deriveCardView({
     suggestions,
@@ -187,20 +157,11 @@ test('deriveCardView maps conflict resolution to a filled/danger marker', () => 
   })
   assert.equal(view.filledId, 'sc')
   assert.equal(view.statusKey, 'status.danger')
-  assert.equal(view.previewText, byId('sc').prompt)
 })
 
 // ---------------------------------------------------------------------------
-// derivePreviewText / deriveChipMarker
+// deriveChipMarker
 // ---------------------------------------------------------------------------
-
-test('derivePreviewText falls back from hover to picked to recommended to first', () => {
-  assert.equal(derivePreviewText({ suggestions, preview: 'hover', pickedPrompt: 'picked' }), 'hover')
-  assert.equal(derivePreviewText({ suggestions, preview: null, pickedPrompt: 'picked' }), 'picked')
-  assert.equal(derivePreviewText({ suggestions, preview: '' }), byId('sa').prompt)
-  assert.equal(derivePreviewText({ suggestions: [{ id: 'x', prompt: 'only' }] }), 'only')
-  assert.equal(derivePreviewText({ suggestions: [] }), '')
-})
 
 test('deriveChipMarker keeps exactly one marker and lets danger win', () => {
   assert.equal(deriveChipMarker({ suggestion: byId('sc'), filledId: 'sc' }), 'danger')

@@ -7,7 +7,10 @@
 2026-11-10 更新：同步卡片 P1 布局（默认 3 条、按需预览、单内联标记、带文字忽略/恢复、冲突对比）与
 彻底移除 Send 模式的实现；改动集中在 §1、§3.2、§6.3/§6.5/§6.6/§6.8、§9、§10、§13 与附录 A/D/F。
 同日补记：冲突态动作并入状态行（`.dshns-statusbar-conflict`，删除独立 `.dshns-conflict-actions` 行），
-冲突态与默认态高度差 ≤25px（748 列实测 24px）；改动集中在 §5.8、§6.3、§8、§9、§10、§11.3、§13、§14 与附录 A。
+冲突态与默认态高度差 ≤25px（748 列实测 24.5px）；改动集中在 §5.8、§6.3、§8、§9、§10、§11.3、§13、§14 与附录 A。
+方案 A（2026-11-10）：删除 hover 预览块，改为状态行单行 peek；`context` 上限 120→240，FoldedText 改为
+2 行 clamp + DOM 溢出测量 + 点击展开（删除 FOLD_WIDTH）；冲突对比框长内容可展开全文。改动集中在 §1、§5.3、
+§5.5/§5.6/§5.7、§6.3、§6.6、§10、§13 与附录 A/D。
 
 证据标记：**【V26】**=在**当前安装的 0.2.2-rc.1** asar/前端产物中直接核对；**【V21】**=本工作区 0.2.1-rc.2 解包语料（`research/app/`、`vendor/`，仅作对照）；**【官方规范】**=官方插件开发 skill 的明文规则；**【推断】**=合理推断，列入 §12 T0 验证。
 
@@ -57,17 +60,18 @@
 ### 1.1 In scope（对应形态稿 v0.9 的 P0/P1）
 
 - 回答末尾卡片：官方动作卡同款容器/折叠说明/控件/状态行（含右侧带文字忽略/恢复按钮）；无可见标题，上下文行前置品牌小标；
-- 1–2 句上下文说明（防唐突），模型随建议一起生成；
+- 1–2 句上下文说明（防唐突，硬上限 240 字符），模型随建议一起生成；默认 2 行 clamp，仅实际溢出时可点击展开；
 - 1–6 条建议中默认展示 3 条，其余收进「还有 N 条」；设置可选 Auto（全部显示）或固定 1–6；推荐项用 primary 置顶并带「推荐」内联标记；
 - 点击 = 完整指令填入输入框（不发送）；输入框已有内容时显示「将填入 / 当前草稿」对比 +「追加到末尾（primary）/ 替换 / 取消」；
 - 危险建议（模型标记 + 本地词表）带「⚠ 需确认」内联标记与填入后的警示；
 - 工具过程组一行式调用记录（标题 + 状态 + 摘要；异常可展开原因 +「查看调用」）；
-- 预览默认收起，悬停/聚焦时在按钮行下方出现「将填入」+ 完整指令（两行 clamp）；
+- hover/focus 只在状态行内显示单行「将填入 · 指令」peek（省略号截断），不插入预览块、卡片高度不变；
+- 冲突对比框目标/草稿各一行省略，长内容可「展开全文/收起全文」；
 - 刷新/重启/回放/fork 后卡片与状态保留；
 - 状态行右侧「暂不需要」→ 控件收起、状态行「已忽略」、按钮变「恢复建议」、卡片保留；
 - 语言跟随用户对话；界面文案中英；
 - 子代理/团队内部会话默认不渲染；
-- P1：设置页（条数/重置 + Host 门控说明）、P1 布局（默认 3 条、按需预览、带文字忽略/恢复，2026-11-10）、本地统计（P2，暂不做）。
+- P1：设置页（条数/重置 + Host 门控说明）、P1 布局（默认 3 条、hover peek、带文字忽略/恢复，2026-11-10）、本地统计（P2，暂不做）。
 
 ### 1.2 Out of scope（本版明确不做）
 
@@ -254,7 +258,7 @@ plugins/dsh-next-actions/
     ├── normalize.test.mjs   # Host 纯函数单测（node:test）
     ├── tool.test.mjs        # 工具注册、根 agent 门控、常驻提示、Host config
     ├── view-model.test.mjs  # 客户端纯逻辑单测
-    ├── card-state.test.mjs  # 卡片状态组合（filled/danger/预览/chip 标记/冲突）
+    ├── card-state.test.mjs  # 卡片状态组合（filled/danger/chip 标记/冲突）
     ├── definition.test.mjs  # native + PTC 的 turn data 折叠
     └── build.test.mjs       # 构建产物与源一致（node:test 调 build --check）
 ```
@@ -425,7 +429,7 @@ const PARAMETERS = {
   properties: {
     context: {
       type: 'string',
-      description: '≤120 chars: what was completed, then the options; never restate the answer.',
+      description: '≤240 chars: what was completed, then the options; never restate the answer.',
     },
     suggestions: {
       type: 'array',
@@ -501,7 +505,7 @@ const META = {
 }
 ```
 
-meta 大小上限：`context ≤ 120` 字、`label ≤ 40` 字、`prompt ≤ 500` 字、最多 6 条 → 最大约 4KB，
+meta 大小上限：`context ≤ 240` 字、`label ≤ 40` 字、`prompt ≤ 500` 字、最多 6 条 → 最大约 4.5KB，
 实际常见 1–1.5KB/回合。压缩（compaction）可能修剪工具结果 → meta 丢失时必须能由 `tool/call.arguments`
 兜底重建（客户端 `modelFromArgs`，规则同 normalize 的保守子集）。
 
@@ -512,7 +516,7 @@ meta 大小上限：`context ≤ 120` 字、`label ≤ 40` 字、`prompt ≤ 500
  *   suggestions?:{id:string,label:string,prompt:string,stance:string,recommended?:true,danger?:true,
  *                 opensNewSession?:true}[], note?:string}} NextStepsMeta */
 
-export const LIMITS = { maxSuggestions: 6, context: 120, label: 40, labelDisplay: 20, prompt: 500 }
+export const LIMITS = { maxSuggestions: 6, context: 240, label: 40, labelDisplay: 20, prompt: 500 }
 
 export function buildMeta(rawArgs) { /* 纯函数；见下 */ }
 ```
@@ -522,7 +526,7 @@ export function buildMeta(rawArgs) { /* 纯函数；见下 */ }
 | 步骤 | 规则 | 违反时 |
 |---|---|---|
 | 1 解析 | `rawArgs` 必须是对象；`context` string；`suggestions` 数组 | `{shown:false, note:'invalid-arguments'}` |
-| 2 context | trim、压缩连续空白、截断 120、去掉首尾引号；空 → 丢弃 | 空则 `shown:false, note:'missing-context'` |
+| 2 context | trim、压缩连续空白、截断 240（2026-11-10 由 120 提高）、去掉首尾引号；空 → 丢弃 | 空则 `shown:false, note:'missing-context'` |
 | 3 条目清洗 | 每条：`label`/`prompt` 至少一个有内容；`label` trim+截断 40；`prompt` trim+截断 500；`prompt` 缺省时回退为 `label` | 空条目丢弃 |
 | 4 去重 | 归一化（小写、压缩空白、去尾部标点）后按 `prompt` 去重；同 label 但不同 prompt 允许（不同角度） | 保留先出现者 |
 | 5 立场 | `stance` ∈ 五档；显式合法 stance 同轮只留第一条 | 丢弃重复者（缺失/非法 stance 不占名额，见下） |
@@ -567,6 +571,9 @@ M1 实测口径（与单测同源）：`JSON.stringify({name, description, param
 > 常驻引导 96 → 143，请求级常驻合计 **415 → 507（+92 tokens/请求）**；模型可见 result 22 → 43 tokens/次调用。
 > 这是为“工作回合触发召回 + 卡片质量”明确接受的代价；P1 的省 token 路径（根 agent `when`、Host 开关、
 > 延迟激活评估）见 §5.7.2：前两项已实现，第三项已评估。
+> **2026-11-10 方案 A**：`context` 的 schema 描述 `≤120 chars` → `≤240 chars` 长度不变，工具声明 token
+> 不变；上限提高只影响模型写满时的单次 arguments / meta 体积（最多约 +120 字符 ≈ +30 tokens/次调用，
+> meta 上限约 4KB → 4.5KB，均不进入常驻声明）。hover peek、上下文/冲突展开都在客户端完成，不产生模型请求。
 
 工具执行与真实会话实测（2026-11-09，本机）：
 
@@ -689,6 +696,9 @@ config 缺省/畸形值）→ `tool.test.mjs` **31**，Host 55 + 31 = **86**；�
 全仓 `node --test` **206** 全绿。
 2026-11-10 冲突态紧凑化：`build.test.mjs` 新增动作与状态同行契约断言（`dshns-statusbar-conflict`、
 无 `dshns-conflict-actions`），全仓 `node --test` **207** 全绿。
+2026-11-10 方案 A：`card-state.test.mjs` 移除预览组合用例、`normalize.test.mjs` 增加 context 240 上限用例、
+`build.test.mjs` 改为断言 hover 无预览块 + measured clamp + `ConflictCompare` 展开控件；
+全仓 `node --test` **207** 全绿。
 
 ---
 
@@ -851,23 +861,21 @@ PTC 预设把工具调用放进 `run_code` 程序：模型直接调用的只有 
 ```text
 section.dshns-card[aria-label=标题][data-next-steps-card]
   div.dshns-body
-    <FoldedText context>                    ← 官方同款折叠说明（FOLD_WIDTH=260，CJK 双宽）
+    <FoldedText context>                    ← 说明：默认 2 行 clamp（.dshns-text-clamped）；实测溢出才显示 ghost「展开/收起」
       svg.dshns-mark                        ← 16px 品牌小标（列表+星火，实色填充，行首内联）
-      text                                  ← 上下文行，13px/1.6 label-secondary
+      text                                  ← 上下文行，13px/1.6 label-secondary；展开后换行全文
     div.dshns-controls                      ← 建议按钮（推荐 primary sm / 其余 ghost sm；默认 3 条）
       button.dshns-btn-primary/ghost.dshns-chip
         span.dshns-chip-label               ← 建议短标签（单行省略）
         span.dshns-marker                   ← 至多一个内联文本标记（推荐 / 已填入 / ⚠需确认）
       button.dshns-toggle「还有 N 条」      ← 官方同款 ghost 小按钮（Card .toggle 样式）；展开后显示「收起」
-    div.dshns-preview[role=note]            ← 按需出现：悬停/聚焦时位于控件行下方
-      span.dshns-preview-label「将填入」
-      text                                  ← 该条完整指令，2 行 clamp
-    div.dshns-conflict                      ← 仅冲突态：替代 controls + preview，只放对比框
-      div.dshns-conflict-compare[role=note]
-        p.dshns-conflict-line               ← span 标签「将填入」 + span 目标指令（单行省略）
-        p.dshns-conflict-line               ← span 标签「当前草稿」 + span 草稿（单行省略）
+    div.dshns-conflict                      ← 仅冲突态：只放对比框（ConflictCompare）
+      div.dshns-conflict-compare[role=note][data-expanded]
+        p.dshns-conflict-line               ← span 标签「将填入」 + span 目标指令（默认单行省略；展开后换行全文）
+        p.dshns-conflict-line               ← span 标签「当前草稿」 + span 草稿（默认单行省略；展开后换行全文）
+        button.dshns-btn-ghost.sm.dshns-conflict-toggle「展开全文/收起全文」  ← 仅溢出或已展开时
     div.dshns-statusbar[.dshns-statusbar-conflict]  ← 一行：左侧状态文字 + 右侧状态动作
-      p.dshns-status[role=status]           ← 已填入/冲突/已忽略/危险警示/输入框不可用（无文字时省略）
+      p.dshns-status[role=status]           ← 状态；hover/focus 时加 .dshns-status-peek，显示单行「将填入 · 指令」
       button.dshns-btn-primary.sm「追加到末尾」  ← 仅冲突态；与状态文字同一行（窄列可换行）
       button.dshns-btn-ghost.sm「替换」          ← 仅冲突态
       button.dshns-btn-ghost.sm「取消」          ← 仅冲突态
@@ -898,7 +906,15 @@ section.dshns-card[aria-label=标题][data-next-steps-card]
 > **2026-11-10 冲突态紧凑化**：删除独立 `.dshns-conflict-actions` 行；冲突态的「追加到末尾（primary）/
 > 替换 / 取消」由 `conflictActions` 交给 `.dshns-statusbar` 渲染，与状态文字「输入框已有内容」同一行
 > （`.dshns-statusbar-conflict { margin-top:8px; flex-wrap:wrap; row-gap:8px }`），`.dshns-conflict`
-> 只保留对比框。宽列 748px 实测默认 134px → 冲突 158px（差 24px，验收 ≤25px）；窄列换行情况待视觉证据实测。
+> 只保留对比框。宽列 748px 实测默认 134px → 冲突 158.5px（差 24.5px，验收 ≤25px）；窄列换行情况待视觉证据实测。
+>
+> **2026-11-10 方案 A（hover 不进布局 + 长内容显式展开）**：删除 `div.dshns-preview` 与
+> `derivePreviewText`/`previewText`；hover/focus 只把状态行文字换成单行 `dshns-status-peek`
+> 「将填入 · {prompt}」，不插入节点、卡片高度不变。`LIMITS.context` 120→240；`FoldedText` 删除
+> `FOLD_WIDTH` 字符预算，改为 CSS 2 行 clamp（`.dshns-text-clamped`）+ `ResizeObserver`/`scrollHeight`
+> 实际溢出测量 + 点击「展开/收起」。冲突对比改为 `ConflictCompare`：目标/草稿默认各一行省略，
+> 溢出时显示 `.dshns-conflict-toggle`「展开全文/收起全文」，展开后在 `[data-expanded]` 下换行显示全文；
+> 748 列短内容冲突卡 158.5px（默认 134px，差 24.5px，验收 ≤25px）。新增 locale `conflict.expand/collapse`。
 
 **交互**：
 
@@ -910,7 +926,7 @@ function onPick(suggestion) {
     draft,
     appliedPrompt: applied !== null && applied.owned === true ? applied.text : '',
   })
-  if (action.kind === 'conflict') { setConflict(suggestion); setPreview(null); return }
+  if (action.kind === 'conflict') { setConflict(suggestion); setPeek(null); return }
   applyFill(suggestion.prompt, suggestion)          // 空草稿 / 本人未编辑 → 直接替换
 }
 function applyFill(text, suggestion, owned = true) {
@@ -920,12 +936,12 @@ function applyFill(text, suggestion, owned = true) {
   appliedRef.current = { id: suggestion.id, text, prompt: suggestion.prompt, danger, owned }
   const next = { ...turnState, filledId: suggestion.id }
   setTurnState(next); writeTurnState(sessionId, turnNumber, next)
-  setConflict(null); setPreview(null)
+  setConflict(null); setPeek(null)
   focusComposer(sessionId)                          // ctx.get('conversation')?.input.shell(sessionId)?.focus()，可选/容错
 }
 function onConflictChoice(choice) {
   if (conflict === null) return
-  setConflict(null); setPreview(null)
+  setConflict(null); setPeek(null)
   if (choice === 'cancel') return
   const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })  // append: draft.trimEnd() + '\n\n' + prompt
   if (merged === null) return
@@ -934,13 +950,25 @@ function onConflictChoice(choice) {
 function dismiss() {
   const next = { ...turnState, dismissed: true }
   setTurnState(next); writeTurnState(sessionId, turnNumber, next)
-  setConflict(null); setPreview(null)
+  setConflict(null); setPeek(null)
 }
 function restore() {
   const next = { ...turnState, dismissed: false }
   setTurnState(next); writeTurnState(sessionId, turnNumber, next)
-  setConflict(null); setPreview(null)
+  setConflict(null); setPeek(null)
 }
+```
+
+hover/focus 只在状态行内换文字，不插入节点：
+
+```js
+onMouseEnter/onFocus: () => setPeek(suggestion.prompt)
+onMouseLeave/onBlur:  () => setPeek(null)
+
+const peekText = canWrite && mode === 'suggestions' && peek !== null
+  ? `${t('preview.label')} · ${peek}`
+  : null
+const statusText = peekText ?? (status === null || status === undefined ? null : t(status))
 ```
 
 细节：
@@ -952,14 +980,21 @@ function restore() {
 - 危险建议：带「⚠ 需确认」内联标记；填入后状态行显示「该操作可能不可逆，请确认后发送」。
 - **单内联标记**：`deriveChipMarker({ suggestion, filledId })` 按 danger > filled > recommended 只返回
   一个标记；`optional` stance 只影响排序，不生成标记；`dshns-tag` 胶囊与「可以不做」文案已移除。
-- **按需预览**：只有 `mode === 'suggestions' && preview !== null` 时渲染 `div.dshns-preview[role=note]`，
-  位于控件行下方；`preview` 由 chip 的 mouseenter/focus 设为该条 prompt、mouseleave/blur 清空，填入/
-  冲突/忽略时也会清空。预览不是按钮，点击不触发填入；触屏无悬停，点建议直接填入。
+- **hover peek（2026-11-10 方案 A）**：hover/focus 只在状态行显示单行「将填入 · {prompt}」
+  （`dshns-status-peek`，`nowrap` + 省略号），不插入块、不改变卡片高度；`peek` 由 chip 的 mouseenter/focus
+  设置、mouseleave/blur 清空，填入/冲突/忽略时也会清空。触屏无悬停，点建议直接填入，完整指令在输入框阅读。
+- **上下文 2 行 clamp（2026-11-10 方案 A）**：`LIMITS.context` 120→240；`FoldedText` 用 CSS
+  `.dshns-text-clamped` 限 2 行，`ResizeObserver` + `scrollHeight > clientHeight` 测量实际溢出，
+  仅溢出（或已展开）时渲染 ghost「展开/收起」；点击显式展开全文，不再使用 `FOLD_WIDTH` 字符预算。
+- **冲突全文**：`ConflictCompare` 保持目标/草稿两行（默认各一行省略），用 `scrollWidth > clientWidth`
+  判断溢出；溢出或已展开时显示 `.dshns-conflict-toggle`「展开全文/收起全文」，`[data-expanded]` 时
+  文本 `white-space: pre-wrap` 换行完整显示；短内容不显示 toggle，默认高度不变。
 - **默认 3 条 + 「还有 N 条」**：`DEFAULTS.maxPerTurn = 3`，`buildDisplay` 切片并给出 `moreCount`；
   「还有 N 条」展开为模型给的全部建议（最多 6），再点「收起」还原。
 - 状态行右侧按钮：建议态「− 暂不需要」（忽略），已忽略态「+ 恢复建议」；两个方向都把 `dismissed`
   写入 localStorage 的 turn 状态，卡片保留。
-- **冲突态**：`div.dshns-conflict` 只放对比框（目标指令与当前草稿各一行省略）；三个动作
+- **冲突态**：`div.dshns-conflict` 只放对比框（`ConflictCompare`；目标指令与当前草稿各一行省略，
+  长内容可展开全文）；三个动作
   `appendPrimary`（primary）/`replace`/`cancel` 由状态行渲染（`conflictActions`），与「输入框已有内容」
   同一行（`.dshns-statusbar-conflict`，窄列可换行）；选择经 `mergeDraft` 合并后同样走 `applyFill`，只填入。
 - 输入框不可写（`inputActions.setDraft` 缺失/禁用）时按钮禁用，状态行「输入框暂不可用」。
@@ -972,7 +1007,10 @@ M3 实现注记（均可单测或代码审查）：
 - **状态行优先级（2026-11-10 修订）**：输入框不可用 > 已忽略 > 冲突 > 已填入/危险警示；
   忽略后卡片保留但控件收起（同官方 dismiss），状态行右侧换成「恢复建议」。
 - **冲突态高度（2026-11-10 紧凑化）**：动作与状态同行、无独立动作行；748 列实测默认 134px → 冲突
-  158px（差 24px，验收 ≤25px）；窄列换行情况待视觉证据实测。
+  158.5px（差 24.5px，验收 ≤25px）；窄列换行情况待视觉证据实测。
+- **方案 A 高度预算（2026-11-10）**：hover/focus 只换状态行文字，卡片高度前后差为 0；748 列实测默认卡
+  134px、冲突卡（短内容）158.5px（差 24.5px，验收 ≤25px）；上下文/冲突的全文展开只在点击后增加高度，
+  再次点击恢复。390px 窄列按同一口径测量。
 - **「已填入」/危险警示按草稿派生（2026-11-10 P0 修复）**：只有草稿仍等于本卡本次写入的文本，或刷新后
   仍等于该建议的 prompt 时，才显示 filled 标记与危险警示；编辑、清空、刷新后不保留误报。危险标记取自建议
   数据，因此持久化的 filledId + 匹配草稿在重载后仍能显示警示。对应纯逻辑集中在 `lib/view-model.js` 的
@@ -980,8 +1018,11 @@ M3 实现注记（均可单测或代码审查）：
 - 首屏默认显示 3 条（`DEFAULTS.maxPerTurn = 3`）；「还有 N 条」就地展开为完整 6 条，再点「收起」；
   设置选 Auto 时全部显示，不出现该入口。
 
-**FoldedText**：照抄官方实现（`Intl.Segmenter` grapheme + 宽字形双宽 + 260 预算 + `…` + ghost 展开/收起），
-类名改写为 `dshns-text/ dshns-toggle`。
+**FoldedText（2026-11-10 方案 A 重写）**：不再使用官方 `FOLD_WIDTH` 字符预算（260 拉丁字宽在 240 字
+上限下不可达）；改为 CSS 2 行 clamp（`.dshns-text-clamped`）+ `ResizeObserver`/`scrollHeight` 实测
+溢出 + ghost「展开/收起」点击显式展开。类名 `dshns-text/ dshns-toggle`。
+**ConflictCompare（2026-11-10 方案 A）**：对比框两行默认单行省略，`scrollWidth > clientWidth` 实测溢出后
+渲染 `.dshns-conflict-toggle`「展开全文/收起全文」；`[data-expanded]` 下文本换行完整显示，短内容不显示 toggle。
 
 ### 6.4 过程组一行（`tool.call.toolview`）
 
@@ -1055,7 +1096,9 @@ root scope，只有 `{close}`，没有 session kit。
 
 `ctx.locale.register('nextSteps', { en, zh })` 在 `apply` 的 effect 中注册（en/zh 为 baseline，成对必需）；
 slot 注册 `locale:NS` 后组件拿到 `t`。词表（§附录 D）：卡片 `aria-label`（不做可见标题）、更多/收起、暂不需要/恢复建议、
-已填入/冲突/危险提示、「将填入」预览前缀、「将填入 / 当前草稿」对比标签、追加到末尾/替换/取消、推荐/已填入/需确认、
+已填入/冲突/危险提示、「将填入」peek 前缀（`preview.label`）、「将填入 / 当前草稿」对比标签、
+展开全文/收起全文（`conflict.expand`/`conflict.collapse`）、
+追加到末尾/替换/取消、推荐/已填入/需确认、
 行状态（正在准备建议/正在生成建议/已生成/未显示/已中断）、查看调用、设置页文案、兜底上下文句。
 包 `locale/{en,zh}.json` 仅放 `meta.title`/`meta.description`。
 
@@ -1173,22 +1216,22 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 
 | 文件 | 覆盖 |
 |---|---|
-| `test/normalize.test.mjs` | §5.6 全部规则；meta/execute 一致性；id 稳定性；边界（6 条上限、空、坏类型） |
+| `test/normalize.test.mjs` | §5.6 全部规则（context 240 上限）；meta/execute 一致性；id 稳定性；边界（6 条上限、空、坏类型） |
 | `test/view-model.test.mjs` | `parseMeta` 防御（缺字段/超大/多余字段）；`modelFromArgs` 兜底；`buildDisplay`（默认 3 条/Auto/推荐顺序/optional 压尾）；草稿冲突状态机（空/本人草稿/用户编辑/追加）；`deriveChipMarker`；设置 clamp（无点击行为项）；storage key/hash；危险词表 |
-| `test/card-state.test.mjs` | 卡片状态组合：filled 标记按草稿派生、danger 只在生效填入时出现、状态行优先级、预览回退、单标记优先级、冲突合并 |
+| `test/card-state.test.mjs` | 卡片状态组合：filled 标记按草稿派生、danger 只在生效填入时出现、状态行优先级、单标记优先级、冲突合并 |
 | `test/definition.test.mjs` | Conversation Definition：native `tool/call`+`tool/result` 与 PTC `tool/ptc-dispatch-*` 两条链路的 match/fold/turn location；meta 优先与 args 兜底；空 state 守卫 |
-| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在；无 Send 模式/`submit` 引用/胶囊 Tag/「可以不做」；冲突动作与状态同一行（`dshns-statusbar-conflict`，无 `dshns-conflict-actions`） |
+| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在；无 Send 模式/`submit` 引用/胶囊 Tag/「可以不做」；冲突动作与状态同一行（`dshns-statusbar-conflict`，无 `dshns-conflict-actions`）；hover 不插入预览块（`dshns-status-peek`、无 `dshns-preview`）、measured clamp（`ResizeObserver`/`scrollHeight`）、`ConflictCompare` 展开控件与 `conflict.expand/collapse` |
 
 ### 10.2 手工 E2E（装插件后逐条执行，对应形态稿 §12）
 
 1. 普通问答 → 过程组一行「下一步建议 · 已生成」；卡片出现在回答下方、官方卡上方；
-2. 卡片与官方卡并排比较：宽度/圆角/描边/说明字号/说明折叠/按钮尺寸/状态行（两卡差异在标题、footer/状态行文字切换、按需预览三处）；
+2. 卡片与官方卡并排比较：宽度/圆角/描边/说明字号/说明折叠/按钮尺寸/状态行（两卡差异在标题、footer/状态行文字切换、hover 状态行 peek 三处）；
 3. 点击建议 → 只填入输入框、不发送；光标在末尾；状态行「已填入输入框，可修改后发送」，chip 显示单个「已填入」标记；
-4. 输入框已有文字 → 点击出「将填入 / 当前草稿」对比，状态行同一行出现「追加到末尾/替换/取消」；三种都验证且都只填入；量测冲突态与默认态高度差（748 列参考 24px，验收 ≤25px）；
+4. 输入框已有文字 → 点击出「将填入 / 当前草稿」对比，状态行同一行出现「追加到末尾/替换/取消」；三种都验证且都只填入；短内容不出现「展开全文」，长内容出现且可展开/收起；量测冲突态与默认态高度差（748 列参考 24.5px，验收 ≤25px）；
 5. 连续点不同建议（未编辑）→ 直接替换不询问；编辑后再点 → 出确认；
 6. 危险建议 → 「⚠ 需确认」标记 + 填入后警示；任何操作都不会发送；
 7. 默认显示 3 条，「还有 N 条」展开/收起；推荐在首位；可跳过类建议压尾但不显示标记；
-8. hover/focus 出现「将填入」预览、移开收起，chip 行不位移；点击预览不填入；
+8. hover/focus 只在状态行显示单行「将填入 · 指令」（省略号），卡片高度与 chip 位置不变，移开/失焦恢复；点击建议直接填入、完整指令在输入框；
 9. 过程组行：折叠过程组后卡片仍可见；「未显示」可展开原因 +「查看调用」；
 10. 状态行右侧「− 暂不需要」→ 控件收起 + 状态行「已忽略」+ 按钮变「+ 恢复建议」+ 卡片保留；再点它 → 控件与状态恢复；
 11. 刷新页面/重启 DSH → 卡片、状态保留；
@@ -1200,7 +1243,10 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 17. 中英文界面/中英文对话 → 文案与建议语言正确；
 18. 长会话 100+ 轮 → 滚动与渲染无明显卡顿；
 19. PTC 预设会话：模型通过 `run_code` 调用 `suggest_next_steps` → `run_code` 过程组内出现「下一步建议 · 已生成」，回答下方出现卡片；刷新后卡片保留；
-20. 分别用 native 与 PTC 预设的新会话各跑一轮 → 两种链路的卡片行为一致（内容、点击、忽略/恢复）。
+20. 分别用 native 与 PTC 预设的新会话各跑一轮 → 两种链路的卡片行为一致（内容、点击、忽略/恢复）；
+21. 长上下文（>2 行、≤240 字符）：默认 2 行 clamp，仅实际溢出时出现「展开/收起」；点击展开全文、再点收起；悬停不展开、高度不变；
+22. 冲突对比框：短内容无「展开全文」；目标/草稿溢出时出现，点击后两行换行完整显示，再点「收起全文」恢复紧凑高度；
+23. 748px 与 390px 两列分别验证：hover 前后卡片高度差为 0、peek 单行省略；冲突态与默认态高度差 ≤25px（748 列参考 158.5 vs 134、差 24.5px）；上下文/冲突展开均只由点击触发。
 
 ### 10.3 视觉一致性核对（官方卡是活体基准，三处有意差异见 §6.3 注）
 
@@ -1214,11 +1260,16 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
   文字 12px/1.6、margin 0，右端 28px 高带文字切换（建议态 `.dshns-dismiss`「− 暂不需要」/ 忽略态
   `.dshns-restore`「+ 恢复建议」，12px 文字 + 16px 图标，padding 0 8）；
 - 本卡扩展：`.dshns-marker` 11px/18、label-secondary（primary chip 内 inherit + opacity .78），
-  `.dshns-warn` 12×12、`--dsw-alias-state-warn-primary`；`.dshns-preview` 12px/1.6、radius-sm、
-  module 底、padding 6 10、2 行 clamp；`.dshns-conflict-compare` 12px/1.6、radius-sm、module 底、padding 8 10；
-  对比框标签与预览前缀 11px、label-tertiary；
-- 冲突态高度：748px 宽列用夹具/实机量 border-box 高度，默认 134px、冲突 158px（差 24px，验收 ≤25px）；
+  `.dshns-warn` 12×12、`--dsw-alias-state-warn-primary`；`.dshns-text-clamped` 2 行 clamp；
+  `.dshns-status` 单行省略（flex `0 1 auto`、`min-width:0`、`nowrap`），`.dshns-status-peek` label-tertiary；
+  `.dshns-conflict-compare` 12px/1.6、radius-sm、module 底、padding 8 10；`[data-expanded]` 下文本
+  `white-space: pre-wrap` + `overflow-wrap: anywhere`；`.dshns-conflict-toggle` 24px 高、link 色、右对齐；
+  对比框标签 11px、label-tertiary；
+- hover/focus 高度：748/390 两列分别量 hover 前后卡片 border-box 高度，差必须为 0；状态行为单行 peek（省略号）；
+- 上下文 clamp：748/390 两列分别验证默认 2 行 clamp；仅实际溢出时出现「展开/收起」，点击后高度增加、再点恢复；
+- 冲突态高度：748px 宽列用夹具/实机量 border-box 高度，默认 134px、冲突 158.5px（差 24.5px，验收 ≤25px）；
   `.dshns-statusbar-conflict` 生效（margin-top 8、flex-wrap wrap）、无独立 `.dshns-conflict-actions` 行；
+  短内容不出现 `.dshns-conflict-toggle`，长内容出现且展开后文本换行；
   窄列（约 390px）动作换行后的高度按同一口径单独测量；
 - 官方 `.footer` `justify-content:flex-end; gap:12px; margin-top:12px`；本卡已删除 footer；
 - Button sm：height 28、font-size 12、padding 0 10、radius `--dsw-radius-sm`；primary/ghost 颜色 token 同官方；
@@ -1229,7 +1280,9 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 
 - token：在 DSH token meter / 会话统计里对比"启用 vs 禁用"插件前后同一提示的请求 token；
 - 延迟：DevTools Performance 记录点击 → 输入框出现文本；
-- meta 体积：会话日志 `tool/result.meta`（native）或 `tool/ptc-dispatch.meta`（PTC）序列化长度（常规 <1.5KB）。
+- meta 体积：会话日志 `tool/result.meta`（native）或 `tool/ptc-dispatch.meta`（PTC）序列化长度（常规 <1.5KB）；
+- 卡片高度：748/390 两列量 border-box 高度；hover 前后差为 0，默认 vs 冲突差 ≤25px（748 列参考 24.5px）；
+  上下文/冲突展开后的高度增加属显式点击操作。
 
 ---
 
@@ -1295,7 +1348,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | M1 | Host：normalize.js + index.js + 单测 | `node --test` 全绿；工具可在会话中调用，meta 入日志 |
 | M2 | Client 数据层：view-model.js + Definition + build 脚本 + 单测 | 刷新后可读到 turn data（console 验证） |
 | M3 | 卡片静态渲染（照抄 CSS/结构）+ 视觉比对 | 除标题例外外与官方卡肉眼一致（T0-7） |
-| M4 | 点击填入 + 冲突 + 暂不需要 + 状态行 + 预览 | 形态稿 §12 的 3/4/5/6/7/8/10 条通过 |
+| M4 | 点击填入 + 冲突 + 暂不需要 + 状态行 + hover peek | 形态稿 §12 的 3/4/5/6/7/8/10 条通过 |
 | M5 | 过程组一行 + 样式 | 过程行与官方同构；异常可展开 |
 | M6 | 场景过滤 + 持久化 + 语言 | 子代理/刷新/fork/中英文通过 |
 | M7 | 设置页（P1） | 条数/重置生效（点击行为 2026-11-10 移除） |
@@ -1331,8 +1384,17 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 >
 > **2026-11-10 冲突态紧凑化**：删除独立 `.dshns-conflict-actions` 行，冲突动作（`conflictActions`）与
 > 状态文字同排（`.dshns-statusbar-conflict { margin-top:8px; flex-wrap:wrap; row-gap:8px }`）；宽列 748px
-> 实测默认 134px → 冲突 158px（差 24px，验收 ≤25px），窄列待视觉证据实测。`build.test.mjs` 新增
+> 实测默认 134px → 冲突 158.5px（差 24.5px，验收 ≤25px），窄列待视觉证据实测。`build.test.mjs` 新增
 > 「冲突动作与状态同一行」契约断言；`node --test` **207** 全绿，`scripts/build-client.mjs --check` 通过。
+>
+> **2026-11-10 方案 A（hover 不进布局 + 长内容显式展开）**：删除 hover 预览块（`dshns-preview` /
+> `derivePreviewText`），改为状态行单行 `dshns-status-peek`「将填入 · {prompt}」，hover/focus 前后卡片
+> 高度不变。`LIMITS.context` 120→240；`FoldedText` 删除 `FOLD_WIDTH`，改为 2 行 clamp +
+> `ResizeObserver`/`scrollHeight` 实测溢出 + 点击「展开/收起」。冲突对比改为 `ConflictCompare`，
+> 长内容显示「展开全文/收起全文」；748 列短内容冲突卡 158.5px（默认 134px，差 24.5px）。新增
+> locale `conflict.expand/collapse`。`card-state.test.mjs` 移除预览组合用例、`normalize.test.mjs`
+> 增加 context 240 用例、`build.test.mjs` 新增 measured clamp/peek/ConflictCompare 断言；
+> `node --test` **207** 全绿，`scripts/build-client.mjs --check` 通过。
 
 ---
 
@@ -1350,9 +1412,10 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | R8 | 单文件 bundle + 内联构建漂移 | 低 | `build --check` 测试 |
 | R9 | link: 安装下 Host import 解析失败 | 已规避 | Host 零 import |
 | R10 | 与官方卡同屏拥挤 | 中 | order -10 + 组数上限；视觉比对 |
-| R11 | 按需预览在触屏不可见（无 hover；点击即填入） | 低 | 触屏以填入为主路径；预览定位为鼠标/键盘辅助；需要时可加常驻摘要 |
+| R11 | 单行 peek 在触屏不可见，且只能看到指令开头 | 低 | 触屏以填入为主路径，完整指令在输入框阅读；peek 定位为鼠标/键盘辅助；需要时可加长 peek 或常驻摘要 |
 | R12 | 默认 3 条让 4–6 条建议需多点一次「还有 N 条」 | 低 | 默认高度稳定优先；设置 Auto 可恢复全显示 |
 | R13 | 窄列（约 390px）冲突态动作换行，高度差可能超过 25px | 低 | 窄列按同一口径实测并更新视觉证据；超预算时压缩对比框行距或调整动作顺序 |
+| R14 | context 上限 240 后长说明更常见，窄列可能默认出现「展开/收起」或展开后卡片更高 | 低 | 默认 2 行 clamp 保持稳定高度；展开只由点击触发；748/390 视觉证据复核按钮出现时机 |
 
 ---
 
@@ -1400,6 +1463,11 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
   display: flex;
 }
 .dshns-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--dsw-alias-label-secondary);
   margin: 0 auto 0 0;
   font-size: 12px;
@@ -1423,10 +1491,9 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 }
 ```
 
-官方附带的折叠说明实现（照抄逻辑，`FoldedText`）：
-`FOLD_WIDTH = 260`；宽字形正则
-`/^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-｠￠-￦]/u`；
-`Intl.Segmenter(undefined, { granularity: 'grapheme' })`；超宽截断 + `'…'`；展开/收起用 ghost sm 按钮。
+官方折叠说明实现（仅作形态基线；本卡实现已于 2026-11-10 方案 A 改为 2 行 clamp + 实测溢出 + 点击展开，
+见 §6.3）：`FOLD_WIDTH = 260` 拉丁字宽；宽字形（CJK/假名/谚文/全角）按 2 计；`Intl.Segmenter` 按
+grapheme 切；超宽截断 + `'…'` + ghost 展开/收起。`FOLD_WIDTH` 常量与字符预算已从本卡实现删除。
 
 本插件在官方卡框之外扩展的样式（2026-11-10，同样只用 `--dsw-*` token）：
 
@@ -1439,16 +1506,19 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 .dshns-btn-primary .dshns-marker { color: inherit; opacity: .78; }
 .dshns-marker-danger { display: inline-flex; align-items: center; gap: 3px; }
 .dshns-warn { flex: none; width: 12px; height: 12px; color: var(--dsw-alias-state-warn-primary); }
-/* 按需预览：闲时不占位，出现在控件行下方 */
-.dshns-preview { margin-top: 8px; padding: 6px 10px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent)); color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.dshns-preview-label { margin-right: 4px; color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.6; white-space: nowrap; }
+/* 上下文默认 2 行 clamp；只在 DOM 实测溢出时由脚本渲染 ghost「展开/收起」 */
+.dshns-text-clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* hover/focus 的指令 peek 复用状态行，单行省略 */
+.dshns-status-peek { color: var(--dsw-alias-label-tertiary); }
 /* 冲突：控件区只放目标指令 + 当前草稿对比；动作并入状态行 */
 .dshns-conflict { margin-top: 12px; }
 .dshns-conflict-compare { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: var(--dsw-radius-sm); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent)); color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }
 .dshns-conflict-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 0; }
 .dshns-conflict-label { flex: none; color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.6; white-space: nowrap; }
 .dshns-conflict-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 冲突态状态行：状态文字与「追加到末尾/替换/取消」同一行，收紧上边距，冲突卡只比默认卡高约 24px */
+.dshns-conflict-compare[data-expanded] .dshns-conflict-text { white-space: pre-wrap; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; }
+.dshns-btn.dshns-conflict-toggle { align-self: flex-end; height: 24px; padding: 0; border-radius: 0; background: none; color: var(--dsw-alias-link); font-size: 12px; line-height: 1.6; }
+/* 冲突态状态行：状态文字与「追加到末尾/替换/取消」同一行，收紧上边距，冲突卡只比默认卡高约 24.5px */
 .dshns-statusbar-conflict { margin-top: 8px; flex-wrap: wrap; row-gap: 8px; }
 ```
 
@@ -1596,6 +1666,8 @@ shell 内 symbol；内联等价、且避免依赖冻结模块表）。
 | conflict.compareTarget | Will fill | 将填入 |
 | conflict.compareDraft | Current draft | 当前草稿 |
 | conflict.appendPrimary | Append to draft | 追加到末尾 |
+| conflict.expand | Expand full text | 展开全文 |
+| conflict.collapse | Collapse full text | 收起全文 |
 | conflict.replace | Replace | 替换 |
 | conflict.cancel | Cancel | 取消 |
 | row.title | Suggested next steps | 下一步建议 |

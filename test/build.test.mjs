@@ -36,17 +36,39 @@ test('client.js carries the one-line process row', () => {
   }
 })
 
-test('card renders an on-demand preview and injects the conversation service', () => {
+test('card keeps hover geometry-neutral with a status-row peek', () => {
   const source = readFileSync(clientPath, 'utf8')
-  assert.ok(source.includes('dshns-preview'))
-  assert.ok(source.includes('preview.label'))
+  // Hover/focus must only swap text inside the existing status row. No preview
+  // block may be inserted, so moving the pointer cannot resize the card.
+  for (const symbol of ['dshns-status-peek', 'peekText', 'preview.label', 'setPeek(']) {
+    assert.ok(source.includes(symbol), `expected client.js to include ${symbol}`)
+  }
+  assert.equal(source.includes('dshns-preview'), false)
+  assert.equal(source.includes('derivePreviewText'), false)
+  assert.equal(source.includes('preview !== null'), false)
   assert.ok(source.includes("'uiConversation'"))
-  // The preview only exists while hovered/focused, and the filled/danger state
-  // is derived from the live draft inside the inlined view model.
-  for (const symbol of ['deriveCardView', 'derivePreviewText', 'deriveActiveFill', 'deriveChipMarker']) {
+  for (const symbol of ['deriveCardView', 'deriveActiveFill', 'deriveChipMarker']) {
     assert.ok(source.includes(symbol), `expected client.js to inline ${symbol}`)
   }
-  assert.match(source, /mode === 'suggestions' && preview !== null/)
+})
+
+test('long text uses measured clamps and explicit expand controls', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  // Context uses a two-line clamp measured through the DOM; conflict target and
+  // draft get a click-only expand control. Both avoid hover-driven layout.
+  for (const symbol of [
+    'dshns-text-clamped',
+    'ResizeObserver',
+    'scrollHeight',
+    'clientHeight',
+    'ConflictCompare',
+    'dshns-conflict-toggle',
+    'conflict.expand',
+    'conflict.collapse',
+    'dshns-conflict-compare[data-expanded]',
+  ]) {
+    assert.ok(source.includes(symbol), `expected client.js to include ${symbol}`)
+  }
 })
 
 test('card wires the draft-derived state and conflict compare UI', () => {
@@ -57,7 +79,7 @@ test('card wires the draft-derived state and conflict compare UI', () => {
   assert.match(source, /deriveChipMarker\(\{ suggestion, filledId: view\.filledId \}\)/)
   assert.match(source, /mergeDraft\(\{ mode: choice, draft, prompt: conflict\.prompt \}\)/)
   assert.match(source, /applyFill\(merged, conflict, choice === 'replace'\)/)
-  for (const symbol of ['dshns-conflict-compare', 'dshns-conflict-label', 'conflict.compareTarget', 'conflict.compareDraft', 'conflict.appendPrimary']) {
+  for (const symbol of ['dshns-conflict-compare', 'dshns-conflict-label', 'dshns-conflict-toggle', 'conflict.compareTarget', 'conflict.compareDraft', 'conflict.appendPrimary', 'conflict.expand']) {
     assert.ok(source.includes(symbol), `expected client.js to include ${symbol}`)
   }
 })

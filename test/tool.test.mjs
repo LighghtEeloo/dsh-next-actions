@@ -166,7 +166,7 @@ test('description states the capability and display rules only', () => {
 
 test('schema descriptions carry the field-level quality rules', () => {
   const properties = __definition.parameters.properties
-  assert.match(properties.context.description, /≤120 chars/)
+  assert.match(properties.context.description, /≤240 chars/)
   assert.match(properties.context.description, /never restate the answer/i)
   assert.match(properties.suggestions.description, /1–3 \(max 6\)/i)
   assert.match(properties.suggestions.description, /distinct angles/i)

@@ -160,6 +160,13 @@ test('context strips CJK corner quotes', () => {
   assert.equal(meta.context, '结论已确认。')
 })
 
+test('context keeps the new 240-character budget before clamping', () => {
+  const text = '上'.repeat(200)
+  const meta = metaOf({ context: text })
+  assert.equal(meta.context, text)
+  assert.equal(meta.context.endsWith('…'), false)
+})
+
 test('context is clamped to LIMITS.context with an ellipsis', () => {
   const meta = metaOf({ context: '上'.repeat(300) })
   const characters = Array.from(meta.context)
