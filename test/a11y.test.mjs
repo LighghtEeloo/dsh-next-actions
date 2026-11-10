@@ -20,6 +20,7 @@ const TOKENS = {
     '--dsw-alias-label-tertiary': '#81858c',
     '--dsw-alias-label-primary-foreground': '#ffffff',
     '--dsw-alias-state-warn-label': '#dd8629',
+    '--dsw-alias-state-business-primary': '#4176e6',
   },
   dark: {
     '--dsw-alias-bg-layer-1': '#232324',
@@ -29,6 +30,7 @@ const TOKENS = {
     '--dsw-alias-label-tertiary': '#adb2b8',
     '--dsw-alias-label-primary-foreground': '#0f1115',
     '--dsw-alias-state-warn-label': '#dd8629',
+    '--dsw-alias-state-business-primary': '#7aaaff',
   },
 }
 
@@ -42,7 +44,9 @@ function escapeRegExp(value) {
 
 /** Declarations of the first rule whose selector line starts with `selector`. */
 function declarations(selector) {
-  const pattern = new RegExp(`(?:^|\\n)\\s*${escapeRegExp(selector)}(?:[^{}]*)\\{`)
+  // The lookahead keeps `.dshns-btn-sm` from matching `.dshns-btn-sm:focus`
+  // style variants that share the prefix.
+  const pattern = new RegExp(`(?:^|\\n)\\s*${escapeRegExp(selector)}(?![\\w:-])(?:[^{}]*)\\{`)
   const match = pattern.exec(STYLES)
   assert.ok(match !== null, `expected a stylesheet rule for ${selector}`)
   const open = match.index + match[0].length
@@ -157,6 +161,38 @@ test('warning icon clears the 3:1 non-text threshold in both themes', () => {
   // On a primary chip the marker inherits the button foreground, which already
   // has AA contrast in both themes.
   assert.equal(property('.dshns-btn-primary .dshns-warn', 'color'), 'inherit')
+})
+
+test('keyboard focus rings follow the DSH focus contract and stay visible', () => {
+  const ring = 'var(--dsw-focus-ring-width, 2px) solid '
+    + 'var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary))'
+  for (const selector of ['.dshns-btn:focus-visible', '.dshns-segmented-tab:focus-visible']) {
+    assert.equal(property(selector, 'outline'), ring)
+    assert.equal(property(selector, 'outline-offset'), '2px')
+  }
+  // The focusable scroll region gets the same ring plus the compare radius.
+  assert.equal(property('.dshns-conflict-lines:focus-visible', 'outline'), ring)
+  assert.equal(property('.dshns-conflict-lines:focus-visible', 'outline-offset'), '2px')
+  assert.match(
+    STYLES,
+    /\.dshns-conflict-lines:focus-visible \{ border-radius: var\(--dsw-radius-sm\); \}/,
+  )
+  // Keyboard-only focus styling: no bare :focus rule may paint on mouse clicks.
+  assert.equal(/(?:^|\n)\s*\.dshns-[\w-]+:focus\s*\{/.test(STYLES), false)
+  // The ring is drawn on the card and compare surfaces, so it must clear 3:1
+  // there in both themes (it never sits on a primary-chip fill).
+  for (const theme of Object.keys(TOKENS)) {
+    for (const surface of ['--dsw-alias-bg-layer-1', '--dsw-alias-bg-module-platform']) {
+      const ratio = contrast(
+        resolve(theme, '--dsw-alias-state-business-primary'),
+        resolve(theme, surface),
+      )
+      assert.ok(
+        ratio >= MIN_NON_TEXT_CONTRAST,
+        `focus ring contrast on ${surface} in ${theme} is ${ratio.toFixed(2)}:1`,
+      )
+    }
+  }
 })
 
 test('every card control targets at least 32px of height', () => {

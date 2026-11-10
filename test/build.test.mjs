@@ -140,6 +140,40 @@ test('expanded conflict text is a capped, scrollable region with a pinned toggle
   assert.match(source, /'aria-label': scrollable \? t\('conflict\.scrollRegion'\) : undefined/)
 })
 
+test('card keeps keyboard focus visible and restores it across state switches', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  // Handlers record the focus destination before re-rendering; a layout effect
+  // moves focus once the new state's DOM exists. The targets that only exist in
+  // one state are addressed by data attributes (Button is not a forwardRef).
+  for (const symbol of [
+    'FOCUS_TARGETS',
+    'pendingFocusRef',
+    'data-chip-id',
+    'data-conflict-primary',
+    'data-card-dismiss',
+    'data-card-restore',
+    'data-card-more',
+    'data-card-collapse',
+    'onCardKeyDown',
+    'cancelConflict',
+    "'data-chip-id': suggestion.id",
+  ]) {
+    assert.ok(source.includes(symbol), `expected client.js to include ${symbol}`)
+  }
+  assert.match(source, /if \(event\.key !== 'Escape' \|\| conflict === null\) return/)
+  assert.match(source, /pendingFocusRef\.current = 'conflictPrimary'/)
+  assert.match(source, /pendingFocusRef\.current = triggerId === null \? null : \{ chip: triggerId \}/)
+  assert.match(source, /pendingFocusRef\.current = 'restore'/)
+  assert.match(source, /pendingFocusRef\.current = 'dismiss'/)
+  assert.match(source, /pendingFocusRef\.current = 'collapse'/)
+  assert.match(source, /pendingFocusRef\.current = 'more'/)
+  assert.match(source, /onKeyDown: onCardKeyDown/)
+  // Keyboard focus styling must come from the shipped stylesheet.
+  for (const symbol of ['dshns-btn:focus-visible', 'dshns-conflict-lines:focus-visible', '--dsw-focus-ring-color']) {
+    assert.ok(source.includes(symbol), `expected client.js to include ${symbol}`)
+  }
+})
+
 test('card reveals a live turn-tail mount instead of inserting it in one frame', () => {
   const source = readFileSync(clientPath, 'utf8')
   for (const symbol of ['dshns-reveal', 'shouldRevealCard', 'CARD_REVEAL', 'REVEAL_INITIAL_STYLE', 'data-revealing']) {

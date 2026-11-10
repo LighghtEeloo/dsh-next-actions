@@ -627,7 +627,10 @@ function noteToLocaleKey(note) {
  *   - the warning icon mixes amber toward label-primary so the 12px glyph
  *     clears the 3:1 non-text threshold on light cards while keeping its hue;
  *   - the expanded conflict compare caps its scrollable lines at 240px and the
- *     toggle stays outside that scroll region.
+ *     toggle stays outside that scroll region;
+ *   - keyboard focus follows the DSH focus.css contract (`:focus-visible` ring
+ *     from --dsw-focus-ring-width/--dsw-focus-ring-color, outside the control),
+ *     including the focusable conflict scroll region.
  */
 const STYLES = `
 .dshns-card {
@@ -869,6 +872,18 @@ const STYLES = `
   align-items: center;
   justify-content: center;
 }
+/* Keyboard focus: mirror the DSH focus.css contract (2px ring color from
+ * --dsw-focus-ring-color, falling back to the business blue; the theme makes the
+ * variable transparent in pointer modality, so clicks paint no ring). The ring
+ * sits outside the 32px control on the card surface, which keeps it >=3:1 in
+ * both themes instead of landing on a light primary-chip fill in dark mode. */
+.dshns-btn:focus-visible,
+.dshns-segmented-tab:focus-visible,
+.dshns-conflict-lines:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+.dshns-conflict-lines:focus-visible { border-radius: var(--dsw-radius-sm); }
 
 /* TextShimmer: copied from the official primitive (dshns- renames, tokens only). */
 .dshns-shimmer {
@@ -1099,6 +1114,18 @@ button.dshns-disc-leading { cursor: pointer; }
     const TOOL_NAME = 'suggest_next_steps'
     const DEFINITION_KEY = 'next-steps'
     const CARD_ORDER = -10
+
+    // Controls that exist in only one card state, addressed by data attribute
+    // because the shared Button is a plain function component (React 18) and
+    // cannot forward refs. Focus returns to these after dismiss/restore,
+    // more/collapse, and when a conflict opens or is cancelled.
+    const FOCUS_TARGETS = Object.freeze({
+      conflictPrimary: '[data-conflict-primary]',
+      dismiss: '[data-card-dismiss]',
+      restore: '[data-card-restore]',
+      more: '[data-card-more]',
+      collapse: '[data-card-collapse]',
+    })
 
     // -----------------------------------------------------------------------
     // Locale dictionaries (official frame copy + this plugin's keys)
@@ -1521,6 +1548,8 @@ button.dshns-disc-leading { cursor: pointer; }
       const [conflict, setConflict] = React.useState(null)
       const [peek, setPeek] = React.useState(null)
       const appliedRef = React.useRef(null)
+      const cardRef = React.useRef(null)
+      const pendingFocusRef = React.useRef(null)
 
       const draft = typeof useInput === 'function'
         ? useInput((state) => (state === undefined || state === null ? '' : state.draft))
@@ -1599,6 +1628,31 @@ button.dshns-disc-leading { cursor: pointer; }
         return finish
       }, [hasCard])
 
+      // Focus continuity across state switches. Handlers record where focus
+      // should go before the re-render; this layout effect moves it once the new
+      // DOM exists (no visible flicker, and the next Tab starts from the new
+      // control). Chip targets are matched by the card's data-chip-id values
+      // instead of CSS.escape so model-provided ids cannot break the selector.
+      React.useLayoutEffect(() => {
+        const pending = pendingFocusRef.current
+        if (pending === null) return
+        pendingFocusRef.current = null
+        const root = cardRef.current
+        if (root === null) return
+        let element = null
+        if (typeof pending === 'string') {
+          element = root.querySelector(FOCUS_TARGETS[pending])
+        } else {
+          for (const candidate of root.querySelectorAll('[data-chip-id]')) {
+            if (candidate.getAttribute('data-chip-id') === pending.chip) {
+              element = candidate
+              break
+            }
+          }
+        }
+        if (element !== null && typeof element.focus === 'function') element.focus()
+      })
+
       if (!hasCard) return null
 
       const canWrite = inputActions !== undefined && inputActions !== null && typeof inputActions.setDraft === 'function'
@@ -1653,19 +1707,42 @@ button.dshns-disc-leading { cursor: pointer; }
         if (action.kind === 'conflict') {
           setConflict(suggestion)
           setPeek(null)
+          // The clicked chip disappears into the conflict layout; start from the
+          // safe default action so keyboard users do not tab in from the top.
+          pendingFocusRef.current = 'conflictPrimary'
           return
         }
         applyFill(suggestion.prompt, suggestion)
       }
 
-      function onConflictChoice(choice) {
-        if (conflict === null) return
+      // Esc and the explicit 「取消」 both leave the conflict state. Focus goes
+      // back to the suggestion that opened it, which is re-rendered a moment
+      // later with the same data-chip-id.
+      function cancelConflict() {
+        const triggerId = conflict === null ? null : conflict.id
         setConflict(null)
         setPeek(null)
-        if (choice === 'cancel') return
+        pendingFocusRef.current = triggerId === null ? null : { chip: triggerId }
+      }
+
+      function onConflictChoice(choice) {
+        if (conflict === null) return
+        if (choice === 'cancel') {
+          cancelConflict()
+          return
+        }
+        setConflict(null)
+        setPeek(null)
         const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })
         if (merged === null) return
         applyFill(merged, conflict, choice === 'replace')
+      }
+
+      function onCardKeyDown(event) {
+        if (event.key !== 'Escape' || conflict === null) return
+        event.preventDefault()
+        event.stopPropagation()
+        cancelConflict()
       }
 
       function onDismiss() {
@@ -1674,6 +1751,8 @@ button.dshns-disc-leading { cursor: pointer; }
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPeek(null)
+        // The dismiss control is replaced by the restore control in the same row.
+        pendingFocusRef.current = 'restore'
       }
 
       function onRestore() {
@@ -1682,6 +1761,7 @@ button.dshns-disc-leading { cursor: pointer; }
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPeek(null)
+        pendingFocusRef.current = 'dismiss'
       }
 
       function renderChip(suggestion) {
@@ -1706,6 +1786,7 @@ button.dshns-disc-leading { cursor: pointer; }
           size: 'sm',
           className: 'dshns-chip',
           'aria-label': accessibleName,
+          'data-chip-id': suggestion.id,
           disabled: !canWrite,
           onClick: () => { onPick(suggestion) },
           onMouseEnter: () => { setPeek(suggestion.prompt) },
@@ -1725,7 +1806,11 @@ button.dshns-disc-leading { cursor: pointer; }
               variant: 'ghost',
               size: 'sm',
               className: 'dshns-toggle',
-              onClick: () => { setExpanded(true) },
+              'data-card-more': '',
+              onClick: () => {
+                setExpanded(true)
+                pendingFocusRef.current = 'collapse'
+              },
             }, t('card.more').replace('{n}', String(moreCount)))
             : null,
           expanded
@@ -1733,7 +1818,11 @@ button.dshns-disc-leading { cursor: pointer; }
               variant: 'ghost',
               size: 'sm',
               className: 'dshns-toggle',
-              onClick: () => { setExpanded(false) },
+              'data-card-collapse': '',
+              onClick: () => {
+                setExpanded(false)
+                pendingFocusRef.current = 'more'
+              },
             }, t('card.collapse'))
             : null)
         : mode === 'conflict'
@@ -1758,7 +1847,7 @@ button.dshns-disc-leading { cursor: pointer; }
       // separate row keeps the conflict card close to the resting card height.
       const conflictActions = mode === 'conflict'
         ? [
-          h(Button, { key: 'append', variant: 'primary', size: 'sm', onClick: () => { onConflictChoice('append') } }, t('conflict.appendPrimary')),
+          h(Button, { key: 'append', variant: 'primary', size: 'sm', 'data-conflict-primary': '', onClick: () => { onConflictChoice('append') } }, t('conflict.appendPrimary')),
           h(Button, { key: 'replace', variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('replace') } }, t('conflict.replace')),
           h(Button, { key: 'cancel', variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('cancel') } }, t('conflict.cancel')),
         ]
@@ -1774,6 +1863,7 @@ button.dshns-disc-leading { cursor: pointer; }
           className: 'dshns-dismiss',
           icon: h(MinusIcon, { size: 16 }),
           onClick: onDismiss,
+          'data-card-dismiss': '',
           'aria-label': t('card.dismiss'),
         }, t('card.dismiss'))]
         : dismissed
@@ -1784,6 +1874,7 @@ button.dshns-disc-leading { cursor: pointer; }
             className: 'dshns-restore',
             icon: h(PlusIcon, { size: 16 }),
             onClick: onRestore,
+            'data-card-restore': '',
             'aria-label': t('card.restore'),
           }, t('card.restore'))]
           : [])
@@ -1806,8 +1897,10 @@ button.dshns-disc-leading { cursor: pointer; }
       },
       h('section', {
         className: 'dshns-card',
+        ref: cardRef,
         'aria-label': title,
         'data-next-steps-card': '',
+        onKeyDown: onCardKeyDown,
       },
       h('div', { className: 'dshns-body' },
         h(FoldedText, {

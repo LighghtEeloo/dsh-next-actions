@@ -18,7 +18,10 @@
  *   - the warning icon mixes amber toward label-primary so the 12px glyph
  *     clears the 3:1 non-text threshold on light cards while keeping its hue;
  *   - the expanded conflict compare caps its scrollable lines at 240px and the
- *     toggle stays outside that scroll region.
+ *     toggle stays outside that scroll region;
+ *   - keyboard focus follows the DSH focus.css contract (`:focus-visible` ring
+ *     from --dsw-focus-ring-width/--dsw-focus-ring-color, outside the control),
+ *     including the focusable conflict scroll region.
  */
 export const STYLES = `
 .dshns-card {
@@ -260,6 +263,18 @@ export const STYLES = `
   align-items: center;
   justify-content: center;
 }
+/* Keyboard focus: mirror the DSH focus.css contract (2px ring color from
+ * --dsw-focus-ring-color, falling back to the business blue; the theme makes the
+ * variable transparent in pointer modality, so clicks paint no ring). The ring
+ * sits outside the 32px control on the card surface, which keeps it >=3:1 in
+ * both themes instead of landing on a light primary-chip fill in dark mode. */
+.dshns-btn:focus-visible,
+.dshns-segmented-tab:focus-visible,
+.dshns-conflict-lines:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+.dshns-conflict-lines:focus-visible { border-radius: var(--dsw-radius-sm); }
 
 /* TextShimmer: copied from the official primitive (dshns- renames, tokens only). */
 .dshns-shimmer {

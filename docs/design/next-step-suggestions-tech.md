@@ -1,6 +1,6 @@
 # 技术方案：DSH「下一步建议」本地插件 `@local/dsh-next-actions`
 
-版本：v1.2（技术方案） ｜ 日期：2026-11-10 ｜ 状态：现行（P1 布局、方案 A 与可访问性打磨已落地）
+版本：v1.3（技术方案） ｜ 日期：2026-11-10 ｜ 状态：现行（P1 布局、方案 A、可访问性打磨与键盘焦点已在源码落地；实机键盘复核待做）
 关联文档：产品形态稿 `design/next-step-suggestions-prd.md`（v0.9，行为与形态的唯一基准）
 运行环境：DSH Desktop `0.2.2-rc.1`（`dsh --version`；asar 内 `dsh/package.json` 双重核对）
 工作区：`/Users/arctic/Box/Terrace/deepseek-harness/default-workspace`
@@ -15,6 +15,11 @@
 ⚠ 图标改 65/35 混色；冲突展开态对比文本封顶 240px 滚动、「收起全文」固定在滚动区外且仅真的滚动时可聚焦
 （`role="group"`）；chip 可访问名改为「可见标签：完整指令」；上下文展开不封顶。改动集中在 §1.1、§5.8、
 §6.3/§6.6、§8、§10、§11.3、§13、§14 与附录 A/B/D；测试与度量见 §5.8/§10。
+键盘焦点（2026-11-10）：新增 `:focus-visible` 焦点环（DSH focus.css 契约：`--dsw-focus-ring-width` 2px、
+`--dsw-focus-ring-color` 回退 `state-business-primary`、控件外 2px；指针模态下颜色变量为 transparent，
+仅键盘可见）；跨状态焦点流转（进入冲突 → 追加到末尾、Esc/取消 → 触发建议 chip、忽略 ↔ 恢复、
+还有 N 条 ↔ 收起）；冲突滚动区可聚焦时获得同一焦点环与对比框圆角；实现为 `FOCUS_TARGETS` +
+`pendingFocusRef` + layout effect。改动集中在 §6.3、§10、§13、§14 与附录 A；测试与度量为 217 个用例。
 
 证据标记：**【V26】**=在**当前安装的 0.2.2-rc.1** asar/前端产物中直接核对；**【V21】**=本工作区 0.2.1-rc.2 解包语料（`research/app/`、`vendor/`，仅作对照）；**【官方规范】**=官方插件开发 skill 的明文规则；**【推断】**=合理推断，列入 §12 T0 验证。
 
@@ -267,7 +272,7 @@ plugins/dsh-next-actions/
     ├── view-model.test.mjs  # 客户端纯逻辑单测
     ├── card-state.test.mjs  # 卡片状态组合（filled/danger/chip 标记/冲突）
     ├── definition.test.mjs  # native + PTC 的 turn data 折叠
-    ├── a11y.test.mjs        # 样式可访问性契约（AA 对比度 / 32px 目标 / 240px 封顶）
+    ├── a11y.test.mjs        # 样式可访问性契约（AA 对比度 / 32px 目标 / 240px 封顶 / 焦点环）
     └── build.test.mjs       # 构建产物与源一致（node:test 调 build --check）
 ```
 
@@ -712,6 +717,10 @@ config 缺省/畸形值）→ `tool.test.mjs` **31**，Host 55 + 31 = **86**；�
 `build.test.mjs` 新增 2 个契约用例（chip 可访问名「可见标签在前」、冲突滚动区 `dshns-conflict-lines` /
 `conflict.scrollRegion` / `tabIndex: scrollable ? 0 : undefined`），现 18 个用例；全仓 `node --test`
 **215** 全绿（207 → 215），`scripts/build-client.mjs --check` 通过，`client.js` 重建为 **92,220 字符**。
+2026-11-10 键盘焦点：`a11y.test.mjs` 新增焦点环契约用例（现 7 个；token 表达式、offset 2px、
+双主题双表面 3:1、仅键盘可见、滚动区圆角），`build.test.mjs` 新增焦点管理契约用例（现 19 个；
+`FOCUS_TARGETS`、data 属性、`onCardKeyDown` Esc、pendingFocus 目标）；全仓 `node --test`
+**217** 全绿（215 → 217），`scripts/build-client.mjs --check` 通过，`client.js` 重建为 **96,405 字符**。
 
 ---
 
@@ -872,16 +881,16 @@ PTC 预设把工具调用放进 `run_code` 程序：模型直接调用的只有 
 **DOM（与官方卡逐项对齐）**：
 
 ```text
-section.dshns-card[aria-label=标题][data-next-steps-card]
+section.dshns-card[aria-label=标题][data-next-steps-card][ref=cardRef][onKeyDown=onCardKeyDown]
   div.dshns-body
     <FoldedText context>                    ← 说明：默认 2 行 clamp（.dshns-text-clamped）；实测溢出才显示 ghost「展开/收起」（min-height 32）
       svg.dshns-mark                        ← 16px 品牌小标（列表+星火，实色填充，行首内联）
       text                                  ← 上下文行，13px/1.6 label-secondary；展开后换行全文（不封顶）
     div.dshns-controls                      ← 建议按钮（推荐 primary sm / 其余 ghost sm；默认 3 条）
-      button.dshns-btn-primary/ghost.dshns-chip[aria-label="可见标签：完整指令"]
+      button.dshns-btn-primary/ghost.dshns-chip[aria-label="可见标签：完整指令"][data-chip-id="<suggestion id>"]
         span.dshns-chip-label               ← 建议短标签（单行省略）
         span.dshns-marker                   ← 至多一个内联文本标记（推荐 / 已填入 / ⚠需确认）
-      button.dshns-toggle「还有 N 条」      ← 官方同款 ghost 小按钮（Card .toggle 样式；min-height 32）；展开后显示「收起」
+      button.dshns-toggle「还有 N 条」[data-card-more]  ← 官方同款 ghost 小按钮（Card .toggle 样式；min-height 32）；展开后显示「收起」[data-card-collapse]
     div.dshns-conflict                      ← 仅冲突态：只放对比框（ConflictCompare）
       div.dshns-conflict-compare[role=note][data-expanded]
         div.dshns-conflict-lines            ← 两行文本 wrapper；[data-expanded] 时 max-height:240px + overflow-y:auto
@@ -890,16 +899,21 @@ section.dshns-card[aria-label=标题][data-next-steps-card]
         button.dshns-btn-ghost.sm.dshns-conflict-toggle「展开全文/收起全文」  ← 仅溢出或已展开时；在滚动区外，高 32px
     div.dshns-statusbar[.dshns-statusbar-conflict]  ← 一行：左侧状态文字 + 右侧状态动作（min-height 32）
       p.dshns-status[role=status]           ← 状态；hover/focus 时加 .dshns-status-peek，显示单行「将填入 · 指令」（不参与 role=status）
-      button.dshns-btn-primary.sm「追加到末尾」  ← 仅冲突态；与状态文字同一行（窄列可换行）
+      button.dshns-btn-primary.sm「追加到末尾」[data-conflict-primary]  ← 仅冲突态；与状态文字同一行（窄列可换行）
       button.dshns-btn-ghost.sm「替换」          ← 仅冲突态
       button.dshns-btn-ghost.sm「取消」          ← 仅冲突态
-      button.dshns-btn-ghost.sm.dshns-dismiss   ← 建议态：16px「−」图标 + 12px「暂不需要」（高 32px）
-      button.dshns-btn-ghost.sm.dshns-restore   ← 已忽略态：16px「+」图标 + 12px「恢复建议」（高 32px）
+      button.dshns-btn-ghost.sm.dshns-dismiss[data-card-dismiss]   ← 建议态：16px「−」图标 + 12px「暂不需要」（高 32px）
+      button.dshns-btn-ghost.sm.dshns-restore[data-card-restore]   ← 已忽略态：16px「+」图标 + 12px「恢复建议」（高 32px）
 ```
 
 > `.dshns-conflict-lines` 只在展开后真的滚动（`scrollHeight > clientHeight + 1`）时才获得
 > `role="group" tabindex="0" aria-label="目标指令与当前草稿"`（locale `conflict.scrollRegion`）；
 > 「收起全文」是 wrapper 的兄弟节点，始终留在滚动区外。
+>
+> 键盘焦点：`section.dshns-card` 上挂 `onKeyDown`（冲突态 `Esc` = 取消，preventDefault + stopPropagation）；
+> 可点控件带稳定 data 属性——chip `[data-chip-id]`、冲突主操作 `[data-conflict-primary]`、
+> `[data-card-dismiss]`/`[data-card-restore]`/`[data-card-more]`/`[data-card-collapse]`——状态切换后
+> 由焦点管理按属性寻址把焦点移到新控件。焦点环规则见 §6.3 细节与附录 A。
 
 > **2026-11-09 卡片改版（实机反馈）**：去掉可见标题 `strong.dshns-title`（`aria-label` 仍为「下一步建议」），
 > 上下文成为第一行、行首内联 16px 品牌小标；上下文样式由 13px/1.7、`margin-top:8px` 调整为 13px/1.6、无上边距，
@@ -950,6 +964,15 @@ section.dshns-card[aria-label=标题][data-next-steps-card]
 > 上下文展开**有意不封顶**：`context` 上游已截到 240 字符，390 窄列最坏约 9 行，属可一次读完的长度，
 > 加 cap 只会把最后一行藏起来。高度复测：748 列默认 142.0 / 冲突短 162.0（+20.0，验收 ≤25）、封顶展开
 > ⑮ 395.5；390 列 162.5 / 183.0（+20.5）、⑮ 416.5，对比框恒为 290 = 8 + 240 + 2 + 32 + 8。
+>
+> **2026-11-10 键盘焦点**：新增 `:focus-visible` 焦点环（`.dshns-btn`、`.dshns-segmented-tab`、
+> `.dshns-conflict-lines`；2px `--dsw-focus-ring-width`、颜色 `--dsw-focus-ring-color` 回退
+> `state-business-primary`、`outline-offset:2px`；指针模态下颜色变量 transparent）。焦点管理：
+> `FOCUS_TARGETS` + `pendingFocusRef`，由无条件 layout effect 在新 DOM 提交后移动焦点；共享 `Button`
+> 是普通函数组件（React 18）不能 forwardRef，所以单状态目标用 data 属性寻址，chip 用 `[data-chip-id]`
+> 循环匹配（不把模型提供的 id 拼进选择器）。进入冲突 → `[data-conflict-primary]`；`section` 的
+> `onKeyDown` 在冲突态截获 `Esc`（preventDefault + stopPropagation）走 `cancelConflict`；dismiss ↔ restore、
+> more ↔ collapse 互相归还焦点；取消/Esc 回到触发 chip。无新增 locale key。
 
 **交互**：
 
@@ -961,7 +984,11 @@ function onPick(suggestion) {
     draft,
     appliedPrompt: applied !== null && applied.owned === true ? applied.text : '',
   })
-  if (action.kind === 'conflict') { setConflict(suggestion); setPeek(null); return }
+  if (action.kind === 'conflict') {
+    setConflict(suggestion); setPeek(null)
+    pendingFocusRef.current = 'conflictPrimary'      // 新布局提交后把焦点放到「追加到末尾」
+    return
+  }
   applyFill(suggestion.prompt, suggestion)          // 空草稿 / 本人未编辑 → 直接替换
 }
 function applyFill(text, suggestion, owned = true) {
@@ -974,10 +1001,15 @@ function applyFill(text, suggestion, owned = true) {
   setConflict(null); setPeek(null)
   focusComposer(sessionId)                          // ctx.get('conversation')?.input.shell(sessionId)?.focus()，可选/容错
 }
+function cancelConflict() {
+  const triggerId = conflict === null ? null : conflict.id
+  setConflict(null); setPeek(null)
+  pendingFocusRef.current = triggerId === null ? null : { chip: triggerId }
+}
 function onConflictChoice(choice) {
   if (conflict === null) return
+  if (choice === 'cancel') { cancelConflict(); return }
   setConflict(null); setPeek(null)
-  if (choice === 'cancel') return
   const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })  // append: draft.trimEnd() + '\n\n' + prompt
   if (merged === null) return
   applyFill(merged, conflict, choice === 'replace')  // 追加产生的合并草稿 owned=false，下次重新确认
@@ -986,11 +1018,13 @@ function dismiss() {
   const next = { ...turnState, dismissed: true }
   setTurnState(next); writeTurnState(sessionId, turnNumber, next)
   setConflict(null); setPeek(null)
+  pendingFocusRef.current = 'restore'
 }
 function restore() {
   const next = { ...turnState, dismissed: false }
   setTurnState(next); writeTurnState(sessionId, turnNumber, next)
   setConflict(null); setPeek(null)
+  pendingFocusRef.current = 'dismiss'
 }
 ```
 
@@ -1005,6 +1039,49 @@ const peekText = canWrite && mode === 'suggestions' && peek !== null
   : null
 const statusText = peekText ?? (status === null || status === undefined ? null : t(status))
 ```
+
+焦点流转由 data 属性 + `pendingFocusRef` + layout effect 完成：
+
+```js
+const FOCUS_TARGETS = {
+  conflictPrimary: '[data-conflict-primary]',
+  dismiss: '[data-card-dismiss]',
+  restore: '[data-card-restore]',
+  more: '[data-card-more]',
+  collapse: '[data-card-collapse]',
+}
+React.useLayoutEffect(() => {
+  const pending = pendingFocusRef.current
+  if (pending === null) return
+  pendingFocusRef.current = null
+  const root = cardRef.current
+  if (root === null) return
+  let element = null
+  if (typeof pending === 'string') element = root.querySelector(FOCUS_TARGETS[pending])
+  else {
+    for (const candidate of root.querySelectorAll('[data-chip-id]')) {
+      if (candidate.getAttribute('data-chip-id') === pending.chip) { element = candidate; break }
+    }
+  }
+  if (element !== null && typeof element.focus === 'function') element.focus()
+})
+function onCardKeyDown(event) {
+  if (event.key !== 'Escape' || conflict === null) return
+  event.preventDefault()
+  event.stopPropagation()
+  cancelConflict()
+}
+```
+
+| 状态变化 | 焦点去向（规约，由契约测试断言） |
+|---|---|
+| 点击建议进入草稿冲突 | `[data-conflict-primary]`「追加到末尾」 |
+| `Esc` 或「取消」 | 触发该冲突的建议 chip（按 `[data-chip-id]` 匹配） |
+| 忽略（`[data-card-dismiss]`） | `[data-card-restore]`「恢复建议」 |
+| 恢复（`[data-card-restore]`） | `[data-card-dismiss]`「暂不需要」 |
+| 「还有 N 条」（`[data-card-more]`） | `[data-card-collapse]`「收起」 |
+| 「收起」（`[data-card-collapse]`） | `[data-card-more]`「还有 N 条」 |
+| 追加 / 替换 / 取消 | 追加/替换仍 `focusComposer`；取消见上 |
 
 细节：
 - **草稿归属判定**用字符串相等（`draft === applied.text`），`draftRev` 作为辅助（T0-4 实测语义）；
@@ -1032,6 +1109,18 @@ const statusText = peekText ?? (status === null || status === undefined ? null :
 - **32px 目标（2026-11-10 打磨）**：`.dshns-btn-sm`、`.dshns-statusbar`（min-height）、`.dshns-dismiss` /
   `.dshns-restore`、`.dshns-toggle`（min-height）、`.dshns-conflict-toggle`、`.dshns-segmented-tab` 均为
   32px；设置分段容器为 40px。
+- **焦点环（2026-11-10 键盘焦点）**：`.dshns-btn:focus-visible`、`.dshns-segmented-tab:focus-visible`、
+  `.dshns-conflict-lines:focus-visible` 共用 `outline: var(--dsw-focus-ring-width, 2px) solid
+  var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px;`，冲突滚动区
+  再加 `border-radius: var(--dsw-radius-sm)`。DSH focus.css 契约：`--dsw-focus-ring-width: 2px`，指针模态把
+  `--dsw-focus-ring-color` 解析为 transparent，因此只有键盘/程序聚焦才画环（app.asar 内
+  `:root{--dsw-focus-ring-width:2px}`、`:focus-visible{outline-color:var(--dsw-focus-ring-color, …
+  state-business-primary)}` 与 `--dsw-focus-ring-color:transparent` 已核对，【V26】）；环画在卡片/module 面上，浅色
+  `#4176E6` 4.23 / 3.91:1，深色 `#7AAAFF` 6.75 / 5.20:1（非文本 3:1）。
+- **焦点管理（2026-11-10 键盘焦点）**：`Button` 是普通函数组件（React 18、无 forwardRef），单状态控件用
+  data 属性寻址；`pendingFocusRef` 在 setState 前记录目标，layout effect 无条件在提交后移动焦点；chip 通过
+  遍历 `[data-chip-id]` 匹配（模型 id 不拼进选择器）；`Esc` 只在冲突态、由卡片 `section` 的 `onKeyDown`
+  截获；无新增 locale key。
 - **默认 3 条 + 「还有 N 条」**：`DEFAULTS.maxPerTurn = 3`，`buildDisplay` 切片并给出 `moreCount`；
   「还有 N 条」展开为模型给的全部建议（最多 6），再点「收起」还原。
 - 状态行右侧按钮：建议态「− 暂不需要」（忽略），已忽略态「+ 恢复建议」；两个方向都把 `dismissed`
@@ -1264,6 +1353,10 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 
 ## 10. 测试方案
 
+当前基线（2026-11-10 键盘焦点轮）：全仓 `node --test` **217** 个用例（`a11y.test.mjs` **7**、
+`build.test.mjs` **19**）；`client.js` 重建为 **96,405 字符**；视觉夹具共 **20 张截图**（含 4 张焦点截图），
+逐项数值与证据见 `docs/design/ui-review-2026-11-10/notes-visual.md`。
+
 ### 10.1 单测（node:test，零依赖，`node --test`；在插件目录执行，Node ≥20 自动发现 `test/*.test.mjs`）
 
 | 文件 | 覆盖 |
@@ -1272,8 +1365,8 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | `test/view-model.test.mjs` | `parseMeta` 防御（缺字段/超大/多余字段）；`modelFromArgs` 兜底；`buildDisplay`（默认 3 条/Auto/推荐顺序/optional 压尾）；草稿冲突状态机（空/本人草稿/用户编辑/追加）；`deriveChipMarker`；设置 clamp（无点击行为项）；storage key/hash；危险词表 |
 | `test/card-state.test.mjs` | 卡片状态组合：filled 标记按草稿派生、danger 只在生效填入时出现、状态行优先级、单标记优先级、冲突合并 |
 | `test/definition.test.mjs` | Conversation Definition：native `tool/call`+`tool/result` 与 PTC `tool/ptc-dispatch-*` 两条链路的 match/fold/turn location；meta 优先与 args 兜底；空 state 守卫 |
-| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在；无 Send 模式/`submit` 引用/胶囊 Tag/「可以不做」；冲突动作与状态同一行（`dshns-statusbar-conflict`，无 `dshns-conflict-actions`）；hover 不插入预览块（`dshns-status-peek`、无 `dshns-preview`）、measured clamp（`ResizeObserver`/`scrollHeight`）、`ConflictCompare` 展开控件与 `conflict.expand/collapse`；chip 可访问名含可见标签（`accessibleName`）；冲突展开滚动区（`dshns-conflict-lines`、`conflict.scrollRegion`、`tabIndex: scrollable ? 0 : undefined`） |
-| `test/a11y.test.mjs` | 样式可访问性契约：peek / 冲突标签 / toggle 的 AA 对比度（light/dark 的 token 解析值）；⚠ 混色图标 ≥3:1；32px 目标高度；展开态 240px 滚动封顶 |
+| `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在；无 Send 模式/`submit` 引用/胶囊 Tag/「可以不做」；冲突动作与状态同一行（`dshns-statusbar-conflict`，无 `dshns-conflict-actions`）；hover 不插入预览块（`dshns-status-peek`、无 `dshns-preview`）、measured clamp（`ResizeObserver`/`scrollHeight`）、`ConflictCompare` 展开控件与 `conflict.expand/collapse`；chip 可访问名含可见标签（`accessibleName`）；冲突展开滚动区（`dshns-conflict-lines`、`conflict.scrollRegion`、`tabIndex: scrollable ? 0 : undefined`）；键盘焦点契约（`FOCUS_TARGETS`、data 属性、`onCardKeyDown`/Esc、pendingFocus 目标） |
+| `test/a11y.test.mjs` | 样式可访问性契约：peek / 冲突标签 / toggle 的 AA 对比度（light/dark 的 token 解析值）；⚠ 混色图标 ≥3:1；32px 目标高度；展开态 240px 滚动封顶；`:focus-visible` 焦点环契约（token 表达式、offset 2px、双主题双表面 ≥3:1、仅键盘可见、滚动区圆角） |
 
 ### 10.2 手工 E2E（装插件后逐条执行，对应形态稿 §12）
 
@@ -1302,7 +1395,10 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 23. 748px 与 390px 两列分别验证：hover 前后卡片高度差为 0、peek 单行省略；冲突态与默认态高度差 ≤25px（748 列 142.0 vs 162.0、差 20.0px；390 列 162.5 vs 183.0、差 20.5px）；上下文/冲突展开均只由点击触发。
 24. 可访问名（读屏/DevTools）：每个 chip 的 accessible name 以可见标签开头并含完整指令（`可见标签：完整指令`）；标记文字（推荐/已填入/需确认）不在可访问名内；
 25. 32px 目标：量 chip、状态行切换、上下文/冲突展开按钮、冲突动作按钮与设置分段 tab 高度均 ≥32px（分段容器 40px），触屏/键盘命中稳定；
-26. 双主题 AA：用对比度工具核对 peek / 冲突标签 / 展开链接 ≥4.5:1（5.80/10.42、5.36/8.03），⚠ 图标 ≥3:1（5.43/8.06）；键盘 Tab 在极长冲突展开态可进入滚动区（role=group/方向键滚动），未到上限的展开态不出现该焦点站。
+26. 双主题 AA：用对比度工具核对 peek / 冲突标签 / 展开链接 ≥4.5:1（5.80/10.42、5.36/8.03），⚠ 图标 ≥3:1（5.43/8.06）；键盘 Tab 在极长冲突展开态可进入滚动区（role=group/方向键滚动），未到上限的展开态不出现该焦点站；
+27. 焦点环（键盘模态）：Tab 到每个卡内可点控件与可聚焦的冲突滚动区，确认 2px 焦点环画在控件外 2px、滚动区带对比框圆角；浅/深主题在卡片/module 面 ≥3:1（浅 4.23/3.91、深 6.75/5.20）；鼠标点击任何控件不出现焦点环；
+28. Esc/焦点归还：进入草稿冲突后焦点在「追加到末尾」；按 `Esc` 或点「取消」后焦点回到触发该冲突的 chip；忽略 →「恢复建议」、恢复 →「暂不需要」、还有 N 条 →「收起」、收起 →「还有 N 条」；追加/替换后输入框聚焦；
+29. 证据级别：焦点环可用夹具截图（`shots/states-focus-{dark,light}.png`、`states-focus-scroll-{dark,light}.png`）核对；Esc/焦点归还无静态截图，只有源码 + 契约测试（a11y/build），实机 GUI 键盘复核待做。
 
 ### 10.3 视觉一致性核对（官方卡是活体基准，三处有意差异见 §6.3 注）
 
@@ -1331,6 +1427,13 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
   极长展开封顶后 395.5 / 416.5px（对比框恒 290px），仅滚动时滚动区可聚焦；
 - 32px 目标：chip（`.dshns-btn-sm`）、状态行切换、上下文 toggle、冲突 toggle、冲突动作、设置分段 tab
   声明值与截图实测均 ≥32px（设置分段容器 40px）；
+- 键盘焦点环：`.dshns-btn` / `.dshns-segmented-tab` / `.dshns-conflict-lines` 的 `:focus-visible` 共用
+  `outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color,
+  var(--dsw-alias-state-business-primary))`、`outline-offset: 2px`，滚动区再 `border-radius: var(--dsw-radius-sm)`；
+  解析后浅色 `#4176E6` 在卡片 4.23:1、module 3.91:1，深色 `#7AAAFF` 6.75:1、5.20:1（≥非文本 3:1）；
+  指针模态下 DSH 把 `--dsw-focus-ring-color` 置为 transparent，点击不出环；
+- 焦点不改变布局：data 属性与 outline 不参与 border-box，15 个卡片状态的高度与上一轮一致（逐项数值与
+  焦点截图证据见 `docs/design/ui-review-2026-11-10/notes-visual.md`；本轮共 20 张截图，含 4 张焦点截图）；
 - 官方 `.footer` `justify-content:flex-end; gap:12px; margin-top:12px`；本卡已删除 footer；
 - Button sm：height **32**（打磨轮由 28 提高，属有意偏离官方 28px）、font-size 12、padding 0 10、
   radius `--dsw-radius-sm`；primary/ghost 颜色 token 同官方；
@@ -1475,6 +1578,16 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 > 用例（现 18 个）；全仓 `node --test` **215** 全绿（207 → 215），`scripts/build-client.mjs --check` 通过，
 > `client.js` 重建为 **92,220 字符**。夹具复测高度：748 列默认 142.0 / 冲突短 162.0（+20.0）、390 列
 > 162.5 / 183.0（+20.5），封顶展开 ⑮ 395.5 / 416.5 有界。
+>
+> **2026-11-10 键盘焦点**：新增 `:focus-visible` 焦点环（DSH focus.css 契约：2px、颜色变量回退
+> `state-business-primary`、控件外 2px、指针模态透明），覆盖 `.dshns-btn` / `.dshns-segmented-tab` /
+> 可聚焦的 `.dshns-conflict-lines`（滚动区同环同对比框圆角）。`FOCUS_TARGETS` + `pendingFocusRef` +
+> layout effect 实现跨状态焦点流转（冲突打开 → 追加到末尾、Esc/取消 → 触发 chip、忽略 ↔ 恢复、
+> 还有 N 条 ↔ 收起），卡片 `section` 的 `onKeyDown` 截获冲突态 `Esc`。`test/a11y.test.mjs` 新增焦点环契约
+> （现 7 个用例）、`build.test.mjs` 新增焦点管理契约（现 19 个用例）；全仓 `node --test` **217** 全绿
+> （215 → 217），`scripts/build-client.mjs --check` 通过，`client.js` 重建为 **96,405 字符**。夹具新增
+> 2 个焦点页 + 4 张焦点截图（共 20 张；15 个卡片状态高度不变）；Esc/焦点归还只有源码 + 契约测试，
+> 实机 GUI 键盘未复核。
 
 ---
 
@@ -1497,7 +1610,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | R13 | 窄列（约 390px）冲突态动作换行，高度差可能超过 25px | 低（已缓解） | 390 列实测差 20.5px 且未换行；更窄列或文案变长时按同一口径复测，超预算时压缩对比框行距或调整动作顺序 |
 | R14 | context 上限 240 后长说明更常见，窄列可能默认出现「展开/收起」或展开后卡片更高 | 低 | 默认 2 行 clamp 保持稳定高度；展开只由点击触发；748/390 视觉证据复核按钮出现时机 |
 | R15 | 32px 目标仍低于移动端 44/48px 建议值 | 低 | 产品定位桌面鼠标/键盘；移动端布局单独立项时再放大 |
-| R16 | 焦点管理未覆盖：`Esc` 取消冲突、状态切换后的焦点归还未实现，实机键盘链路未复核 | 中低 | 已知缺口；下一轮补实现并在运行中 DSH 复验 Tab/focus-visible |
+| R16 | 键盘焦点实机验证未完成：Esc/焦点归还已在源码实现并有契约测试，焦点环有双主题夹具截图，但运行中 DSH 的 Tab/Esc/focus-visible 真机链路未复核；过程行与读屏实机也未复核 | 中低 | 源码 + 契约测试（a11y/build）+ 夹具截图已覆盖规约；下一次实机复核按 §10.2 第 27–29 条执行 |
 | R17 | 浅色主题 chip hover 填充（1.11:1）与卡片描边（1.26:1）偏弱 | 低 | 官方卡原语继承项，不属 WCAG 文字要求；作为观察项，不自行发明新视觉 |
 
 ---
@@ -1620,6 +1733,11 @@ grapheme 切；超宽截断 + `'…'` + ghost 展开/收起。`FOLD_WIDTH` 常�
 .dshns-segmented { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 4px; border-radius: var(--dsw-radius-md); background: var(--dsw-alias-interactive-bg-hover); }
 .dshns-segmented-tab { box-sizing: border-box; position: relative; z-index: 1; height: 32px; padding: 0 10px; border: 0; border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; line-height: 20px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: color .12s ease; }
 .dshns-segmented-tab[aria-selected=true], .dshns-segmented-tab:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
+/* 2026-11-10 键盘焦点：遵循 DSH focus.css 契约（--dsw-focus-ring-width:2px；指针模态下 ring color 解析为 transparent） */
+.dshns-btn:focus-visible,
+.dshns-segmented-tab:focus-visible,
+.dshns-conflict-lines:focus-visible { outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 2px; }
+.dshns-conflict-lines:focus-visible { border-radius: var(--dsw-radius-sm); }
 ```
 
 ## 附录 B：官方过程行与 primitive CSS（抄录；Button sm 按本项目 32px 规格调整）
