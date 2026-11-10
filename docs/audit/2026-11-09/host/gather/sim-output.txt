@@ -1,0 +1,25 @@
+S1 root: tool visible = true | guidance = true | sections ["tool:suggest-next-steps@undefined"]
+S1 getSectionOrder(TOOL_REPORT) = 2900
+S1 subagent: tool = false | guidance = false
+S1 unknown-agent fail-open admitted = true
+S1 rendered prompt length: 620
+S2 second row error: tool "suggest_next_steps" is already registered (for a per-agent variant, register through that agent's `agent.ctx` instead)
+S2 first row functional: true | section count 1
+S3 before reload: sections 1 | tool true
+S3 after unload: guidance = false | tool = false
+S3 remount error: none | after remount sections ["tool:suggest-next-steps@undefined"] | tool true
+S4 pre-existing root guidance: true | sections 1
+S4 duplicate agent/created -> sections 1
+S5 disabled: tool = false | guidance = false
+S5 enabled:"no" keeps feature = true
+S6 restricted: tool = false | guidance still present = true
+S7 broken roots: resolve error = none | admitted = true
+S7 broken roots: guidance for new agent = false
+S8 output schema valid: true
+S8 output schema rejects fractional: true
+S8 output schema rejects extra: true
+S8 meta lossless: true | meta chars: 169
+S8 render: [{"type":"text","text":"Next steps shown below your answer (2). Now write the final answer: do not list or number them, keep at most one lead-in sentence, and do not call this tool again this turn."}]
+S8 exports: __config,__definition,__guidance,__when,apply,inject,name,normalizeConfig
+S8 name/inject: @local/dsh-next-actions ["tools","systemPrompt","agents"]
+S9 recreated agent guidance: true

@@ -1,0 +1,20 @@
+# Inserts the Host half of the bundle. One row activates the package for both halves:
+# the Host `apply` registers the `suggest_next_steps` tool; the Client half is discovered
+# through the package.json `dsh.client` section.
+#
+# Host config (raw, because this zero-import package exports no Config schema):
+#   enabled: true   register the tool and the prompt guidance (default)
+#           false   register neither, so the feature costs no prompt tokens
+# Turn it off from the profile's user patch layer (id-targeted patch replaces the
+# whole config, so restate `name`):
+#   # ~/.dsh/profiles/<profile>/cordis.patch.yml
+#   - id: dsh-next-actions
+#     name: '@local/dsh-next-actions'
+#     config: { enabled: false }
+# The running Web-client bundle still loads in that case; it shows no cards because
+# the tool never runs.
+- insert:
+    - id: dsh-next-actions
+      name: '@local/dsh-next-actions'
+      config:
+        enabled: true

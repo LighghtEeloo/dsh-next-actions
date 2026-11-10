@@ -1,0 +1,83 @@
+A. never-throw hostile: PASS (no throws, shown boolean)
+A2 throwing getter on suggestions: THREW (getter) - Error: getter
+A3 frozen args: {"ok":true,"meta":{"shown":true,"context":"ok","suggestions":[{"id":"s3t1j","label":"a","prompt":"b","stance":"continue"}]}}
+B. emoji label codepoints: 40 code units: 79 ends ellipsis: true
+B2 ZWJ family label codepoints: 40 graphemes: 7
+B3 bidi/zero-width preserved: "safe ‮ txet desrever" "ok ‮ abc" "next ​ step"
+B4 control chars preserved: "a\u0000b\u0007c d" "\u0000\u0007"
+C. FP DANGER | Run the production build
+C. FP DANGER | Publish docs
+C. FP DANGER | Deploy config check
+C. FP DANGER | chmod notes
+C. FP DANGER | publish
+C. FN safe    | git reset --hard
+C. FN safe    | delete rows
+C. FN safe    | remove files
+C. FN safe    | overwrite
+C. FN safe    | wipe
+C. FN safe    | npm install -g
+C. FN safe    | billing
+C. FN safe    | charge
+C. FN safe    | permission
+C. FN safe    | git clean
+C. FN safe    | kill process
+C. FN safe    | rm -r
+C. FN safe    | shutdown
+C. FN safe    | drop column
+C. TP DANGER | rm -rf
+C. TP DANGER | force push
+C. TP DANGER | 删除
+C. TP DANGER | 发布
+C2 "rm -rfx" -> safe
+C2 "myrm -rf" -> safe
+C2 "sudoers" -> safe
+C2 "sudo" -> danger
+C2 "chmodding" -> safe
+C2 "chmod +x file" -> danger
+C2 "DROP   TABLE users" -> danger
+C2 "drop table" -> danger
+D1 recommended dropped when dup prompt keeps first unmarked: [{"id":"sefmqya","label":"A","prompt":"same task","stance":"continue"}]
+D2 recommended dropped by duplicate explicit stance: [{"id":"s3hmpw","label":"A","prompt":"p1","stance":"verify"}]
+D3 recommended+optional same entry: [{"id":"s3hmpw","label":"A","prompt":"p1","stance":"optional","recommended":true},{"id":"s3hmpz","label":"B","prompt":"p2","stance":"continue"}]
+D4 optional appears twice (one explicit, one via fallback?): [{"id":"s3hmpy","label":"C","prompt":"p3","stance":"continue"},{"id":"s3hmpw","label":"A","prompt":"p1","stance":"optional"}]
+D5 cap n=6 order=L0,L1,L2,L3,L4,L5
+D5 capRec n=6 order=L7*,L0,L1,L2,L3,L4
+D5 capOpt n=6 order=L0,L1,L2,L3,L4,L7
+D5 capBoth n=6 order=L6*,L0,L1,L2,L3,L7
+D6 unicode case dedupe: 1
+D7 tr locale edge (İ): 2
+D8 trailing punctuation: 1
+D9 internal punctuation untouched: 2
+E1 quotes nested: "“x”"
+E2 quotes around only: "missing-context"
+E3 context 120 exactly no ellipsis: 120
+E4 context 121 -> 120
+E5 newline collapse: "a b c d"
+F1 execute/presentationMeta consistency: {"shown":true,"count":1} meta.shown true n 1
+F2 execute(JSON string): {"shown":true,"count":1}
+F3 execute never throws: PASS
+G1 config "" -> {"enabled":true}
+G1 config "() => {}" -> {"enabled":true}
+G1 config "Mon Nov 09 2026 19:22:34 GMT-0500 (Eastern Standard Time)" -> {"enabled":true}
+G1 config THREW TypeError: Cannot convert object to primitive value
+G1 config {"enabled":"false"} -> {"enabled":false}
+G1 config {"enabled":"false"} -> {"enabled":true}
+H1 when({}) = true
+H2 when unknown agent fail-open = false
+H3 when roots throws (ctx,agent) = true
+H4 when roots returns non-array = true
+H5 when roots undefined method = true
+H6 when ctx.agents missing = true
+I1 2000-entry buildMeta ms: 10.15 -> n 6 maxPromptLen 251
+I2 20000 typical buildMeta us/call: 11.35
+J1 order-independent ids: true
+J2 ids unique: true
+K1 "never list"/"do not list" display rule appears in: ["desc","guidance","render"]
+K2 "once" trigger appears in: ["desc","guidance"]
+K3 "lead-in sentence" appears in: ["guidance","render"]
+K4 description words: 43 guidance words: 97
+L1 output schema: {"type":"object","additionalProperties":false,"required":["shown","count"],"properties":{"shown":{"type":"boolean"},"count":{"type":"integer"}}}
+L2 params additionalProperties: false | item additionalProperties: false
+L3 stance schema has no enum: false
+L4 label schema maxLength: false
+L5 required fields: ["context","suggestions"]

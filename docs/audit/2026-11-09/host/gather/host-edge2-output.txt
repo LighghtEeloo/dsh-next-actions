@@ -1,0 +1,37 @@
+stance " verify " -> kept 2 | stances ["continue","verify"]
+stance "Verify" -> kept 2 | stances ["continue","verify"]
+stance "VERIFY" -> kept 2 | stances ["continue","verify"]
+stance "verify\n" -> kept 2 | stances ["continue","verify"]
+stance true -> kept 2 | stances ["continue","verify"]
+stance 1 -> kept 2 | stances ["continue","verify"]
+stance null -> kept 2 | stances ["continue","verify"]
+recommended:"true" -> absent
+danger:1 -> absent
+danger:"true" -> absent
+config null-proto {enabled:false} -> {"enabled":false}
+config array -> {"enabled":true}
+config {enabled: Boolean false object} -> {"enabled":true}
+config {enabled:false, extra:1} -> {"enabled":false}
+worst-case suggestions: 1 | meta JSON bytes: 2081
+FP: Check the production logs
+FP: Review deploy checklist
+FP: Publish docs
+FP: Update chmod docs
+FP: Read sudo docs
+FP: Force push docs
+FN: Reset branch
+FN: Clean worktree
+FN: Delete rows
+FN: Remove files
+FN: Overwrite config
+FN: Wipe database
+FN: Kill server
+FN: Shutdown
+FN: Global install
+FN: Enable billing
+FN: rm -r
+FN: rm -fr
+FN: truncate
+FN: drop column
+danger lexicon battery: benign misflagged 6/9 | destructive missed 14/15
+lexicon entries: 13
