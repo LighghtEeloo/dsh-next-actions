@@ -15,6 +15,7 @@
 - 危险动作：模型标记 + 本地中英词表升级为「需确认」；默认 Fill 模式下永不自动发送。
 - 官方动作卡同款外观 + 工具过程组一行式记录；卡片支持预览、忽略/恢复、替换/追加/取消。
 - 子代理会话不注册工具、不显示卡片；Host `enabled:false` 时 0 常驻 token。
+- 兼容 PTC（programmatic tool calling / `run_code`）会话：工具作为 PTC SDK binding 调用，客户端从 `tool/ptc-dispatch` 的 meta 折叠出同一张卡片，与 native `tool/result.meta` 共用展示契约。
 
 ## 安装与开发
 
@@ -26,7 +27,7 @@
 开发命令（Node ≥ 20）：
 
 ```sh
-node --test                          # 181 tests
+node --test                          # 192 tests
 node scripts/build-client.mjs        # 从 src/ + lib/view-model.js 重建 client.js
 node scripts/build-client.mjs --check
 ```
@@ -62,6 +63,7 @@ node scripts/build-client.mjs --check
 ## 兼容性与许可
 
 - 实测环境：DSH Desktop `0.2.2-rc.1`（Web/Desktop UI；CLI/headless 不显示卡片）。
+- PTC 预设（`agent-preset-registry.selectedDefault: ptc`）数据链路已实测：`suggest_next_steps` 作为 `run_code` 生成的 SDK binding 调用，`tool/ptc-dispatch.meta` 能折叠出与 native 相同的 turn data（2026-11-10 用真实 PTC 会话日志重放确认）；卡片渲染复用 native 同一路径，改后需刷新页面复验 GUI。PTC 下嵌套调用结果不进入模型上下文（模型只看到 `run_code` 外层结果），不影响卡片与过程行。
 - 尚未声明 `engines.dsh` / `dsh.manifestVersion`（审计 P0-3）。
 - 许可证未定；当前 `package.json` 无 `license` 字段。审计建议 MIT + `THIRD_PARTY_NOTICES`
   （卡片外观抄自 MIT 许可的 DSH 官方动作卡）。在许可证确定前，默认保留所有权利。

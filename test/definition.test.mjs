@@ -79,6 +79,73 @@ function fold(events) {
   return state
 }
 
+const RUN_CODE = 'run_code'
+
+// Shapes captured from a real DSH 0.2.2-rc.1 PTC session log:
+//   tool/ptc-dispatch-start: {rootCallId, parentCallId, subCallId, name, arguments(object)}
+//   tool/ptc-dispatch:       the above + {isError, content} and meta when the Host
+//                            produced a display model
+// Neither record carries turn/step; only the outer run_code tool/call owns the turn.
+
+const turnLocation = (turn) => ({ kind: 'turn', turn: { turn } })
+const matchOf = (event, location) => (location === undefined ? { event } : { event, location })
+
+const runCodeCallEvent = ({ turn = 1, callId = 'run-ptc', seq = 5 } = {}) => ({
+  type: 'tool/call',
+  seq,
+  data: { turn, callId, name: RUN_CODE, arguments: '{"code":"return await tools.suggest_next_steps(...)"}' },
+})
+
+const ptcStartEvent = ({
+  rootCallId = 'run-ptc',
+  subCallId = `${rootCallId}:ptc:1`,
+  name = TOOL,
+  payload = args(),
+  seq = 10,
+} = {}) => ({
+  type: 'tool/ptc-dispatch-start',
+  seq,
+  data: { rootCallId, parentCallId: rootCallId, subCallId, name, arguments: payload },
+})
+
+const ptcResultEvent = ({
+  rootCallId = 'run-ptc',
+  subCallId = `${rootCallId}:ptc:1`,
+  name = TOOL,
+  payload = args(),
+  meta,
+  isError = false,
+  seq = 20,
+} = {}) => ({
+  type: 'tool/ptc-dispatch',
+  seq,
+  data: {
+    rootCallId,
+    parentCallId: rootCallId,
+    subCallId,
+    name,
+    arguments: payload,
+    isError,
+    content: [],
+    ...(meta === undefined ? {} : { meta }),
+  },
+})
+
+/** Framework Match objects: dispatch records carry the turn only through the resolved location. */
+function ptcMatches({ turn = 1, callId = 'run-ptc', meta, payload = args(), isError = false } = {}) {
+  return [
+    matchOf(ptcStartEvent({ rootCallId: callId, payload }), turnLocation(turn)),
+    matchOf(ptcResultEvent({ rootCallId: callId, payload, meta, isError }), turnLocation(turn)),
+  ]
+}
+
+function foldMatches(matches) {
+  const [first, ...rest] = matches
+  let state = definition.start({}, first)
+  for (const match of rest) state = definition.update({ state }, match)
+  return state
+}
+
 // ---------------------------------------------------------------------------
 // Bundle and registration surface
 // ---------------------------------------------------------------------------
@@ -116,6 +183,33 @@ test('definition ignores other tools, non-surface results and unrelated events',
   assert.equal(definition.match(callEvent({ name: 'some_other_tool' })), null)
   assert.equal(definition.match(resultEvent({ surfaceOp: null })), null)
   assert.equal(definition.match({ type: 'assistant/message', data: {} }), null)
+})
+
+test('definition matches PTC dispatch events for this tool', () => {
+  assert.equal(definition.match(runCodeCallEvent({ callId: 'run-ptc-match' })), null)
+  assert.deepEqual(definition.match(ptcStartEvent({ rootCallId: 'run-ptc-match' })), { id: '1', role: 'start' })
+  assert.deepEqual(definition.match(ptcResultEvent({ rootCallId: 'run-ptc-match' })), { id: '1', role: 'update' })
+})
+
+test('PTC dispatch turn comes from its own run_code call', () => {
+  definition.match(runCodeCallEvent({ turn: 2, callId: 'run-ptc-turn2' }))
+  assert.deepEqual(definition.match(ptcStartEvent({ rootCallId: 'run-ptc-turn2' })), { id: '2', role: 'start' })
+})
+
+test('definition ignores PTC dispatches without a known run_code call or for other tools', () => {
+  assert.equal(definition.match(ptcStartEvent({ rootCallId: 'run-ptc-unknown' })), null)
+  assert.equal(definition.match(ptcResultEvent({ rootCallId: 'run-ptc-unknown' })), null)
+  definition.match(runCodeCallEvent({ callId: 'run-ptc-other' }))
+  assert.equal(definition.match(ptcStartEvent({ rootCallId: 'run-ptc-other', name: 'read' })), null)
+  assert.equal(definition.match(ptcResultEvent({ rootCallId: 'run-ptc-other', name: 'read' })), null)
+})
+
+test('PTC dispatch start records the object arguments and reads the turn from the match location', () => {
+  definition.match(runCodeCallEvent({ turn: 7, callId: 'run-ptc-loc' }))
+  const state = definition.start({}, matchOf(ptcStartEvent({ rootCallId: 'run-ptc-loc' }), turnLocation(7)))
+  assert.equal(state.turn, 7)
+  assert.equal(state.calls.size, 1)
+  assert.equal(JSON.parse(state.calls.get('run-ptc-loc:ptc:1').argsRaw).context, context)
 })
 
 // ---------------------------------------------------------------------------
@@ -195,6 +289,45 @@ test('the latest result wins inside one turn', () => {
 })
 
 // ---------------------------------------------------------------------------
+// PTC dispatch transport (run_code programs)
+// ---------------------------------------------------------------------------
+
+test('folding PTC dispatch records publishes the model from the dispatch meta', () => {
+  const state = foldMatches(ptcMatches({ callId: 'run-ptc-meta', meta: hostMeta() }))
+  assert.equal(state.turn, 1)
+  assert.equal(state.model.shown, true)
+  assert.equal(state.model.context, context)
+  assert.equal(state.model.suggestions[0].id, 'sb')
+})
+
+test('PTC folding falls back to the dispatch arguments when meta is missing', () => {
+  const state = foldMatches(ptcMatches({
+    callId: 'run-ptc-args',
+    payload: args({ context: 'PTC 上下文的兜底解析。' }),
+  }))
+  assert.equal(state.model.shown, true)
+  assert.equal(state.model.context, 'PTC 上下文的兜底解析。')
+  assert.equal(state.model.suggestions.length, 2)
+})
+
+test('an authoritative shown:false PTC meta suppresses the args fallback', () => {
+  const state = foldMatches(ptcMatches({
+    callId: 'run-ptc-hidden',
+    meta: { shown: false, note: 'no-usable-suggestions' },
+  }))
+  assert.equal(state.model, null)
+})
+
+test('an errored PTC dispatch never produces a model', () => {
+  const state = foldMatches(ptcMatches({
+    callId: 'run-ptc-error',
+    meta: hostMeta(),
+    isError: true,
+  }))
+  assert.equal(state.model, null)
+})
+
+// ---------------------------------------------------------------------------
 // Turn location data
 // ---------------------------------------------------------------------------
 
@@ -214,4 +347,35 @@ test('buildLocationData stays empty outside turn scope or without a model', () =
   assert.equal(definition.buildLocationData({ state }, 'session'), null)
   const withModel = fold([startEvent(4), callEvent({ turn: 4 }), resultEvent({ meta: hostMeta() })])
   assert.equal(definition.buildLocationData({ state: withModel }, 'session'), null)
+})
+
+test('PTC events flow through the matcher into the same turn data contract', () => {
+  const runCode = runCodeCallEvent({ turn: 5, callId: 'run-ptc-flow' })
+  assert.equal(definition.match(runCode), null) // indexes the outer call only
+  const start = ptcStartEvent({ rootCallId: 'run-ptc-flow' })
+  const result = ptcResultEvent({ rootCallId: 'run-ptc-flow', meta: hostMeta() })
+  assert.deepEqual(definition.match(start), { id: '5', role: 'start' })
+  assert.deepEqual(definition.match(result), { id: '5', role: 'update' })
+  let state = definition.start({}, matchOf(start, turnLocation(5)))
+  state = definition.update({ state }, matchOf(result, turnLocation(5)))
+  const location = definition.buildLocationData({ state }, 'turn')
+  assert.equal(location.turn, 5)
+  assert.equal(location.value.turn, 5)
+  assert.equal(location.value.model.shown, true)
+})
+
+test('PTC folding publishes turn location data from the dispatch meta', () => {
+  definition.match(runCodeCallEvent({ turn: 3, callId: 'run-ptc-location' }))
+  const state = foldMatches(ptcMatches({ turn: 3, callId: 'run-ptc-location', meta: hostMeta() }))
+  const location = definition.buildLocationData({ state }, 'turn')
+  assert.equal(location.kind, 'turn')
+  assert.equal(location.turn, 3)
+  assert.equal(location.key, 'next-steps')
+  assert.equal(location.value.turn, 3)
+  assert.equal(location.value.model.shown, true)
+})
+
+test('buildLocationData tolerates a fold window without a start Match', () => {
+  // A session page can begin mid-turn; never crash the whole Conversation fold.
+  assert.equal(definition.buildLocationData({ state: undefined }, 'turn'), null)
 })

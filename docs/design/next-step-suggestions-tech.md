@@ -131,6 +131,9 @@
 | 参数 raw JSON Schema 支持子集：对象/数组/字符串/数字/整数/布尔/null、`properties`/`required`/`additionalProperties`/`items`、scalar `enum`/`const`、exact-one `oneOf` | `P/dsh-tools/lib/shared-DTdn5dXO.js:24-34` |
 | 执行结果：`execute` 返回 **lossless JSON value**，pipeline 用 `output.schema` 校验后再 `render(args, value)` 得到模型可见内容；`presentationMeta(args, value)` 的结果写入 `tool/result.meta`；**canonical value 不持久化** | `P/dsh-tools/lib/pipeline.js:699-731`、`:188-214` |
 | 会话日志事件：`tool/call {turn, step, callId, name, arguments(string)}`、`tool/result {turn, step, message, error?, meta?}`；Compaction 可能修剪工具结果（meta 也随之丢失）→ 客户端需 args 兜底 | `api-catalog.js:8226`、`P/dsh-compaction-tool-result-pruner`（压缩存在） | 
+| PTC 嵌套调用事件：`tool/ptc-dispatch-start {rootCallId, parentCallId, subCallId, name, arguments(对象)}` 与 `tool/ptc-dispatch`（追加 `isError`、`content`、可选 `meta`）；两者都没有 `turn`/`step`，`tool/call` 只记录外层 `run_code` | `P/dsh-tool-executor-ptc/lib/index.js:500-563`（0.2.2-rc.1） |
+| Definition 的 `match(event)` 只收到原始事件；框架在 `start`/`update`/`buildLocationData` 的 Match 上附带 `location`（turn/step 或 session） | `P/dsh-client-ui-conversation/lib/client.js:2792-2811,2509-2515,3120-3129` |
+| 官方 PTC-aware Definition 先例：显式匹配 `tool/ptc-dispatch-start`/`tool/ptc-dispatch`（ui-plan、ui-user-questions、ui-stats、ui-trajectory） | `P/dsh-client-ui-plan/lib/client.js:239-262,313-321`、`P/dsh-client-ui-user-questions/lib/client.js:1491-1550` |
 | 审批：`tools/pre-execute` 瀑布**默认 `allow`**；0.2.2 唯一产出 `ask` 的是 Auto review（仅当用户选择 Auto 权限预设）；插件无法用定义字段声明"免审批" | `P/dsh-tools/lib/pipeline.js:386-390`、`P/dsh-experimental-auto-review/lib/index.js:565-599` |
 | keyed `tool.call.toolview` 命中即替换通用行；`block.meta` 可读（内置行即读 meta） | `P/dsh-client-ui-tool/lib/client.js:106,468` |
 | Host 半零 import 可行；无 `Config` 时 patch 行 config 原样传入 `apply`（本项目不需要 config） | `P/cordis/lib/index.js:245-250`、`plugins/dsh-side/index.js`（本机已装零 import 先例） |
@@ -731,60 +734,90 @@ window.__ModuleLoader__.load({
 
 ### 6.2 Conversation Definition（本回合数据折叠）
 
+以下为结构示意（省略实现细节），完整实现见 `src/client.js`。
+
 ```js
 const SURFACE_EVENT_TYPES = new Set(['system/message','developer/message','user/message','assistant/message','tool/result'])
 const isSurfaceEvent = (e) => SURFACE_EVENT_TYPES.has(e.type) && e.surfaceOp !== undefined
 const isAppendSurfaceEvent = (e) => isSurfaceEvent(e) && e.surfaceOp === 'append'
 
+const RUN_CODE_TOOL = 'run_code'
+const runCodeTurns = new Map()                 // run_code callId -> turn（有界 1024）
+
 const nextStepsDefinition = {
   kind: KEY,                                   // 'next-steps'
   match: (event) => {
     if (event.type === 'turn/start') return { id: String(event.data.turn), role: 'start' }
-    if (event.type === 'tool/call' && event.data.name === TOOL_NAME)
-      return { id: String(event.data.turn), role: 'update' }
+    if (event.type === 'tool/call') {
+      if (event.data.name === RUN_CODE_TOOL) rememberRunCodeTurn(event)   // dispatch 的 turn 来源
+      if (event.data.name === TOOL_NAME) return { id: String(event.data.turn), role: 'update' }
+      return null
+    }
     if (event.type === 'tool/result' && isAppendSurfaceEvent(event))
       return { id: String(event.data.turn), role: 'update' }
+    if (event.type === 'tool/ptc-dispatch-start' && event.data.name === TOOL_NAME) {
+      const turn = ptcTurnOf(event)              // 经 rootCallId 查外层 run_code
+      return turn === undefined ? null : { id: String(turn), role: 'start' }
+    }
+    if (event.type === 'tool/ptc-dispatch' && event.data.name === TOOL_NAME) {
+      const turn = ptcTurnOf(event)
+      return turn === undefined ? null : { id: String(turn), role: 'update' }
+    }
     return null
   },
-  start: (_context, match) => ({
-    turn: match.event.data.turn,
-    calls: new Map(),                          // callId -> { argsRaw, seq }
-    data: null,                                // 发布到 turn.data 的值
-  }),
-  update: (context, match) => {
-    const state = context.state
-    if (match.event.type === 'tool/call') {
-      const calls = new Map(state.calls)
-      calls.set(String(match.event.data.callId), {
-        argsRaw: match.event.data.arguments,
+  start: (_context, match) => {                // turn 优先取 Match.location，事件上的 turn 兜底
+    const calls = new Map()
+    if (match.event.type === 'tool/ptc-dispatch-start')
+      calls.set(String(match.event.data.subCallId), {
+        argsRaw: JSON.stringify(match.event.data.arguments ?? {}),
         seq: match.event.seq,
       })
-      return { ...state, calls }
-    }
-    if (match.event.type !== 'tool/result') return state
-    const callId = String(match.event.data.message.source.callId)
-    const call = state.calls.get(callId)
-    if (call === undefined || match.event.data.message.isError === true) return state
-    const meta = parseMeta(match.event.data.meta)              // 首选：Host 写入的规范化 meta
-      ?? modelFromArgs(call.argsRaw)                            // 兜底：压缩后 meta 丢失
-    if (meta === null) return state
-    if (state.data !== null && state.data.model === meta) return state
-    return { ...state, data: { turn: state.turn, model: meta } }
+    return { turn: matchTurn(match), calls, model: null }
+  },
+  update: (context, match) => {
+    // tool/call 与 dispatch-start 记录调用参数；结果分支：
+    //   native tool/result：event.data.meta（append 语义）
+    //   PTC dispatch：event.data.meta / isError（无需 surfaceOp）
+    // 权威 meta → parseMeta；缺失/损坏 → modelFromArgs(call.argsRaw)。
   },
   buildLocationData: (context, scope, previous) => {
-    if (scope !== 'turn' || context.state.data === null) return null
-    const value = context.state.data
-    if (previous?.kind === 'turn' && previous.turn === value.turn
-        && previous.key === KEY && previous.value === value) return previous
-    return { kind: 'turn', turn: value.turn, key: KEY, value }
+    if (scope !== 'turn' || context.state === undefined || context.state.model === null) return null
+    // 发布 { kind:'turn', turn, key: KEY, value: { turn, model } }；值不变时复用 previous。
   },
 }
 ```
 
-- 复制官方 ui-schedule 的 `isAppendSurfaceEvent` 语义（避免 replacement 副本重复计数）；
+- `isAppendSurfaceEvent` 只用于 native `tool/result`（复制官方 ui-schedule 的 append 语义，避免 replacement 副本重复计数）；PTC 的 `tool/ptc-dispatch` 没有 `surfaceOp`，由事件类型本身区分。
 - **优先 meta**（Host 规范化的唯一权威），meta 丢失时用 args 兜底（`lib/view-model.js` 的 `modelFromArgs`，
-  规则与 normalize 保持保守一致：trim/截断/去重/上限/立场合法化；危险词表常量复制一份）；
-- `buildLocationData` 只在值变化时返回新引用（避免无意义发布）。
+  规则与 normalize 保持保守一致：trim/截断/去重/上限/立场合法化；危险词表常量复制一份）；PTC 的 args 是对象，记录时 `JSON.stringify` 成与 native 相同的字符串形态。
+- `buildLocationData` 只在值变化时返回新引用（避免无意义发布）；新增空 state / 非法 turn 守卫，事件窗口从回合中间开始时返回 null 而不是抛错（覆盖审计 B1 的崩溃路径）。
+- PTC 事件如何落到同一 turn 键见 §6.2.1；`run_code` 索引与 Match location 的分工也在该节说明。
+
+### 6.2.1 PTC（`run_code`）兼容（2026-11-10）
+
+PTC 预设把工具调用放进 `run_code` 程序：模型直接调用的只有 `run_code`，其余可见工具由 PTC executor 生成 SDK binding。插件 Host 半不变（工具照常注册、`when` 仍按 root agent 门控、`output.schema` 照常进入 PTC SDK 声明），缺的是客户端折叠层：嵌套调用记录的事件与 native 不同。
+
+| 维度 | native | PTC |
+|---|---|---|
+| 调用事件 | `tool/call`，`arguments` 为 JSON 字符串 | `tool/ptc-dispatch-start`，`arguments` 为对象，调用 id 是 `subCallId` |
+| 结果事件 | append 的 `tool/result`，`message` 包结果，`meta` 在事件上 | `tool/ptc-dispatch`，`meta`/`isError`/`content` 直接在 `data` 上，无 `surfaceOp` |
+| turn | 事件带 `turn`/`step` | 事件不带；只有外层 `run_code` 的 `tool/call` 带 turn |
+| Definition 可见 | `match(event)` 只有事件本身 | 同上；`start`/`update`/`buildLocationData` 的 Match 才有 `location` |
+
+实现（`src/client.js`）：
+
+1. `match` 同时匹配两种 transport，并用有界索引把 `run_code` callId 映射到 turn；dispatch 事件的 turn 键来自该索引（匹配函数在 0.2.2 只收到原始事件，拿不到 location）。
+2. `start` 在窗口从 dispatch 开始时记录首个调用；`turn` 优先取 Match 的 `location`，回退事件上的 `turn`（直接调用 Definition 的测试与异常宿主都能工作）。
+3. `update` 对 PTC 结果直接读 `event.data.meta`，`isError === true` 时忽略；meta 缺失时用 dispatch-start 记录的对象参数走与 native 相同的 `modelFromArgs` 兜底。
+4. `buildLocationData` 增加空 state / 非法 turn 守卫，避免事件窗口从回合中间开始时抛错。
+
+限制：
+
+- 若宿主以非分页方式截出一个从 PTC dispatch 记录开始的窗口（外层 `run_code` 调用不在窗口内），该次 dispatch 没有 turn 索引，不会折叠；分页加载的切点是 `turn/start` 或消息记录边界，页面打开与实时 append 不受影响。
+- PTC 下嵌套调用的模型可见结果只有程序返回值；插件 `output.render` 的"现在写最终回答"提示不进入模型上下文，卡片链路不受影响。
+- meta 仍只进会话日志、不进模型上下文；与 native 相同。
+
+验证：`test/definition.test.mjs` 以真实会话日志的事件 shape 覆盖 PTC 匹配、turn 解析、meta/args 兜底、`shown:false`、错误与 turn location；另用当前 PTC 会话日志重放真实 `tool/ptc-dispatch` 事件，确认 `turn.data.get('next-steps')` 发布 `shown:true` 模型。
 
 ### 6.3 turnTail 卡片
 
@@ -1005,6 +1038,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 ### 7.2 客户端数据契约
 
 - Definition kind：`next-steps`；`turn.data.get('next-steps') = { turn, model }`；
+- PTC transport：`tool/ptc-dispatch-start`/`tool/ptc-dispatch` 折叠进同一 `turn.data.get('next-steps')`；turn 由外层 `run_code` 调用索引 + Match location 解析，`meta` 与 native 同契约（§6.2.1）；
 - `model` = 解析后的 meta：`{shown, context?, suggestions?, note?}`；
 - turnTail props：`{turn: TurnLocation, seq, openFile}` + 19 标准 props（§2.2）；
 - toolview props：`{phase, block, callId, toolName, inspect, ...}`；`block.meta` 可取；
@@ -1019,6 +1053,9 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 | 模型未调用工具 | 无卡片、无过程行；一切正常 | — |
 | 参数非法/空/context 缺失 | `shown:false` + meta.note；无卡片；过程行「未显示」可展开原因 | — |
 | `tool/result.meta` 丢失（压缩/旧日志） | Definition 用 `tool/call.arguments` 兜底解析（保守规则） | 若 args 也不可用 → 无卡片 |
+| PTC `tool/ptc-dispatch` 缺 meta（压缩/旧日志） | 用 dispatch-start 记录的对象参数兜底解析（与 native 同一套保守规则） | 若 args 也不可用 → 无卡片 |
+| 异常窗口从 PTC dispatch 记录开始（外层 `run_code` 调用不在窗口内） | 该次调用没有 turn 索引，不折叠 → 无卡片 | 分页切点在 `turn/start` 或消息边界，正常加载与实时 append 不产生该窗口 |
+| 事件窗口从回合中间开始、没有 start Match | `buildLocationData` 返回 null，不抛错 | 不显示该轮卡片（审计 B1 修复） |
 | `uiConversation` 服务不可用 | Definition 不注册；卡片不可用；**过程行仍工作**（toolview 不依赖它） | console.warn 一次 |
 | `conversation` 服务不可用 | 仍可 `inputActions.setDraft`（标准 prop）；无自动聚焦 | 提示用户手动点输入框 |
 | `inputActions` 缺失（非 session 作用域/异常宿主） | 卡片按钮禁用并提示 | 不应发生（turnTail 为 session scope） |
@@ -1045,6 +1082,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 5. **权限**：不申请审批扩展；默认 allow 由平台保证；不注册 `tools/pre-execute` 监听、不绕过 Auto review。
 6. **数据**：meta 写入用户自己的会话日志（与工具结果同级别），不额外复制到别处；本地状态不含正文。
 7. **卸载**：effect 清理字典/样式/slot/Definition；localStorage 残留由 key 前缀可识别（提供重置）。
+8. **PTC 记录同属会话日志**：`tool/ptc-dispatch` 的 meta 与 native 的 `tool/result.meta` 走同一展示通道，不新增注入面；嵌套调用的 content 仅进日志，不进模型上下文。
 
 ---
 
@@ -1056,6 +1094,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 |---|---|
 | `test/normalize.test.mjs` | §5.6 全部规则；meta/execute 一致性；id 稳定性；边界（6 条上限、空、坏类型） |
 | `test/view-model.test.mjs` | `parseMeta` 防御（缺字段/超大/多余字段）；`modelFromArgs` 兜底；`buildDisplay`（条数裁剪/推荐顺序/optional 压尾）；草稿冲突状态机（空/本人草稿/用户编辑/追加）；storage key/hash；危险词表 |
+| `test/definition.test.mjs` | Conversation Definition：native `tool/call`+`tool/result` 与 PTC `tool/ptc-dispatch-*` 两条链路的 match/fold/turn location；meta 优先与 args 兜底；空 state 守卫 |
 | `test/build.test.mjs` | `client.js` 与 `src/*` 一致（`--check`）；模板内联区存在 |
 
 ### 10.2 手工 E2E（装插件后逐条执行，对应形态稿 §12）
@@ -1077,7 +1116,9 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 15. 关闭插件（Plugins 页禁用）→ 卡片与过程行消失、无残留样式；
 16. 重新启用 → 恢复；
 17. 中英文界面/中英文对话 → 文案与建议语言正确；
-18. 长会话 100+ 轮 → 滚动与渲染无明显卡顿。
+18. 长会话 100+ 轮 → 滚动与渲染无明显卡顿；
+19. PTC 预设会话：模型通过 `run_code` 调用 `suggest_next_steps` → `run_code` 过程组内出现「下一步建议 · 已生成」，回答下方出现卡片；刷新后卡片保留；
+20. 分别用 native 与 PTC 预设的新会话各跑一轮 → 两种链路的卡片行为一致（内容、点击、忽略/恢复）。
 
 ### 10.3 视觉一致性核对（官方卡是活体基准，三处有意差异见 §6.3 注）
 
@@ -1098,7 +1139,7 @@ dsh-next-actions:v1:stats               → { shown, clicked, filled, dismissed,
 
 - token：在 DSH token meter / 会话统计里对比"启用 vs 禁用"插件前后同一提示的请求 token；
 - 延迟：DevTools Performance 记录点击 → 输入框出现文本；
-- meta 体积：会话日志 `tool/result.meta` 序列化长度（常规 <1.5KB）。
+- meta 体积：会话日志 `tool/result.meta`（native）或 `tool/ptc-dispatch.meta`（PTC）序列化长度（常规 <1.5KB）。
 
 ---
 

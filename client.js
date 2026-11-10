@@ -5,6 +5,10 @@
  * `tool/call` + `tool/result` (preferring the Host-persisted `tool/result.meta`,
  * falling back to the arguments when compaction dropped it) into
  * `turn.data.get('next-steps')`.
+ * M10 (2026-11-10): PTC (`run_code`) sessions fold `tool/ptc-dispatch-start` +
+ * `tool/ptc-dispatch` into the same turn data. Those records carry `meta` and
+ * `isError` directly on `data` and are placed in a turn through the outer
+ * `run_code` call, which is the only record naming the turn.
  * M3: the card renders the official action-card frame (copied markup/CSS, no
  * Harness Client imports), fills the input draft on click, and owns the
  * conflict / dismiss / preview states.
@@ -1902,6 +1906,16 @@ button.dshns-disc-leading { cursor: pointer; }
 
     // -----------------------------------------------------------------------
     // Conversation Definition (turn-scoped fold of this tool's events)
+    //
+    // Two transports reach the Session log:
+    //   - native: `tool/call` (arguments are a JSON string) plus an append
+    //     `tool/result` whose `message` carries the result and whose `meta`
+    //     carries the normalized display model;
+    //   - PTC (`run_code` programs): `tool/ptc-dispatch-start` and
+    //     `tool/ptc-dispatch`, where `arguments` is already a JSON value and
+    //     `meta`/`isError` hang directly off `data`. Those records carry no
+    //     `turn`; only the outer `run_code` call names it, so the matcher
+    //     keeps a small call-id -> turn index while it forwards events.
     // -----------------------------------------------------------------------
 
     const SURFACE_EVENT_TYPES = new Set([
@@ -1914,55 +1928,145 @@ button.dshns-disc-leading { cursor: pointer; }
     const isSurfaceEvent = (event) => SURFACE_EVENT_TYPES.has(event.type) && event.surfaceOp !== undefined
     const isAppendSurfaceEvent = (event) => isSurfaceEvent(event) && event.surfaceOp === 'append'
 
+    /** Reserved PTC transport: its `tool/call` record is the only turn owner. */
+    const RUN_CODE_TOOL = 'run_code'
+    const MAX_RUN_CODE_TURNS = 1024
+    /** run_code callId -> turn, for PTC dispatches that carry no turn themselves. */
+    const runCodeTurns = new Map()
+
+    /**
+     * Remember one `run_code` call's turn. The matcher sees the outer call
+     * before its dispatch records, so a bounded insertion-ordered index is
+     * enough; it only ever maps immutable call identities.
+     */
+    function rememberRunCodeTurn(event) {
+      const data = event.data
+      if (typeof data.callId !== 'string' || !Number.isSafeInteger(data.turn)) return
+      if (runCodeTurns.size >= MAX_RUN_CODE_TURNS) {
+        const oldest = runCodeTurns.keys().next().value
+        if (oldest !== undefined) runCodeTurns.delete(oldest)
+      }
+      runCodeTurns.set(data.callId, data.turn)
+    }
+
+    /** Turn of a PTC dispatch event, resolved through its outer `run_code` call. */
+    function ptcTurnOf(event) {
+      const data = event.data
+      const callId = typeof data.rootCallId === 'string' ? data.rootCallId : data.parentCallId
+      return typeof callId === 'string' ? runCodeTurns.get(callId) : undefined
+    }
+
+    /** Turn carried by a native call/result event. */
+    function eventTurn(event) {
+      const turn = event.data.turn
+      return Number.isSafeInteger(turn) && turn >= 0 ? turn : undefined
+    }
+
+    /**
+     * Turn of one framework Match. Matcher functions only receive the raw
+     * event (0.2.2), while `start`, `update` and `buildLocationData` also
+     * receive the resolved Match location; prefer the location and fall back
+     * to the event payload for direct (test) folds.
+     */
+    function matchTurn(match) {
+      const location = match.location
+      if (location !== undefined && location !== null && (location.kind === 'turn' || location.kind === 'step')) {
+        const turn = location.turn === undefined || location.turn === null ? undefined : location.turn.turn
+        if (Number.isSafeInteger(turn) && turn >= 0) return turn
+      }
+      const event = match.event
+      return event === undefined || event === null ? undefined : eventTurn(event)
+    }
+
     const nextStepsDefinition = {
       kind: DEFINITION_KEY,
       match: (event) => {
         if (event.type === 'turn/start') {
           return { id: String(event.data.turn), role: 'start' }
         }
-        if (event.type === 'tool/call' && event.data.name === TOOL_NAME) {
-          return { id: String(event.data.turn), role: 'update' }
+        if (event.type === 'tool/call') {
+          if (event.data.name === RUN_CODE_TOOL) rememberRunCodeTurn(event)
+          return event.data.name === TOOL_NAME
+            ? { id: String(event.data.turn), role: 'update' }
+            : null
         }
         if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
           return { id: String(event.data.turn), role: 'update' }
         }
+        if (event.type === 'tool/ptc-dispatch-start' && event.data.name === TOOL_NAME) {
+          const turn = ptcTurnOf(event)
+          return turn === undefined ? null : { id: String(turn), role: 'start' }
+        }
+        if (event.type === 'tool/ptc-dispatch' && event.data.name === TOOL_NAME) {
+          const turn = ptcTurnOf(event)
+          return turn === undefined ? null : { id: String(turn), role: 'update' }
+        }
         return null
       },
-      start: (_context, match) => ({
-        turn: match.event.data.turn,
-        calls: new Map(),
-        model: null,
-      }),
+      start: (_context, match) => {
+        const event = match.event
+        const calls = new Map()
+        // A window can begin at the dispatch instead of `turn/start`; record
+        // that first call here so the settled record can still fall back to it.
+        if (event.type === 'tool/ptc-dispatch-start') {
+          calls.set(String(event.data.subCallId), {
+            argsRaw: JSON.stringify(event.data.arguments === undefined ? {} : event.data.arguments),
+            seq: event.seq,
+          })
+        }
+        return { turn: matchTurn(match), calls, model: null }
+      },
       update: (context, match) => {
         const state = context.state
-        if (match.event.type === 'tool/call') {
+        const event = match.event
+        if (event.type === 'tool/call') {
           const calls = new Map(state.calls)
-          calls.set(String(match.event.data.callId), {
-            argsRaw: match.event.data.arguments,
-            seq: match.event.seq,
+          calls.set(String(event.data.callId), {
+            argsRaw: event.data.arguments,
+            seq: event.seq,
           })
           return { ...state, calls }
         }
-        if (match.event.type !== 'tool/result') return state
-        // Replacement copies of a result must not re-publish the card.
-        if (!isAppendSurfaceEvent(match.event)) return state
-        const message = match.event.data.message
-        if (message === undefined || message.isError === true) return state
-        const source = message.source ?? {}
-        const callId = String(source.callId ?? message.toolCallId ?? '')
+        if (event.type === 'tool/ptc-dispatch-start') {
+          const calls = new Map(state.calls)
+          calls.set(String(event.data.subCallId), {
+            argsRaw: JSON.stringify(event.data.arguments === undefined ? {} : event.data.arguments),
+            seq: event.seq,
+          })
+          return { ...state, calls }
+        }
+        // Both transports expose the same durable meta; the recorded arguments
+        // only back a pruned or missing meta.
+        let callId
+        let meta
+        if (event.type === 'tool/result') {
+          // Replacement copies of a result must not re-publish the card.
+          if (!isAppendSurfaceEvent(event)) return state
+          const message = event.data.message
+          if (message === undefined || message.isError === true) return state
+          const source = message.source ?? {}
+          callId = String(source.callId ?? message.toolCallId ?? '')
+          meta = event.data.meta
+        } else if (event.type === 'tool/ptc-dispatch') {
+          if (event.data.isError === true) return state
+          callId = String(event.data.subCallId)
+          meta = event.data.meta
+        } else {
+          return state
+        }
         const call = state.calls.get(callId)
         if (call === undefined) return state
         // A persisted meta with a boolean `shown` is authoritative even when it
         // says "no card"; only a missing/corrupt meta falls back to the arguments.
-        const model = isAuthoritativeMeta(match.event.data.meta)
-          ? parseMeta(match.event.data.meta)
-          : modelFromArgs(call.argsRaw)
+        const model = isAuthoritativeMeta(meta) ? parseMeta(meta) : modelFromArgs(call.argsRaw)
         if (model === null || model.shown !== true || state.model === model) return state
         return { ...state, model }
       },
       buildLocationData: (context, scope, previous) => {
-        if (scope !== 'turn' || context.state.model === null) return null
-        const value = { turn: context.state.turn, model: context.state.model }
+        if (scope !== 'turn' || context.state === undefined || context.state.model === null) return null
+        const turn = context.state.turn
+        if (!Number.isSafeInteger(turn) || turn < 0) return null
+        const value = { turn, model: context.state.model }
         if (
           previous !== undefined
           && previous !== null
