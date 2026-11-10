@@ -40,7 +40,24 @@ test('card keeps a fixed preview slot and injects the conversation service', () 
   const source = readFileSync(clientPath, 'utf8')
   assert.ok(source.includes('dshns-preview'))
   assert.ok(source.includes("'uiConversation'"))
-  assert.ok(source.includes('defaultPreview'))
+  // Preview and filled/danger state are derived from the live draft, and state
+  // combinations live in the inlined view model.
+  for (const symbol of ['deriveCardView', 'derivePreviewText', 'deriveActiveFill', 'shouldAutoSubmit', 'resolveConflictFill']) {
+    assert.ok(source.includes(symbol), `expected client.js to inline ${symbol}`)
+  }
+})
+
+test('card wires the draft-derived state into the click and conflict paths', () => {
+  const source = readFileSync(clientPath, 'utf8')
+  // The view derivation is the single source of the filled/danger markers and
+  // the status line; the handlers must pass the safety-relevant flags through.
+  assert.match(source, /deriveCardView\(\{/)
+  assert.match(source, /resolveConflictFill\(\{ draft, prompt: conflict\.prompt, mode: choice \}\)/)
+  assert.match(source, /applyFill\(plan\.text, conflict, choice === 'replace', plan\.submit\)/)
+  assert.match(source, /shouldAutoSubmit\(\{ clickMode: mode, danger \}\)/)
+  assert.match(source, /typeof inputActions\.submit === 'function'/)
+  // A submitted message must be able to outrank the filled marker.
+  assert.match(source, /sent,\n\s+conflict: conflict !== null,/)
 })
 
 test('card reveals a live turn-tail mount instead of inserting it in one frame', () => {

@@ -415,12 +415,15 @@ test('turn state persists the last filled suggestion id', () => {
   assert.deepEqual(decodeTurnState({ dismissed: true, filledId: '' }), { dismissed: true, filledId: null })
 })
 
-test('cardStatusKey picks the status line', () => {
+test('cardStatusKey prioritizes dismissed, conflict, sent, then the active fill', () => {
   assert.equal(cardStatusKey({}), null)
   assert.equal(cardStatusKey({ dismissed: true }), 'status.dismissed')
   assert.equal(cardStatusKey({ conflict: true }), 'status.conflict')
-  assert.equal(cardStatusKey({ filledId: 'sa' }), 'status.filled')
-  assert.equal(cardStatusKey({ filledId: 'sa', danger: true }), 'status.danger')
+  assert.equal(cardStatusKey({ activeFill: { danger: false } }), 'status.filled')
+  assert.equal(cardStatusKey({ activeFill: { danger: true } }), 'status.danger')
+  assert.equal(cardStatusKey({ sent: true, activeFill: { danger: true } }), 'status.sent')
+  assert.equal(cardStatusKey({ dismissed: true, conflict: true, sent: true }), 'status.dismissed')
+  assert.equal(cardStatusKey({ conflict: true, sent: true }), 'status.conflict')
 })
 
 test('cardControlMode hides controls after dismissal', () => {

@@ -344,10 +344,8 @@ window.__ModuleLoader__.load({
       const [turnState, setTurnState] = React.useState(() => readTurnState(sessionId, turnNumber))
       const [expanded, setExpanded] = React.useState(false)
       const [conflict, setConflict] = React.useState(null)
-      const [filledId, setFilledId] = React.useState(turnState.filledId)
-      const [statusKey, setStatusKey] = React.useState(null)
+      const [sent, setSent] = React.useState(false)
       const [preview, setPreview] = React.useState(null)
-      const dangerRef = React.useRef(false)
       const appliedRef = React.useRef(null)
 
       const draft = typeof useInput === 'function'
@@ -431,50 +429,67 @@ window.__ModuleLoader__.load({
 
       const canWrite = inputActions !== undefined && inputActions !== null && typeof inputActions.setDraft === 'function'
       const mode = cardControlMode({ dismissed: turnState.dismissed, conflict: conflict !== null })
-      const statusFromState = cardStatusKey({
-        dismissed: turnState.dismissed,
+      // The draft is authoritative for the "filled" marker and the danger
+      // warning: a click or a restored id only counts while the composer still
+      // contains exactly what the card wrote. `sent` outranks it so a submitted
+      // message never shows "filled into the input" afterwards.
+      const view = deriveCardView({
+        suggestions: model.suggestions,
+        draft,
+        persistedId: turnState.filledId,
+        applied: appliedRef.current,
+        preview,
+        sent,
         conflict: conflict !== null,
-        filledId,
-        danger: dangerRef.current,
-      }) ?? statusKey
-      const status = canWrite ? statusFromState : 'status.unavailable'
+        dismissed: turnState.dismissed,
+        canWrite,
+      })
+      const status = view.statusKey
+      const previewText = view.previewText
       const items = expanded ? model.suggestions : display.items
       const moreCount = expanded ? 0 : display.moreCount
       const title = t('card.title')
-      const recommended = model.suggestions.find((suggestion) => suggestion.recommended === true)
-      const defaultPreview = (recommended ?? model.suggestions[0]).prompt
-      const previewText = preview === null ? defaultPreview : preview
 
-      function applyFill(text, suggestion, owned = true) {
+      function applyFill(text, suggestion, owned = true, submit = true) {
+        if (!canWrite) return
         const mode = readSettings().clickMode
         const danger = suggestion.danger === true
         inputActions.setDraft(text)
-        // An appended draft contains the user's own text, so a later click must
-        // ask before replacing it; only pure "replace/empty" fills stay owned.
-        appliedRef.current = owned ? { prompt: text, id: suggestion.id } : null
+        // Keep the exact text we wrote and whether the card owns it: an
+        // appended draft contains the user's own text, so a later click must
+        // ask before replacing it. This record also decides the "filled" marker
+        // and danger warning, but only while `draft` still equals `text`.
+        appliedRef.current = {
+          id: suggestion.id,
+          text,
+          prompt: suggestion.prompt,
+          danger,
+          owned,
+        }
         const next = { ...turnState, filledId: suggestion.id }
         setTurnState(next)
         writeTurnState(sessionId, turnNumber, next)
-        setFilledId(suggestion.id)
         setConflict(null)
         setPreview(null)
-        dangerRef.current = danger
-        // Dangerous suggestions always fill only; "send" needs a real submit.
-        const canSend = mode === 'send' && danger !== true && typeof inputActions.submit === 'function'
-        if (canSend) {
+        setSent(false)
+        // Dangerous suggestions and conflict resolution always fill only;
+        // only the explicit Send-mode opt-in may submit a safe pick, and only
+        // when the host actually exposes `submit`.
+        if (submit && typeof inputActions.submit === 'function' && shouldAutoSubmit({ clickMode: mode, danger })) {
           inputActions.submit()
-          setStatusKey('status.sent')
+          setSent(true)
           return
         }
-        setStatusKey(danger ? 'status.danger' : 'status.filled')
         focusComposer(sessionId)
       }
 
       function onPick(suggestion) {
         if (!canWrite) return
+        setSent(false)
+        const applied = appliedRef.current
         const action = resolveDraftAction({
           draft,
-          appliedPrompt: appliedRef.current === null ? '' : appliedRef.current.prompt,
+          appliedPrompt: applied !== null && applied.owned === true ? applied.text : '',
         })
         if (action.kind === 'conflict') {
           setConflict(suggestion)
@@ -487,10 +502,14 @@ window.__ModuleLoader__.load({
       function onConflictChoice(choice) {
         if (conflict === null) return
         setConflict(null)
+        setPreview(null)
+        setSent(false)
         if (choice === 'cancel') return
-        const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })
-        if (merged === null) return
-        applyFill(merged, conflict, choice === 'replace')
+        // Conflict resolution is always fill-only, even when the card's click
+        // mode is "send": the user has not seen the merged draft yet.
+        const plan = resolveConflictFill({ draft, prompt: conflict.prompt, mode: choice })
+        if (plan === null) return
+        applyFill(plan.text, conflict, choice === 'replace', plan.submit)
       }
 
       function onDismiss() {
@@ -499,7 +518,7 @@ window.__ModuleLoader__.load({
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPreview(null)
-        setStatusKey(null)
+        setSent(false)
       }
 
       function onRestore() {
@@ -508,11 +527,11 @@ window.__ModuleLoader__.load({
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPreview(null)
-        setStatusKey(null)
+        setSent(false)
       }
 
       function renderChip(suggestion) {
-        const filled = suggestion.id === filledId
+        const filled = view.filledId !== null && suggestion.id === view.filledId
         return h(Button, {
           key: suggestion.id,
           variant: suggestion.recommended === true ? 'primary' : 'ghost',

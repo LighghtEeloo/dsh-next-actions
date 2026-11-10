@@ -366,16 +366,149 @@ function serializeTurnState(state) {
 
 /**
  * The status line the card should show, or null for no status.
- * @param {{ dismissed?: boolean, conflict?: boolean, filledId?: string|null, danger?: boolean }} state
+ *
+ * Priority: dismissed > conflict > sent > filled/danger. `activeFill` must come
+ * from {@link deriveActiveFill}: a persisted id or a click that the user has
+ * since edited must not keep claiming "filled".
+ * @param {{ dismissed?: boolean, conflict?: boolean, sent?: boolean,
+ *   activeFill?: { danger?: boolean }|null }} state
  * @returns {string | null} locale key
  */
 function cardStatusKey(state = {}) {
   if (state.dismissed === true) return 'status.dismissed'
   if (state.conflict === true) return 'status.conflict'
-  if (typeof state.filledId === 'string' && state.filledId !== '') {
-    return state.danger === true ? 'status.danger' : 'status.filled'
-  }
+  if (state.sent === true) return 'status.sent'
+  if (isRecord(state.activeFill)) return state.activeFill.danger === true ? 'status.danger' : 'status.filled'
   return null
+}
+
+/**
+ * The suggestion the card filled that is still actually present in the draft.
+ *
+ * The draft is authoritative. `applied` records the text this card wrote in
+ * the current mount; `persistedId` is the localStorage hint restored after a
+ * reload. Neither counts unless the draft still equals the written text
+ * (`applied`) or the suggestion's own prompt (`persistedId`), so editing,
+ * clearing, or a stale restored id never leaves a false "filled" state.
+ *
+ * @param {{ suggestions?: Array, draft?: string, persistedId?: string|null,
+ *   applied?: { id?: string, text?: string, prompt?: string, danger?: boolean }|null }} input
+ * @returns {{ id: string, prompt: string, danger: boolean, text: string }|null}
+ */
+function deriveActiveFill({ suggestions, draft, persistedId, applied } = {}) {
+  const current = asText(draft)
+  const record = isRecord(applied) ? applied : null
+  if (record !== null && typeof record.text === 'string' && record.text !== '' && record.text === current) {
+    return {
+      id: asText(record.id),
+      prompt: asText(record.prompt),
+      danger: record.danger === true,
+      text: current,
+    }
+  }
+  if (typeof persistedId !== 'string' || persistedId === '') return null
+  const list = Array.isArray(suggestions) ? suggestions : []
+  const persisted = list.find((item) => isRecord(item) && item.id === persistedId)
+  if (persisted === undefined || current === '' || current !== persisted.prompt) return null
+  return {
+    id: asText(persisted.id),
+    prompt: asText(persisted.prompt),
+    danger: persisted.danger === true,
+    text: current,
+  }
+}
+
+/** Prompt of a normalized suggestion id, or '' when the id is unknown. */
+function promptOfSuggestion(suggestions, id) {
+  if (typeof id !== 'string' || id === '') return ''
+  const list = Array.isArray(suggestions) ? suggestions : []
+  const suggestion = list.find((item) => isRecord(item) && item.id === id)
+  return suggestion === undefined ? '' : asText(suggestion.prompt)
+}
+
+/**
+ * The preview line under the controls.
+ *
+ * Hover/focus wins; otherwise the last suggestion this card picked (and which
+ * therefore still owns the preview even after the draft is edited), then the
+ * restored suggestion id, then the recommended/first suggestion. Keeping the
+ * picked prompt ahead of the recommended one is what stops the preview from
+ * jumping back to the recommended item after a non-recommended click.
+ * @param {{ suggestions?: Array, preview?: string|null, pickedPrompt?: string }} input
+ * @returns {string}
+ */
+function derivePreviewText({ suggestions, preview, pickedPrompt } = {}) {
+  const hovered = asText(preview)
+  if (hovered !== '') return hovered
+  const picked = asText(pickedPrompt)
+  if (picked !== '') return picked
+  const list = Array.isArray(suggestions) ? suggestions : []
+  const fallback = list.find((item) => isRecord(item) && item.recommended === true)
+    ?? list.find((item) => isRecord(item) && asText(item.prompt) !== '')
+  return fallback === undefined ? '' : asText(fallback.prompt)
+}
+
+/**
+ * Derive everything the card renders that depends on mutable UI state, so the
+ * state combinations can be tested without React. `filledId` is null unless
+ * the draft really contains the fill and that fill was not just sent;
+ * `statusKey` obeys the documented priority; `previewText` never snaps back to
+ * the recommendation after a non-recommended pick.
+ * @param {object} input
+ * @returns {{ activeFill: object|null, filledId: string|null, statusKey: string|null, previewText: string }}
+ */
+function deriveCardView({
+  suggestions,
+  draft,
+  persistedId,
+  applied,
+  preview,
+  sent = false,
+  conflict = false,
+  dismissed = false,
+  canWrite = true,
+} = {}) {
+  const list = Array.isArray(suggestions) ? suggestions : []
+  // A submitted pick was consumed by the send, so it must not also keep the
+  // chip marked as merely filled while the composer catches up.
+  const activeFill = sent === true
+    ? null
+    : deriveActiveFill({ suggestions: list, draft, persistedId, applied })
+  const appliedPrompt = isRecord(applied) ? asText(applied.prompt) : ''
+  const persistedPrompt = promptOfSuggestion(list, persistedId)
+  const pickedPrompt = appliedPrompt !== '' ? appliedPrompt : persistedPrompt
+  return {
+    activeFill,
+    filledId: activeFill === null ? null : activeFill.id,
+    statusKey: canWrite === false
+      ? 'status.unavailable'
+      : cardStatusKey({ dismissed, conflict, sent, activeFill }),
+    previewText: derivePreviewText({ suggestions: list, preview, pickedPrompt }),
+  }
+}
+
+/**
+ * Whether picking a suggestion should submit immediately. Only the explicit
+ * Send-mode opt-in may submit, and only for safe suggestions that are not being
+ * resolved through a draft conflict; conflict resolution is always fill-only.
+ * @param {{ clickMode?: string, danger?: boolean, conflict?: boolean }} input
+ * @returns {boolean}
+ */
+function shouldAutoSubmit({ clickMode, danger = false, conflict = false } = {}) {
+  return clickMode === 'send' && danger !== true && conflict !== true
+}
+
+/**
+ * Merge one draft-conflict choice. The result is always fill-only (`submit:
+ * false`): the user is deciding how to combine their draft, not authorizing a
+ * send, and a Send-mode card must not submit text it has not shown yet.
+ * @param {{ draft?: string, prompt?: string, mode?: string }} input
+ * @returns {{ text: string, submit: boolean }|null} null for cancel/invalid
+ */
+function resolveConflictFill({ draft, prompt, mode } = {}) {
+  const text = mergeDraft({ mode, draft, prompt })
+  if (text === null) return null
+  return { text, submit: false }
 }
 
 /**
@@ -1235,10 +1368,8 @@ button.dshns-disc-leading { cursor: pointer; }
       const [turnState, setTurnState] = React.useState(() => readTurnState(sessionId, turnNumber))
       const [expanded, setExpanded] = React.useState(false)
       const [conflict, setConflict] = React.useState(null)
-      const [filledId, setFilledId] = React.useState(turnState.filledId)
-      const [statusKey, setStatusKey] = React.useState(null)
+      const [sent, setSent] = React.useState(false)
       const [preview, setPreview] = React.useState(null)
-      const dangerRef = React.useRef(false)
       const appliedRef = React.useRef(null)
 
       const draft = typeof useInput === 'function'
@@ -1322,50 +1453,67 @@ button.dshns-disc-leading { cursor: pointer; }
 
       const canWrite = inputActions !== undefined && inputActions !== null && typeof inputActions.setDraft === 'function'
       const mode = cardControlMode({ dismissed: turnState.dismissed, conflict: conflict !== null })
-      const statusFromState = cardStatusKey({
-        dismissed: turnState.dismissed,
+      // The draft is authoritative for the "filled" marker and the danger
+      // warning: a click or a restored id only counts while the composer still
+      // contains exactly what the card wrote. `sent` outranks it so a submitted
+      // message never shows "filled into the input" afterwards.
+      const view = deriveCardView({
+        suggestions: model.suggestions,
+        draft,
+        persistedId: turnState.filledId,
+        applied: appliedRef.current,
+        preview,
+        sent,
         conflict: conflict !== null,
-        filledId,
-        danger: dangerRef.current,
-      }) ?? statusKey
-      const status = canWrite ? statusFromState : 'status.unavailable'
+        dismissed: turnState.dismissed,
+        canWrite,
+      })
+      const status = view.statusKey
+      const previewText = view.previewText
       const items = expanded ? model.suggestions : display.items
       const moreCount = expanded ? 0 : display.moreCount
       const title = t('card.title')
-      const recommended = model.suggestions.find((suggestion) => suggestion.recommended === true)
-      const defaultPreview = (recommended ?? model.suggestions[0]).prompt
-      const previewText = preview === null ? defaultPreview : preview
 
-      function applyFill(text, suggestion, owned = true) {
+      function applyFill(text, suggestion, owned = true, submit = true) {
+        if (!canWrite) return
         const mode = readSettings().clickMode
         const danger = suggestion.danger === true
         inputActions.setDraft(text)
-        // An appended draft contains the user's own text, so a later click must
-        // ask before replacing it; only pure "replace/empty" fills stay owned.
-        appliedRef.current = owned ? { prompt: text, id: suggestion.id } : null
+        // Keep the exact text we wrote and whether the card owns it: an
+        // appended draft contains the user's own text, so a later click must
+        // ask before replacing it. This record also decides the "filled" marker
+        // and danger warning, but only while `draft` still equals `text`.
+        appliedRef.current = {
+          id: suggestion.id,
+          text,
+          prompt: suggestion.prompt,
+          danger,
+          owned,
+        }
         const next = { ...turnState, filledId: suggestion.id }
         setTurnState(next)
         writeTurnState(sessionId, turnNumber, next)
-        setFilledId(suggestion.id)
         setConflict(null)
         setPreview(null)
-        dangerRef.current = danger
-        // Dangerous suggestions always fill only; "send" needs a real submit.
-        const canSend = mode === 'send' && danger !== true && typeof inputActions.submit === 'function'
-        if (canSend) {
+        setSent(false)
+        // Dangerous suggestions and conflict resolution always fill only;
+        // only the explicit Send-mode opt-in may submit a safe pick, and only
+        // when the host actually exposes `submit`.
+        if (submit && typeof inputActions.submit === 'function' && shouldAutoSubmit({ clickMode: mode, danger })) {
           inputActions.submit()
-          setStatusKey('status.sent')
+          setSent(true)
           return
         }
-        setStatusKey(danger ? 'status.danger' : 'status.filled')
         focusComposer(sessionId)
       }
 
       function onPick(suggestion) {
         if (!canWrite) return
+        setSent(false)
+        const applied = appliedRef.current
         const action = resolveDraftAction({
           draft,
-          appliedPrompt: appliedRef.current === null ? '' : appliedRef.current.prompt,
+          appliedPrompt: applied !== null && applied.owned === true ? applied.text : '',
         })
         if (action.kind === 'conflict') {
           setConflict(suggestion)
@@ -1378,10 +1526,14 @@ button.dshns-disc-leading { cursor: pointer; }
       function onConflictChoice(choice) {
         if (conflict === null) return
         setConflict(null)
+        setPreview(null)
+        setSent(false)
         if (choice === 'cancel') return
-        const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })
-        if (merged === null) return
-        applyFill(merged, conflict, choice === 'replace')
+        // Conflict resolution is always fill-only, even when the card's click
+        // mode is "send": the user has not seen the merged draft yet.
+        const plan = resolveConflictFill({ draft, prompt: conflict.prompt, mode: choice })
+        if (plan === null) return
+        applyFill(plan.text, conflict, choice === 'replace', plan.submit)
       }
 
       function onDismiss() {
@@ -1390,7 +1542,7 @@ button.dshns-disc-leading { cursor: pointer; }
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPreview(null)
-        setStatusKey(null)
+        setSent(false)
       }
 
       function onRestore() {
@@ -1399,11 +1551,11 @@ button.dshns-disc-leading { cursor: pointer; }
         writeTurnState(sessionId, turnNumber, next)
         setConflict(null)
         setPreview(null)
-        setStatusKey(null)
+        setSent(false)
       }
 
       function renderChip(suggestion) {
-        const filled = suggestion.id === filledId
+        const filled = view.filledId !== null && suggestion.id === view.filledId
         return h(Button, {
           key: suggestion.id,
           variant: suggestion.recommended === true ? 'primary' : 'ghost',
