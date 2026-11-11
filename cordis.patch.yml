@@ -2,6 +2,6 @@
 # discovered through package.json `dsh.client`. `enabled: false` registers nothing.
 - insert:
     - id: dsh-next-actions
-      name: '@local/dsh-next-actions'
+      name: 'dsh-next-actions'
       config:
         enabled: true

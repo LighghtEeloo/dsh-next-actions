@@ -3,7 +3,23 @@
 > Suggested next actions under DeepSeek Harness replies — clicking one fills the input, never sends.
 > DSH Web/Desktop 插件：在回复下方显示 1–3 条「下一步建议」，点击只填入输入框。
 
-**状态：v0.1.0，本地 `link:` 安装试用，未公开发布。** 设计与理念见 [`DESIGN.md`](DESIGN.md)。
+**状态：v0.1.0，已发布到 npm。** 设计与理念见 [`DESIGN.md`](DESIGN.md)，版本记录见 [`CHANGELOG.md`](CHANGELOG.md)。
+
+## 安装
+
+要求 DSH 0.2.2-rc.1 或更高版本；Host 需要支持 Web Client（Desktop 与 Web 均可）。
+
+```sh
+dsh plugin --profile desktop add dsh-next-actions
+```
+
+也可以让 agent 用 `plugin_manager` 的 `install_bundle` 安装同名 bundle，或在 Web 侧栏的 Plugins 页面里选中它。装好后重启 DSH。
+
+本地开发时用 `link:` 安装本目录：
+
+```sh
+dsh plugin --profile desktop add link:/path/to/dsh-next-actions
+```
 
 ## 功能
 
@@ -38,7 +54,7 @@ Host 改动需重启 DSH，Client 改动需刷新页面。
 
 ```yaml
 - id: dsh-next-actions
-  name: '@local/dsh-next-actions'
+  name: 'dsh-next-actions'
   config: { enabled: false }
 ```
 

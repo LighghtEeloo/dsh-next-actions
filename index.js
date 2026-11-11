@@ -1,5 +1,5 @@
 /**
- * Host half of `@local/dsh-next-actions`.
+ * Host half of `dsh-next-actions`.
  *
  * Registers the `suggest_next_actions` tool for root agents plus one standing
  * prompt section that tells the model when to call it. Zero imports: the
@@ -9,7 +9,7 @@
 
 import { buildMeta, LIMITS } from './lib/normalize.js'
 
-export const name = '@local/dsh-next-actions'
+export const name = 'dsh-next-actions'
 export const inject = ['tools', 'systemPrompt', 'agents']
 
 const TOOL_NAME = 'suggest_next_actions'

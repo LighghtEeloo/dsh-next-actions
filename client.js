@@ -1,5 +1,5 @@
 /**
- * Browser half of @local/dsh-next-actions.
+ * Browser half of dsh-next-actions.
  *
  * - Two Conversation Definitions publish turn data. `next-actions` holds the
  *   card from this tool's `tool/result.meta` (native) or `tool/ptc-dispatch`
@@ -20,7 +20,7 @@
  * source, not a build output.
  */
 window.__ModuleLoader__.load({
-  id: '@local/dsh-next-actions',
+  id: 'dsh-next-actions',
   factory(require) {
     const React = require('react')
     const h = React.createElement
@@ -99,7 +99,7 @@ window.__ModuleLoader__.load({
 .dshna-row-summary { min-width: 0; margin-left: 2px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 `
 
-    const PKG = '@local/dsh-next-actions'
+    const PKG = 'dsh-next-actions'
     const NS = 'nextActions'
     const TOOL_NAME = 'suggest_next_actions'
     const KEY = 'next-actions'
