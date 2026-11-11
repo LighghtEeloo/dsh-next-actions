@@ -1,82 +1,50 @@
 # dsh-next-actions
 
-> Suggested next steps under DeepSeek Harness replies — clicking a suggestion fills the input, not sends.
-> 一个 DSH Web/Desktop 插件：在完成的回复下方显示「下一步建议」卡片，点击只把指令填入输入框。
+> Suggested next steps under DeepSeek Harness replies — clicking one fills the input, never sends.
+> DSH Web/Desktop 插件：在最新一条回复下方显示 1–3 条「下一步建议」，点击只填入输入框。
 
-**状态：v0.1.0，本地开发/试用中，尚未公开发布。** 发布前阻断项与改进顺序见
-[`docs/audit/2026-11-09/REMEDIATION-PLAN.md`](docs/audit/2026-11-09/REMEDIATION-PLAN.md)。
-本 README 为仓库整理版；面向插件市场的正式 README（EN+zh、截图、成本披露、许可）属于审计 P0-4。
+**状态：v0.1.0，本地 `link:` 安装试用，未公开发布。** 设计见 [`docs/design.md`](docs/design.md)。
 
 ## 功能
 
-- 回复结束后的「下一步建议」卡片：1–2 句上下文 + 可点击建议（默认展示 3 条，其余收进「还有 N 条」；设置可改 1–6 或 Auto）。
-- 点击建议 = 只填入输入框，永不自动发送；「已填入」标记按当前草稿重新派生，编辑/清空/刷新后不误报。
-- 布局：hover/focus 只在状态行显示单行「将填入 · …」peek（不改变卡片高度）；完整指令点击填入后在输入框阅读/修改。
-  每个 chip 最多一个内联标记（推荐 / 已填入 / ⚠需确认）；忽略/恢复为带文字的 ghost 按钮；草稿冲突显示「将填入」与
-  「当前草稿」两行对比，长内容可展开全文，追加为主操作且只填入不发送。
-- 可访问性（2026-11-10 打磨）：卡片内可点控件统一 32px（chip、状态行切换、上下文/冲突展开、设置分段 tab）；
-  浅色/深色下状态行 peek、冲突对比标签与展开链接均达 WCAG AA 文字对比度（浅色 5.80 / 5.36 / 5.36，
-  深色 10.42 / 8.03 / 8.03），危险标记的 ⚠ 图标过非文本 3:1；chip 可访问名保留可见标签
-  （「可见标签：完整指令」）。
-- 键盘焦点（2026-11-10 键盘焦点轮）：卡内控件与可聚焦的冲突滚动区显示 DSH 同款 `:focus-visible` 焦点环
-  （2px、控件外，浅/深主题在卡片与 module 面上均 ≥3:1；指针点击不出环）；进入草稿冲突时焦点落到
-  「追加到末尾」，`Esc` 取消冲突并回到触发建议，忽略/恢复与「还有 N 条」/「收起」互相归还焦点。
-- 长内容：上下文上限 240 字符，默认 2 行 clamp、仅溢出时出现「展开/收起」（展开不封顶）；冲突对比框长内容
-  可展开全文，极长文本展开后在 240px 滚动区内滚动、「收起全文」固定在滚动区外，键盘可聚焦滚动区。
-- 建议由模型在同一次收尾调用里给出（无额外模型调用）；常驻根 agent 提示段保证 compact / 重启后仍会触发。
-- 危险动作：模型标记 + 本地中英词表升级为「需确认」；危险建议只填入、永不自动发送。
-- 官方动作卡同款外观 + 工具过程组一行式记录。
-- 子代理会话不注册工具、不显示卡片；Host `enabled:false` 时 0 常驻 token。
-- 兼容 PTC（programmatic tool calling / `run_code`）会话：工具作为 PTC SDK binding 调用，客户端从 `tool/ptc-dispatch` 的 meta 折叠出同一张卡片，与 native `tool/result.meta` 共用展示契约。
+- 一两句上下文 + 最多 3 个建议按钮；只在最新一轮显示，继续对话后自然消失。
+- 空草稿直接填入；已有草稿时在光标处插入（保留 `@` 引用，⌘Z 撤销）；永不自动发送。
+- 危险建议带 ⚠ 标记，同样只填入。
+- 工具过程组里一行记录；子代理不注册工具；Host 配置 `enabled: false` 时零常驻 token。
+- 兼容 PTC（`run_code`）会话。
 
-## 安装与开发
-
-本地开发安装（当前 desktop profile 以 `link:` 方式装入本目录）：
-
-- 通过 `plugin_manager` 的 `install_bundle` 安装本目录的绝对路径；
-- 卸载用 `remove_bundle`；Host/Client 改动后需重启 DSH（Client 需刷新页面）。
-
-开发命令（Node ≥ 20）：
-
-```sh
-node --test                          # 217 tests
-node scripts/build-client.mjs        # 从 src/ + lib/view-model.js 重建 client.js
-node scripts/build-client.mjs --check
-```
-
-## 仓库结构
+## 结构
 
 ```text
-.
-├── index.js                 Host 半：suggest_next_steps 工具 + 根 agent 提示段 + enabled 门控
-├── client.js                构建产物：单文件 Web client bundle（勿手改）
-├── src/                     client bundle 源码（client.js 模板 + styles）
-├── lib/normalize.js         Host 纯逻辑（参数规范化 / meta）
-├── lib/view-model.js        Client 纯逻辑（数据折叠 / 展示 / 草稿冲突 / 设置）
-├── test/                    node --test 单测（Host、client 纯逻辑、Definition、build）
-├── cordis.patch.yml         插件行 patch（enabled 配置）
-├── locale/                  插件管理器显示文案（en/zh）
-├── scripts/build-client.mjs 零依赖构建
-├── docs/
-│   ├── design/              产品形态稿 + 技术方案（历史设计）
-│   └── audit/2026-11-09/    发布前审计报告 + 改进计划
-├── DEVELOPMENT.md           原开发日志（历史记录，非用户文档）
-└── README.md                本文件
+index.js            Host：工具 + 根 agent 常驻提示 + enabled 门控
+lib/normalize.js    参数规范化（Host 与 Client 共用）
+src/client.js       Client 模板：Definition、卡片、过程行
+src/styles.js       卡片与过程行 CSS
+client.js           构建产物（勿手改）
+cordis.patch.yml    插件行 patch
+test/               node --test
 ```
 
-## 文档
+## 开发
 
-- 产品形态：[docs/design/next-step-suggestions-prd.md](docs/design/next-step-suggestions-prd.md)
-- 技术方案：[docs/design/next-step-suggestions-tech.md](docs/design/next-step-suggestions-tech.md)
-- 2026-11-09 发布审计：[docs/audit/2026-11-09/README.md](docs/audit/2026-11-09/README.md)
-- 按审计改进的计划：[docs/audit/2026-11-09/REMEDIATION-PLAN.md](docs/audit/2026-11-09/REMEDIATION-PLAN.md)
-- 开发日志：[DEVELOPMENT.md](DEVELOPMENT.md)
+```sh
+node --test                            # 测试
+node scripts/build-client.mjs          # 重建 client.js
+node scripts/build-client.mjs --check  # 检查 client.js 是否最新
+npm pack --dry-run                     # 打包检查
+```
 
-## 兼容性与许可
+安装/卸载用 `plugin_manager` 的 `install_bundle` / `remove_bundle`；验证使用假 `DSH_HOME`。
+Host 改动需重启 DSH，Client 改动需刷新页面。
 
-- 实测环境：DSH Desktop `0.2.2-rc.1`（Web/Desktop UI；CLI/headless 不显示卡片）。
-- PTC 预设（`agent-preset-registry.selectedDefault: ptc`）数据链路已实测：`suggest_next_steps` 作为 `run_code` 生成的 SDK binding 调用，`tool/ptc-dispatch.meta` 能折叠出与 native 相同的 turn data（2026-11-10 用真实 PTC 会话日志重放确认）；卡片渲染复用 native 同一路径，改后需刷新页面复验 GUI。PTC 下嵌套调用结果不进入模型上下文（模型只看到 `run_code` 外层结果），不影响卡片与过程行。
-- 尚未声明 `engines.dsh` / `dsh.manifestVersion`（审计 P0-3）。
-- 许可证未定；当前 `package.json` 无 `license` 字段。审计建议 MIT + `THIRD_PARTY_NOTICES`
-  （卡片外观抄自 MIT 许可的 DSH 官方动作卡）。在许可证确定前，默认保留所有权利。
-- 非 DeepSeek 官方插件；未使用 DeepSeek 商标/标识。
+关闭功能：在 profile 的 `cordis.patch.yml` 写
+
+```yaml
+- id: dsh-next-actions
+  name: '@local/dsh-next-actions'
+  config: { enabled: false }
+```
+
+## 许可
+
+许可证未定；卡片外观参照 MIT 许可的 DSH 官方动作卡。非 DeepSeek 官方插件。

@@ -4,7 +4,7 @@
 
 ## 项目入口
 
-按任务阅读 `docs/design/next-step-suggestions-prd.md`，了解产品最终愿景、设计动机、目标体验与成功标准；技术方案见 `docs/design/next-step-suggestions-tech.md`，审计与改进计划见 `docs/audit/2026-11-09/`，命令与安装说明见 `README.md`。
+产品形态、设计取舍与机制见 `docs/design.md`；命令与安装说明见 `README.md`。项目以极简为原则：新增机制前先确认它服务于「看一眼 → 点一下 → 在输入框里改」这条核心路径。
 
 文档中的命令、参数和示例应与实际脚本一致。
 
@@ -33,7 +33,7 @@
 
 ## 验证
 
-迭代时先运行受影响的测试。运行时代码变更完成后执行项目的完整测试与检查；发行时按项目说明打包。具体命令与验证重点见 `README.md`。本项目的完整检查为 `node --test` 与 `node scripts/build-client.mjs --check`；Client 改动后用 `node scripts/build-client.mjs` 重建 `client.js`，打包检查用 `npm pack --dry-run`。安装、升级与卸载验证使用假 `DSH_HOME` 的 `dsh plugin` 命令，不操作真实 profile。
+迭代时先运行受影响的测试。运行时代码变更完成后执行项目的完整测试与检查；发行时按项目说明打包。具体命令与验证重点见 `README.md`。本项目的完整检查为 `node --test`（含 `client.js` 是否最新的检查）；Client 改动后用 `node scripts/build-client.mjs` 重建 `client.js`，打包检查用 `npm pack --dry-run`。安装、升级与卸载验证使用假 `DSH_HOME` 的 `dsh plugin` 命令，不操作真实 profile。
 
 行为或校验变更同时覆盖有效输入与对应的拒绝、缺失或冲突情形。断言具体结果及关键状态，将问题复现保留为回归测试。
 
@@ -45,7 +45,7 @@
 
 每条长期规则拥有一个明确的归属位置，其他文档通过简短引用连接。移动或合并内容时，同步更新链接、示例和相关说明，删除重复段落。
 
-`docs/design/next-step-suggestions-prd.md` 是产品最终形态的愿望。围绕“为何设计”“用户最终获得什么体验”“如何判断成功”展开。实现状态、阶段排期、临时妥协、内部 API 和性能调试记录放入相应的实现说明或任务记录。
+`docs/design.md` 描述产品形态、取舍与机制；实现状态、排期与调试记录不写入其中。
 
 使用说明描述可用操作，版本日志记录实现变化，测试记录保存观察与证据。临时记录中的长期价值应整理到对应文档，再清理临时内容。
 

@@ -1,27 +1,18 @@
 /**
- * Browser half template for @local/dsh-next-actions.
+ * Browser half of @local/dsh-next-actions (template).
  *
- * M2: turn-tail data layer — a Conversation Definition folds this tool's
- * `tool/call` + `tool/result` (preferring the Host-persisted `tool/result.meta`,
- * falling back to the arguments when compaction dropped it) into
- * `turn.data.get('next-steps')`.
- * M10 (2026-11-10): PTC (`run_code`) sessions fold `tool/ptc-dispatch-start` +
- * `tool/ptc-dispatch` into the same turn data. Those records carry `meta` and
- * `isError` directly on `data` and are placed in a turn through the outer
- * `run_code` call, which is the only record naming the turn.
- * M3: the card renders the official action-card frame (copied markup/CSS, no
- * Harness Client imports), fills the input draft on click, and owns the
- * conflict / dismiss / hover-peek states.
- * M9: a live turn-tail card reveals itself with a short height/opacity
- * transition. DSH 0.2.2's default completion-time fold mounts the card in the
- * same frame that collapses the turn's work rows, so a full-height insert moves
- * the just-read answer up by the card height in one frame; the transition lets
- * the scroll layer follow the growth frame by frame. Historical cards
- * (session open / rebuild) and reduced-motion users keep the instant mount.
+ * - A Conversation Definition folds this tool's events into
+ *   `turn.data.get('next-steps')`: native `tool/call` + `tool/result.meta`, and
+ *   PTC (`run_code`) `tool/ptc-dispatch` records, whose turn is only known
+ *   through the outer `run_code` call.
+ * - A `conversation.chat.turnTail` entry renders the card for the latest turn
+ *   only; clicking a suggestion fills the composer and never sends.
+ * - A `tool.call.toolview` entry renders the one-line process row.
  *
- * Built by scripts/build-client.mjs, which inlines lib/view-model.js and
- * src/styles.js at the markers below. The generated client.js is a single
- * classic script; the module id must equal the package name.
+ * External plugins must not require Harness Client packages, so the markup and
+ * CSS follow the official action card with renamed `dshns-` classes and theme
+ * tokens only. scripts/build-client.mjs inlines lib/normalize.js and
+ * src/styles.js at the markers and writes client.js.
  */
 window.__ModuleLoader__.load({
   id: '@local/dsh-next-actions',
@@ -30,2469 +21,337 @@ window.__ModuleLoader__.load({
     const h = React.createElement
 
     /**
- * Client-side pure view logic for the next-steps card (M2 data layer).
+ * Normalize `suggest_next_steps` arguments into the card model.
  *
- * This module is import-free and side-effect-free: it is unit-tested directly
- * with `node --test` and inlined verbatim into the single-file browser bundle by
- * `scripts/build-client.mjs` (the template marks the inline site).
- *
- * Responsibilities:
- *   - defend-parse the Host-persisted `tool/result.meta` into a display model;
- *   - rebuild a conservative model from `tool/call.arguments` when compaction
- *     dropped the meta (fallback path only);
- *   - turn a model + local settings into the card's display model;
- *   - decide "fill vs conflict" for a clicked suggestion and merge drafts;
- *   - decide when a live turn-tail card reveals itself instead of appearing in
- *     the DSH completion-fold frame's single jump;
- *   - own localStorage keys, settings clamping and persisted-state codecs;
- *   - derive the process-row state/reason from a tool view's phase/block/meta.
- *
- * The risk lexicon intentionally duplicates the Host copy: this file must stay
- * import-free so it can run both in Node tests and inside the browser bundle.
+ * Shared by both halves: the Host persists the result as `tool/result.meta`,
+ * and the browser bundle inlines this file to re-read that meta (or the raw
+ * arguments when compaction dropped it). Import-free and side-effect-free.
  */
 
-const DEFAULTS = Object.freeze({
-  // The old client-side `enabled` switch moved to the Host config (the plugin
-  // row's `enabled`), so client settings only carry display preferences now.
-  // `maxPerTurn` is either 'auto' (show what the model returned, 1–6) or a
-  // fixed 1–6 cap. The default shows 3: the rest stay behind "more", so the
-  // resting card keeps a stable, scannable size.
-  maxPerTurn: 3,
-})
+const LIMITS = Object.freeze({ suggestions: 3, context: 240, label: 24, prompt: 500 })
 
-const LIMITS = Object.freeze({
-  maxSuggestions: 6,
-  maxPerTurn: 6,
-  context: 240,
-  label: 40,
-  labelDisplay: 20,
-  prompt: 500,
-})
+/** A hit marks a suggestion as needing confirmation; clicking still only fills the input. */
+const RISK = /\brm\s+-rf\b|\bforce[- ]?push\b|--force\b|\bdrop\s+(table|database)\b|\bsudo\b|\bdeploy\b|\bpublish\b|\bproduction\b|删除|清空|重置|强制推送|强推|发布|部署|上线|付费|支付|授权|卸载|回滚|销毁/i
 
-const STANCES = Object.freeze(['verify', 'continue', 'push', 'pivot', 'optional'])
+const text = (value) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '')
 
-const NOTES = Object.freeze({
-  invalidArguments: 'invalid-arguments',
-  missingContext: 'missing-context',
-  noUsableSuggestions: 'no-usable-suggestions',
-})
-
-const RISK_LEXICON = Object.freeze([
-  /\brm\s+-rf\b/i,
-  /\bforce[- ]?push\b/i,
-  /\bgit\s+push\s+--force\b/i,
-  /\bdrop\s+(table|database|schema)\b/i,
-  /\btruncate\s+table\b/i,
-  /\bsudo\b/i,
-  /\bchmod\b/i,
-  /\bchown\b/i,
-  /\bformat\s+(disk|drive|volume)\b/i,
-  /\bdeploy\b/i,
-  /\bpublish\b/i,
-  /\bproduction\b/i,
-  /删除|清空|重置|格式化|强制推送|强推|发布|部署|上线|付费|扣费|支付|授权|提权|权限|卸载|回滚|迁移|销毁/,
-])
-
-const STORAGE_PREFIX = 'dsh-next-actions:v1:'
-
-const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
-const asText = (value) => (typeof value === 'string' ? value : '')
-
-function collapse(value) {
-  return value.replace(/\s+/g, ' ').trim()
-}
-
-function truncate(value, max) {
+function clip(value, max) {
   const characters = Array.from(value)
-  if (characters.length <= max) return value
-  return `${characters.slice(0, Math.max(0, max - 1)).join('')}…`
-}
-
-function normalizeKey(value) {
-  return collapse(value)
-    .toLocaleLowerCase()
-    .replace(/[。．.!！?？,，;；:：]+$/u, '')
-}
-
-function hashBase36(value) {
-  let hash = 5381
-  for (let index = 0; index < value.length; index += 1) {
-    hash = ((hash * 33) ^ value.charCodeAt(index)) >>> 0
-  }
-  return hash.toString(36)
-}
-
-function riskOf(label, prompt) {
-  const haystack = `${label}\n${prompt}`
-  return RISK_LEXICON.some((pattern) => pattern.test(haystack))
+  return characters.length <= max ? value : `${characters.slice(0, max - 1).join('')}…`
 }
 
 /**
- * Clean one suggestion. Ids are kept when valid (the Host already assigned
- * them); otherwise they are derived from the prompt so local state stays stable.
+ * @param {unknown} raw - tool arguments (object or JSON string), or a persisted meta.
+ * @returns {{ shown: true, context: string, suggestions: { label: string, prompt: string, danger?: true }[] } | { shown: false, note: string }}
  */
-function cleanSuggestion(raw, usedIds) {
-  if (!isRecord(raw)) return undefined
-  const label = truncate(collapse(asText(raw.label)), LIMITS.label)
-  const promptText = truncate(collapse(asText(raw.prompt)), LIMITS.prompt)
-  if (label === '' && promptText === '') return undefined
-  const prompt = promptText === '' ? label : promptText
-  const safeLabel = label === '' ? truncate(prompt, LIMITS.label) : label
-  const stance = STANCES.includes(raw.stance) ? raw.stance : 'continue'
-  const providedId = typeof raw.id === 'string' && raw.id !== '' ? raw.id : ''
-  let id = providedId !== '' ? providedId : `s${hashBase36(prompt)}`
-  let suffix = 1
-  while (usedIds.has(id)) {
-    suffix += 1
-    id = `${providedId !== '' ? providedId : `s${hashBase36(prompt)}`}-${suffix}`
-  }
-  usedIds.add(id)
-  const suggestion = { id, label: safeLabel, prompt, stance }
-  if (raw.recommended === true) suggestion.recommended = true
-  if (raw.danger === true || riskOf(safeLabel, prompt)) suggestion.danger = true
-  return suggestion
-}
-
-/** Dedupe prompts, cap to six, order recommendation first and optional last. */
-function cleanSuggestions(rawSuggestions) {
-  const usedIds = new Set()
-  const seen = new Set()
-  const kept = []
-  for (const raw of rawSuggestions) {
-    const suggestion = cleanSuggestion(raw, usedIds)
-    if (suggestion === undefined) continue
-    const key = normalizeKey(suggestion.prompt)
-    if (key === '' || seen.has(key)) continue
-    seen.add(key)
-    kept.push(suggestion)
-    if (kept.length >= LIMITS.maxSuggestions) break
-  }
-  return orderSuggestions(kept)
-}
-
-function orderSuggestions(suggestions) {
-  const recommendation = suggestions.find((suggestion) => suggestion.recommended)
-  const optional = suggestions.find((suggestion) => suggestion.stance === 'optional' && suggestion !== recommendation)
-  const middle = suggestions.filter((suggestion) => suggestion !== recommendation && suggestion !== optional)
-  return [
-    ...(recommendation ? [recommendation] : []),
-    ...middle,
-    ...(optional ? [optional] : []),
-  ]
-}
-
-/**
- * Rebuild a model from raw tool arguments (compaction fallback). Never throws;
- * returns null when nothing renderable can be recovered.
- */
-function modelFromArgs(rawArguments) {
-  let args = rawArguments
+function buildMeta(raw) {
+  let args = raw
   if (typeof args === 'string') {
     try {
       args = JSON.parse(args)
     } catch {
-      return null
+      args = null
     }
   }
-  if (!isRecord(args)) return null
-  const context = truncate(collapse(asText(args.context)), LIMITS.context)
-  if (context === '') return null
-  if (!Array.isArray(args.suggestions)) return null
-  const suggestions = cleanSuggestions(args.suggestions)
-  if (suggestions.length === 0) return null
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) return { shown: false, note: 'invalid-arguments' }
+
+  const context = clip(text(args.context), LIMITS.context)
+  if (context === '') return { shown: false, note: 'missing-context' }
+
+  const seen = new Set()
+  const suggestions = []
+  for (const item of Array.isArray(args.suggestions) ? args.suggestions : []) {
+    if (item === null || typeof item !== 'object') continue
+    const prompt = clip(text(item.prompt) || text(item.label), LIMITS.prompt)
+    const key = prompt.toLowerCase()
+    if (prompt === '' || seen.has(key)) continue
+    seen.add(key)
+    const label = clip(text(item.label) || prompt, LIMITS.label)
+    suggestions.push(item.danger === true || RISK.test(`${label}\n${prompt}`)
+      ? { label, prompt, danger: true }
+      : { label, prompt })
+    if (suggestions.length === LIMITS.suggestions) break
+  }
+  if (suggestions.length === 0) return { shown: false, note: 'no-usable-suggestions' }
   return { shown: true, context, suggestions }
-}
-
-/** Whether a raw meta is an authoritative record (has a boolean `shown`). */
-function isAuthoritativeMeta(rawMeta) {
-  let meta = rawMeta
-  if (typeof meta === 'string') {
-    try {
-      meta = JSON.parse(meta)
-    } catch {
-      return false
-    }
-  }
-  return isRecord(meta) && typeof meta.shown === 'boolean'
-}
-
-/**
- * Defend-parse the persisted `tool/result.meta` into a display model.
- * A meta that cannot produce a card becomes `{ shown: false, note }`.
- */
-function parseMeta(rawMeta, fallbackNote = '') {
-  let meta = rawMeta
-  if (typeof meta === 'string') {
-    try {
-      meta = JSON.parse(meta)
-    } catch {
-      meta = undefined
-    }
-  }
-  if (!isRecord(meta) || typeof meta.shown !== 'boolean') {
-    return { shown: false, note: asText(fallbackNote) || NOTES.invalidArguments }
-  }
-  if (meta.shown === false) {
-    return { shown: false, note: asText(meta.note) || asText(fallbackNote) || NOTES.noUsableSuggestions }
-  }
-  const context = truncate(collapse(asText(meta.context)), LIMITS.context)
-  const suggestions = Array.isArray(meta.suggestions) ? cleanSuggestions(meta.suggestions) : []
-  if (context === '' || suggestions.length === 0) {
-    return { shown: false, note: asText(meta.note) || NOTES.noUsableSuggestions }
-  }
-  return { shown: true, context, suggestions }
-}
-
-/**
- * Clamp persisted or user-entered settings into the supported shape.
- * Unknown keys are dropped, including the removed client-side `enabled` flag:
- * legacy stored JSON from before the Host gate must still decode cleanly.
- */
-function clampSettings(raw) {
-  const record = isRecord(raw) ? raw : {}
-  const rawCount = record.maxPerTurn
-  const maxPerTurn = rawCount === 'auto'
-    ? 'auto'
-    : Number.isInteger(rawCount)
-      ? Math.min(LIMITS.maxPerTurn, Math.max(1, rawCount))
-      : DEFAULTS.maxPerTurn
-  return { maxPerTurn }
-}
-
-/**
- * Build the card's display model. Returns null when the card must not render.
- * Whether cards exist at all is the Host's call (no tool = no model), so this
- * no longer takes a client-side enabled gate.
- */
-function buildDisplay(model, settings) {
-  if (!isRecord(model) || model.shown !== true) return null
-  if (!Array.isArray(model.suggestions) || model.suggestions.length === 0) return null
-  const resolved = clampSettings(settings)
-  const limit = resolved.maxPerTurn === 'auto' ? model.suggestions.length : resolved.maxPerTurn
-  const items = model.suggestions.slice(0, limit)
-  return {
-    context: model.context,
-    items,
-    moreCount: Math.max(0, model.suggestions.length - items.length),
-    totalCount: model.suggestions.length,
-    autoCount: resolved.maxPerTurn === 'auto',
-  }
-}
-
-/**
- * Decide what a click does. `appliedPrompt` is the last text this card filled
- * and the user has not edited it yet, so another click may replace it silently.
- * @returns {{ kind: 'fill' } | { kind: 'conflict' }}
- */
-function resolveDraftAction({ draft, appliedPrompt }) {
-  const current = asText(draft)
-  if (current.trim() === '') return { kind: 'fill' }
-  if (asText(appliedPrompt) !== '' && current === appliedPrompt) return { kind: 'fill' }
-  return { kind: 'conflict' }
-}
-
-/**
- * Merge a conflict choice into the draft. `null` means "leave the draft alone".
- * @param {{ mode: 'replace'|'append'|'cancel', draft: string, prompt: string }} input
- * @returns {string | null}
- */
-function mergeDraft({ mode, draft, prompt }) {
-  if (mode === 'replace') return asText(prompt)
-  if (mode === 'append') {
-    const base = asText(draft).trimEnd()
-    return base === '' ? asText(prompt) : `${base}\n\n${asText(prompt)}`
-  }
-  return null
-}
-
-// ---------------------------------------------------------------------------
-// Storage
-// ---------------------------------------------------------------------------
-
-const storageKeys = Object.freeze({
-  prefix: STORAGE_PREFIX,
-  settings: `${STORAGE_PREFIX}settings`,
-  stats: `${STORAGE_PREFIX}stats`,
-  turn: (sessionId, turn) => `${STORAGE_PREFIX}turn:${asText(sessionId)}:${String(turn)}`,
-})
-
-function decodeSettings(rawStored) {
-  let value = rawStored
-  if (typeof value === 'string') {
-    try {
-      value = JSON.parse(value)
-    } catch {
-      value = undefined
-    }
-  }
-  return clampSettings(value)
-}
-
-function serializeSettings(settings) {
-  return JSON.stringify(clampSettings(settings))
-}
-
-function decodeTurnState(rawStored) {
-  let value = rawStored
-  if (typeof value === 'string') {
-    try {
-      value = JSON.parse(value)
-    } catch {
-      value = undefined
-    }
-  }
-  const record = isRecord(value) ? value : {}
-  return {
-    dismissed: record.dismissed === true,
-    filledId: typeof record.filledId === 'string' && record.filledId !== '' ? record.filledId : null,
-  }
-}
-
-function serializeTurnState(state) {
-  const record = isRecord(state) ? state : {}
-  const filledId = typeof record.filledId === 'string' && record.filledId !== '' ? record.filledId : null
-  return JSON.stringify({
-    dismissed: record.dismissed === true,
-    ...(filledId === null ? {} : { filledId }),
-  })
-}
-
-/**
- * The status line the card should show, or null for no status.
- *
- * Priority: dismissed > conflict > filled/danger. `activeFill` must come from
- * {@link deriveActiveFill}: a persisted id or a click that the user has since
- * edited must not keep claiming "filled".
- * @param {{ dismissed?: boolean, conflict?: boolean,
- *   activeFill?: { danger?: boolean }|null }} state
- * @returns {string | null} locale key
- */
-function cardStatusKey(state = {}) {
-  if (state.dismissed === true) return 'status.dismissed'
-  if (state.conflict === true) return 'status.conflict'
-  if (isRecord(state.activeFill)) return state.activeFill.danger === true ? 'status.danger' : 'status.filled'
-  return null
-}
-
-/**
- * The suggestion the card filled that is still actually present in the draft.
- *
- * The draft is authoritative. `applied` records the text this card wrote in
- * the current mount; `persistedId` is the localStorage hint restored after a
- * reload. Neither counts unless the draft still equals the written text
- * (`applied`) or the suggestion's own prompt (`persistedId`), so editing,
- * clearing, or a stale restored id never leaves a false "filled" state.
- *
- * @param {{ suggestions?: Array, draft?: string, persistedId?: string|null,
- *   applied?: { id?: string, text?: string, prompt?: string, danger?: boolean }|null }} input
- * @returns {{ id: string, prompt: string, danger: boolean, text: string }|null}
- */
-function deriveActiveFill({ suggestions, draft, persistedId, applied } = {}) {
-  const current = asText(draft)
-  const record = isRecord(applied) ? applied : null
-  if (record !== null && typeof record.text === 'string' && record.text !== '' && record.text === current) {
-    return {
-      id: asText(record.id),
-      prompt: asText(record.prompt),
-      danger: record.danger === true,
-      text: current,
-    }
-  }
-  if (typeof persistedId !== 'string' || persistedId === '') return null
-  const list = Array.isArray(suggestions) ? suggestions : []
-  const persisted = list.find((item) => isRecord(item) && item.id === persistedId)
-  if (persisted === undefined || current === '' || current !== persisted.prompt) return null
-  return {
-    id: asText(persisted.id),
-    prompt: asText(persisted.prompt),
-    danger: persisted.danger === true,
-    text: current,
-  }
-}
-
-/**
- * Derive everything the card renders that depends on mutable UI state, so the
- * state combinations can be tested without React. `filledId` is null unless
- * the draft really contains the fill; `statusKey` obeys the documented
- * priority.
- * @param {object} input
- * @returns {{ activeFill: object|null, filledId: string|null, statusKey: string|null }}
- */
-function deriveCardView({
-  suggestions,
-  draft,
-  persistedId,
-  applied,
-  conflict = false,
-  dismissed = false,
-  canWrite = true,
-} = {}) {
-  const list = Array.isArray(suggestions) ? suggestions : []
-  const activeFill = deriveActiveFill({ suggestions: list, draft, persistedId, applied })
-  return {
-    activeFill,
-    filledId: activeFill === null ? null : activeFill.id,
-    statusKey: canWrite === false
-      ? 'status.unavailable'
-      : cardStatusKey({ dismissed, conflict, activeFill }),
-  }
-}
-
-/**
- * The one inline state marker a chip may show. Danger wins over the filled
- * confirmation, which wins over the recommendation, so a chip never stacks
- * tag pills; `null` means the chip carries no marker.
- * @param {{ suggestion?: object, filledId?: string|null }} input
- * @returns {'danger'|'filled'|'recommended'|null}
- */
-function deriveChipMarker({ suggestion, filledId } = {}) {
-  if (!isRecord(suggestion)) return null
-  if (suggestion.danger === true) return 'danger'
-  if (typeof filledId === 'string' && filledId !== '' && suggestion.id === filledId) return 'filled'
-  if (suggestion.recommended === true) return 'recommended'
-  return null
-}
-
-/**
- * Which control block the card renders: suggestions, the conflict prompt, or
- * nothing (dismissed cards keep the card but lose their controls/footer).
- * @param {{ dismissed?: boolean, conflict?: boolean }} state
- * @returns {'suggestions'|'conflict'|'hidden'}
- */
-function cardControlMode(state = {}) {
-  if (state.dismissed === true) return 'hidden'
-  if (state.conflict === true) return 'conflict'
-  return 'suggestions'
-}
-
-// ---------------------------------------------------------------------------
-// Storage helpers (tolerate unavailable storage; return defaults)
-// ---------------------------------------------------------------------------
-
-/** @param {{ getItem(key: string): string | null }} storage */
-function readSettingsFrom(storage) {
-  try {
-    return decodeSettings(storage.getItem(storageKeys.settings))
-  } catch {
-    return decodeSettings(undefined)
-  }
-}
-
-/** @param {{ setItem(key: string, value: string): void }} storage */
-function writeSettingsTo(storage, settings) {
-  try {
-    storage.setItem(storageKeys.settings, serializeSettings(settings))
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** Whether a localStorage key belongs to one turn's card state. */
-function isTurnStateKey(key) {
-  return typeof key === 'string' && key.startsWith('dsh-next-actions:v1:turn:')
-}
-
-/**
- * Remove every persisted card state (used by the settings page reset action).
- * @param {{ length: number, key(index: number): string | null, removeItem(key: string): void }} storage
- * @returns {number} number of removed entries
- */
-function clearTurnStates(storage) {
-  const keys = []
-  try {
-    for (let index = 0; index < storage.length; index += 1) {
-      const key = storage.key(index)
-      if (isTurnStateKey(key)) keys.push(key)
-    }
-    for (const key of keys) storage.removeItem(key)
-  } catch {
-    return 0
-  }
-  return keys.length
-}
-
-// ---------------------------------------------------------------------------
-// Live mount reveal (turn-tail insertion animation)
-// ---------------------------------------------------------------------------
-
-/**
- * DSH 0.2.2's default collapse timing is "on completion": `turn/end` mounts the
- * completed-turn footer (this card's turn-tail row) in the same React commit
- * that instantly folds the turn's work rows, then lands the reader through its
- * instant-fold compensation. Inserting the card's full height in that one frame
- * shifts the just-read answer up by the card height under a reader following
- * the bottom. Revealing the card over a short height/opacity transition lets
- * the transcript's scroll layer consume the growth frame by frame instead of in
- * one jump.
- */
-const CARD_REVEAL = Object.freeze({
-  // Short enough to feel immediate, long enough for the scrollport to follow
-  // several frames instead of one.
-  durationMs: 180,
-  // The opacity sweep finishes slightly earlier than the height so the card is
-  // fully readable while its last rows arrive.
-  opacityMs: 140,
-  // Only a card inserted at the live tail (the reader is following the floor)
-  // is worth animating; a card mounted while reading history does not move the
-  // reader (native scroll anchoring keeps the visible content still).
-  maxDistanceFromTail: 96,
-  // A turn that ended long ago was mounted by a chat-window rebuild, a session
-  // reload, or a resync; keep those cards instant.
-  maxTurnAgeMs: 5000,
-})
-
-/**
- * Decide whether a freshly mounted turn-tail card should animate itself in.
- * Pure so the policy can be unit-tested without a DOM.
- * @param {object} input - `{ reducedMotion, distanceFromTail, turnAgeMs }`.
- * @returns {boolean} whether to run the reveal transition.
- */
-function shouldRevealCard(input) {
-  if (!isRecord(input)) return false
-  if (input.reducedMotion === true) return false
-  const distance = input.distanceFromTail
-  if (typeof distance !== 'number' || !Number.isFinite(distance)) return false
-  if (distance > CARD_REVEAL.maxDistanceFromTail) return false
-  const age = input.turnAgeMs
-  // Unknown age (missing event time or skewed clock) falls back to the reader
-  // position alone; a future end time can only come from clock skew and is
-  // treated as fresh.
-  if (typeof age === 'number' && Number.isFinite(age) && age > CARD_REVEAL.maxTurnAgeMs) return false
-  return true
-}
-
-// ---------------------------------------------------------------------------
-// Process row and localization helpers
-// ---------------------------------------------------------------------------
-
-function textOfContent(content) {
-  if (!Array.isArray(content)) return ''
-  return content
-    .flatMap((item) => (isRecord(item) && item.type === 'text' ? [asText(item.text)] : []))
-    .join('\n')
-}
-
-/**
- * Process-row state. Mirrors the official ProposeRow state machine and extends
- * it to a successful call whose meta says no card was shown.
- * @returns {'preparing'|'running'|'ok'|'error'|'stopped'}
- */
-function deriveProcessState({ phase, isError, errorCode, meta } = {}) {
-  if (phase === 'preparing') return 'preparing'
-  if (phase === 'start') return 'running'
-  if (errorCode === 'interrupted') return 'stopped'
-  if (isError === true) return 'error'
-  const parsed = parseMeta(meta)
-  if (parsed.shown === false) return 'error'
-  return 'ok'
-}
-
-/** Expansion reason: only failed or not-shown calls have one. */
-function processReason({ phase, isError, errorCode, meta, content, note } = {}) {
-  if (phase !== 'result') return ''
-  if (errorCode === 'interrupted') return asText(note) || 'interrupted'
-  if (isError === true) return textOfContent(content)
-  const parsed = parseMeta(meta)
-  return parsed.shown === false ? asText(parsed.note) : ''
-}
-
-const NOTE_LOCALE_KEYS = Object.freeze({
-  [NOTES.invalidArguments]: 'note.invalidArguments',
-  [NOTES.missingContext]: 'note.missingContext',
-  [NOTES.noUsableSuggestions]: 'note.noUsableSuggestions',
-})
-
-function noteToLocaleKey(note) {
-  return NOTE_LOCALE_KEYS[asText(note)] ?? null
 }
 
     /**
- * Card CSS for the browser half (M3).
- *
- * Values are copied from the official action card and its primitives in DSH
- * 0.2.2-rc.1 (design/next-step-suggestions-tech.md appendix A/B). Classes are
- * renamed under the `dshns-` prefix and only theme tokens are referenced, per
- * the official external-plugin guidance. Additions for our own controls
- * (controls row, inline markers, compact conflict row, measured clamps) reuse
- * the same tokens and spacing scale. M9 adds the reveal wrapper: the script
- * owns the height/opacity transition, the stylesheet only guarantees
- * reduced-motion safety.
- *
- * Accessibility contract (2026-11-10 polish round):
- *   - every clickable control inside the card targets >=32px height;
- *   - text is never styled with a token below WCAG AA 4.5:1 on its own
- *     surface in either theme (label-tertiary and link are therefore not used
- *     for peek/label/toggle text);
- *   - the warning icon mixes amber toward label-primary so the 12px glyph
- *     clears the 3:1 non-text threshold on light cards while keeping its hue;
- *   - the expanded conflict compare caps its scrollable lines at 240px and the
- *     toggle stays outside that scroll region;
- *   - keyboard focus follows the DSH focus.css contract (`:focus-visible` ring
- *     from --dsw-focus-ring-width/--dsw-focus-ring-color, outside the control),
- *     including the focusable conflict scroll region.
+ * Card and process-row CSS. Frame values follow the official DSH action card
+ * and propose_action row; classes use the `dshns-` prefix and only theme tokens.
  */
 const STYLES = `
+.dshns-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin: 16px 0;
+  animation: dshns-reveal .22s cubic-bezier(.4, 0, .2, 1) both;
+}
+.dshns-reveal > * { min-height: 0; }
+@keyframes dshns-reveal { from { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .dshns-reveal { animation: none; } }
 .dshns-card {
+  overflow: hidden;
+  padding: 14px 20px 16px;
   border: .5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-layer-1);
-  font-family: var(--dsw-font-family);
   color: var(--dsw-alias-label-primary);
-  margin: 16px 0;
-  overflow: hidden;
+  font-family: var(--dsw-font-family);
 }
-/* M9: live mount reveal wrapper (see CARD_REVEAL / shouldRevealCard). The
- * script owns the max-height/opacity transition and hides overflow only while
- * it runs, so the settled card clips nothing. */
-.dshns-reveal { min-width: 0; }
-.dshns-reveal[data-revealing] { will-change: max-height, opacity; }
-@media (prefers-reduced-motion: reduce) {
-  .dshns-reveal { transition: none !important; }
-  .dshns-reveal[data-revealing] { max-height: none !important; opacity: 1 !important; overflow: visible !important; }
-}
-.dshns-body { padding: 14px 20px 18px; }
-.dshns-text {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  color: var(--dsw-alias-label-secondary);
+.dshns-context {
   margin: 0;
+  color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 1.6;
-}
-.dshns-mark {
-  display: inline-block;
-  vertical-align: -3px;
-  margin-right: 6px;
-}
-/* Folded context: two-line clamp; the toggle is rendered only on measured overflow. */
-.dshns-text-clamped {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-.dshns-toggle {
-  height: auto;
-  min-height: 32px;
-  margin: 8px 0 0;
-  padding-inline: 0;
-  font-size: 12px;
-}
-.dshns-statusbar {
-  justify-content: flex-end;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-  min-height: 32px;
-  display: flex;
-}
-.dshns-status {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--dsw-alias-label-secondary);
-  margin: 0 auto 0 0;
-  font-size: 12px;
-  line-height: 1.6;
-}
-/* Peek keeps the resting status color: label-tertiary missed AA at 12px in the
- * light theme (3.71:1). The "将填入" prefix, not a lighter gray, marks it as
- * transient. */
-.dshns-status-peek { color: var(--dsw-alias-label-secondary); }
-.dshns-btn.dshns-dismiss,
-.dshns-btn.dshns-restore {
-  flex: none;
-  width: auto;
-  min-width: 0;
-  height: 32px;
-  padding: 0 8px;
-  gap: 4px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
-}
-.dshns-btn.dshns-dismiss:hover:not(:disabled),
-.dshns-btn.dshns-restore:hover:not(:disabled) {
-  color: var(--dsw-alias-label-primary);
-}
-.dshns-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-.dshns-chip { max-width: 100%; text-align: left; }
-.dshns-chip-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* One inline state marker per chip; text first, color is never the only cue. */
-.dshns-marker {
-  flex: none;
-  margin-left: 2px;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 18px;
-  white-space: nowrap;
-}
-.dshns-btn-primary .dshns-marker { color: inherit; opacity: .78; }
-.dshns-marker-danger { display: inline-flex; align-items: center; gap: 3px; }
-/* Amber-600 alone is 2.79:1 on the white card; mixing it 65/35 toward
- * label-primary yields 5.43:1 (light) / 8.06:1 (dark) while still reading as
- * warning amber. On a primary chip the marker inherits the button foreground,
- * which already has AA contrast in both themes. */
-.dshns-warn {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary));
-}
-.dshns-btn-primary .dshns-warn { color: inherit; }
-/* Conflict prompt: keep the target instruction and the current draft visible,
- * then offer an append-first decision row. */
-.dshns-conflict {
-  margin-top: 12px;
-}
-.dshns-conflict-compare {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-2, transparent));
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-}
-/* The expandable lines live in their own wrapper so the expanded state can cap
- * its height and scroll without scrolling the toggle out of reach. Collapsed it
- * is a plain stack and adds no visible box. */
-.dshns-conflict-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.dshns-conflict-compare[data-expanded] .dshns-conflict-lines {
-  max-height: 240px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.dshns-conflict-line {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  margin: 0;
-}
-/* Labels carry meaning, so they use the same AA-safe secondary as the text
- * (label-tertiary was 3.42:1 on the light module surface). */
-.dshns-conflict-label {
-  flex: none;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 1.6;
-  white-space: nowrap;
-}
-.dshns-conflict-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dshns-conflict-compare[data-expanded] .dshns-conflict-text {
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
-  overflow: visible;
-  text-overflow: clip;
 }
-/* The toggle stays outside the capped scroll region. Link blue missed AA on the
- * light module surface (3.91:1); secondary + underline keeps the link cue and
- * reaches 5.36:1. */
-.dshns-btn.dshns-conflict-toggle {
-  align-self: flex-end;
-  height: 32px;
-  padding: 0;
-  border-radius: 0;
-  background: none;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.dshns-btn.dshns-conflict-toggle:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
-/* Conflict keeps the status text and the three actions on one row so the
- * state stays within the 25px height budget over a resting card. */
-.dshns-statusbar-conflict {
-  margin-top: 8px;
-  flex-wrap: wrap;
-  row-gap: 8px;
-}
-.dshns-btn {
+.dshns-mark { display: inline-block; vertical-align: -3px; margin-right: 6px; }
+.dshns-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.dshns-chip {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  border: none;
-  border-radius: var(--dsw-radius-md);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 22px;
-  color: var(--dsw-alias-label-primary);
-  background: transparent;
-  padding: 0 14px;
-}
-.dshns-btn:disabled { cursor: not-allowed; opacity: .4; }
-.dshns-btn-sm {
-  height: 32px;
-  font-size: 12px;
-  line-height: 18px;
-  padding: 0 10px;
-  border-radius: var(--dsw-radius-sm);
-}
-.dshns-btn-primary {
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-foreground);
-}
-.dshns-btn-primary:hover:not(:disabled) { background: var(--dsw-alias-button-primary-hover); }
-.dshns-btn-ghost:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
-.dshns-btn-ghost:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active); }
-.dshns-btn-icon {
-  display: inline-flex;
-  width: 16px;
-  height: 16px;
-  align-items: center;
-  justify-content: center;
-}
-/* Keyboard focus: mirror the DSH focus.css contract (2px ring color from
- * --dsw-focus-ring-color, falling back to the business blue; the theme makes the
- * variable transparent in pointer modality, so clicks paint no ring). The ring
- * sits outside the 32px control on the card surface, which keeps it >=3:1 in
- * both themes instead of landing on a light primary-chip fill in dark mode. */
-.dshns-btn:focus-visible,
-.dshns-segmented-tab:focus-visible,
-.dshns-conflict-lines:focus-visible {
-  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
-  outline-offset: 2px;
-}
-.dshns-conflict-lines:focus-visible { border-radius: var(--dsw-radius-sm); }
-
-/* TextShimmer: copied from the official primitive (dshns- renames, tokens only). */
-.dshns-shimmer {
-  position: relative;
-  display: inline-grid;
-  width: max-content;
   max-width: 100%;
-  min-width: 0;
-  vertical-align: top;
-  color: inherit;
-}
-.dshns-shimmer-content { display: flex; align-items: center; min-width: 0; }
-.dshns-shimmer-text { color: inherit; }
-.dshns-shimmer-text[data-shimmer-text]:after { content: attr(data-shimmer-text); }
-.dshns-shimmer-decoration {
-  position: absolute;
-  inset: 0;
-  overflow: clip;
-  pointer-events: none;
-  user-select: none;
-}
-.dshns-shimmer-sweep {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  color: var(--dsw-alias-label-shimmer);
-  mask-image: linear-gradient(105deg, transparent 0%, black 40% 60%, transparent 100%);
-  transform: translate(-100%);
-  animation-name: dshns-row-shimmer-sweep;
-}
-.dshns-shimmer-sweep * { color: inherit !important; }
-.dshns-shimmer-sweep [data-shimmer-decoration] { background: currentColor; }
-.dshns-shimmer-highlight {
-  width: 100%;
-  height: 100%;
-  transform: translate(100%);
-  animation-name: dshns-row-shimmer-highlight;
-}
-.dshns-shimmer-sweep,
-.dshns-shimmer-highlight {
-  animation-duration: 1.5s;
-  animation-delay: .3s;
-  animation-timing-function: steps(48, end);
-  animation-iteration-count: infinite;
-}
-@keyframes dshns-row-shimmer-sweep {
-  0% { transform: translate(-100%); }
-  66.6667%, to { transform: translate(100%); }
-}
-@keyframes dshns-row-shimmer-highlight {
-  0% { transform: translate(100%); }
-  66.6667%, to { transform: translate(-100%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dshns-shimmer-decoration { display: none; }
-  .dshns-shimmer-sweep,
-  .dshns-shimmer-highlight { animation: none; }
-}
-
-/* Settings section (copied SegmentedControl styles + row layout). */
-.dshns-settings {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-  padding: 8px 20px 24px;
-  color: var(--dsw-alias-label-primary);
-  font-size: 14px;
-  line-height: 1.6;
-}
-.dshns-settings-heading {
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.5;
-  margin: 8px 0 12px;
-}
-.dshns-setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 44px;
-  padding: 8px 0;
-  border-top: .5px solid var(--dsw-alias-border-l3);
-}
-.dshns-setting-label { min-width: 0; color: var(--dsw-alias-label-primary); }
-.dshns-setting-note {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-  margin: 8px 0 0;
-}
-.dshns-settings-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-.dshns-settings-status {
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.dshns-segmented {
-  position: relative;
-  display: inline-grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 2px;
-  padding: 4px;
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-.dshns-segmented-indicator {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: calc((100% - 8px - 2px * (var(--dsh-segment-count) - 1)) / var(--dsh-segment-count));
-  height: calc(100% - 8px);
-  border: 0;
-  border-radius: var(--dsw-radius-sm);
-  background: var(--dsw-alias-bg-layer-1);
-  box-shadow: var(--dsw-elevation-soft);
-  transform: translate(calc(var(--dsh-segment-index) * (100% + 2px)));
-  transition: transform .16s ease;
-  pointer-events: none;
-}
-.dshns-segmented-tab {
-  box-sizing: border-box;
-  position: relative;
-  z-index: 1;
   height: 32px;
-  padding: 0 10px;
-  border: 0;
+  padding: 0 12px;
+  border: .5px solid var(--dsw-alias-border-l3);
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 13px;
   line-height: 20px;
-  font-weight: 500;
-  white-space: nowrap;
   cursor: pointer;
-  transition: color .12s ease;
 }
-.dshns-segmented-tab[aria-selected=true] { color: var(--dsw-alias-label-primary); }
-.dshns-segmented-tab:hover:not(:disabled) { color: var(--dsw-alias-label-primary); }
-.dshns-segmented-tab:disabled { cursor: default; opacity: .4; }
-
-/* Process row: copied from the official action-card DisclosureRow/ProposeRow. */
-.dshns-disc-root { display: flex; flex-direction: column; width: 100%; min-width: 0; }
-.dshns-disc-header { display: flex; align-items: center; min-width: 0; }
-.dshns-disc-header[data-has-accessory] { gap: 8px; }
-.dshns-disc-header[data-has-accessory] .dshns-disc-row { flex: 0 1 auto; }
-.dshns-disc-row {
-  flex: 1 1 auto;
-  position: relative;
-  overflow: hidden;
+.dshns-chip:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dshns-chip:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active); }
+.dshns-chip:disabled { cursor: not-allowed; opacity: .4; }
+.dshns-chip:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+.dshns-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dshns-warn { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary)); }
+.dshns-row {
   display: flex;
   align-items: center;
+  gap: 6px;
+  min-width: 0;
   height: calc(24px + var(--dsh-content-font-delta, 0px));
-  min-width: 0;
   color: var(--dsw-alias-label-tertiary);
-  transition: color .1s ease;
 }
-.dshns-disc-row[data-expandable] { cursor: pointer; }
-.dshns-disc-row:hover { color: var(--dsw-alias-label-secondary); }
-.dshns-disc-leading {
-  position: relative;
-  flex: none;
-  width: calc(16px + var(--dsh-content-font-delta, 0px));
-  height: calc(16px + var(--dsh-content-font-delta, 0px));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 6px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: inherit;
-}
-.dshns-disc-leading svg:not([data-state]) {
-  width: calc(14px + var(--dsh-content-font-delta, 0px));
-  height: calc(14px + var(--dsh-content-font-delta, 0px));
-}
-button.dshns-disc-leading { cursor: pointer; }
-.dshns-disc-iconIdle { display: inline-flex; opacity: 1; transition: opacity .1s ease; }
-.dshns-disc-chevronHover { position: absolute; inset: 0; margin: auto; opacity: 0; transition: opacity .1s ease; }
-.dshns-disc-row:hover .dshns-disc-iconIdle { opacity: 0; }
-.dshns-disc-row:hover .dshns-disc-chevronHover { opacity: 1; }
-.dshns-disc-content { display: flex; align-items: center; min-width: 0; }
-.dshns-disc-title {
-  flex: none;
-  font-size: var(--dsh-content-font-size-secondary, 13px);
-  line-height: calc(24px + var(--dsh-content-font-delta, 0px));
-  color: inherit;
-}
-.dshns-row-summary {
-  min-width: 0;
-  color: inherit;
-  align-items: center;
-  gap: 8px;
-  margin-left: 8px;
-  font-size: 12px;
-  display: flex;
-}
-.dshns-row-summary > :first-child { flex-shrink: 0; }
-.dshns-row-title { text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
-.dshns-row-reason {
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 8px 0;
-  padding: 12px;
-  font-size: 12px;
-}
-.dshns-row-inspect {
-  color: var(--dsw-alias-link);
-  font: inherit;
-  cursor: pointer;
-  background: 0 0;
-  border: none;
-  align-self: flex-start;
-  padding: 4px 0;
-  font-size: 12px;
-}
+.dshns-row > svg { flex: none; }
+.dshns-row-title { flex: none; font-size: var(--dsh-content-font-size-secondary, 13px); }
+.dshns-row-summary { min-width: 0; margin-left: 2px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 `
 
     const PKG = '@local/dsh-next-actions'
     const NS = 'nextSteps'
     const TOOL_NAME = 'suggest_next_steps'
-    const DEFINITION_KEY = 'next-steps'
-    const CARD_ORDER = -10
-
-    // Controls that exist in only one card state, addressed by data attribute
-    // because the shared Button is a plain function component (React 18) and
-    // cannot forward refs. Focus returns to these after dismiss/restore,
-    // more/collapse, and when a conflict opens or is cancelled.
-    const FOCUS_TARGETS = Object.freeze({
-      conflictPrimary: '[data-conflict-primary]',
-      dismiss: '[data-card-dismiss]',
-      restore: '[data-card-restore]',
-      more: '[data-card-more]',
-      collapse: '[data-card-collapse]',
-    })
-
-    // -----------------------------------------------------------------------
-    // Locale dictionaries (official frame copy + this plugin's keys)
-    // -----------------------------------------------------------------------
+    const RUN_CODE = 'run_code'
+    const KEY = 'next-steps'
 
     const EN = Object.freeze({
       'card.title': 'Suggested next steps',
-      'card.expand': 'Show more',
-      'card.collapse': 'Show less',
-      'card.dismiss': 'Not now',
-      'card.restore': 'Restore suggestions',
-      'card.more': 'More ({n})',
-      'chip.recommended': 'Recommended',
       'chip.danger': 'Needs confirmation',
-      'chip.filled': 'Filled',
-      'status.filled': 'Filled into the input — review and send',
-      'status.danger': 'This may be irreversible — review before sending',
-      'status.dismissed': 'Dismissed',
-      'status.conflict': 'The input already has content',
-      'status.unavailable': 'The composer is unavailable',
-      'preview.label': 'Will fill',
-      'conflict.compareTarget': 'Will fill',
-      'conflict.compareDraft': 'Current draft',
-      'conflict.appendPrimary': 'Append to draft',
-      'conflict.replace': 'Replace',
-      'conflict.cancel': 'Cancel',
-      'conflict.expand': 'Expand full text',
-      'conflict.collapse': 'Collapse full text',
-      'conflict.scrollRegion': 'Target instruction and current draft',
-      'fallback.context': 'Here are a few natural next steps.',
-      'note.invalidArguments': 'The tool arguments were invalid',
-      'note.missingContext': 'No context was provided',
-      'note.noUsableSuggestions': 'No usable suggestions were produced',
-      'note.interrupted': 'The call was interrupted',
-      'row.title': 'Suggested next steps',
-      'row.preparing': 'Preparing suggestions',
-      'row.running': 'Writing suggestions',
-      'row.ok': 'Suggested',
+      'row.title': 'Next steps',
+      'row.running': 'Writing',
+      'row.ok': 'Shown',
       'row.error': 'Not shown',
-      'row.stopped': 'Interrupted',
-      'row.inspect': 'Inspect call',
-      'settings.title': 'Next steps',
-      'settings.hostGate': 'Cards are controlled by the plugin Host config (profile cordis.patch.yml → dsh-next-actions → enabled). Turning it off removes the tool and the prompt guidance.',
-      'settings.maxPerTurn': 'Suggestions per reply',
-      'settings.auto': 'Auto',
-      'settings.note': 'Clicking a suggestion only fills the input; nothing is sent automatically. Dangerous suggestions are marked “Needs confirmation”.',
-      'settings.reset': 'Reset card states',
-      'settings.saved': 'Saved',
-      'settings.resetDone': 'Card states cleared',
-      'settings.resetEmpty': 'Nothing to clear',
-      'settings.storageUnavailable': 'Could not save in this browser',
     })
-
     const ZH = Object.freeze({
       'card.title': '下一步建议',
-      'card.expand': '展开',
-      'card.collapse': '收起',
-      'card.dismiss': '暂不需要',
-      'card.restore': '恢复建议',
-      'card.more': '还有 {n} 条',
-      'chip.recommended': '推荐',
       'chip.danger': '需确认',
-      'chip.filled': '已填入',
-      'status.filled': '已填入输入框，可修改后发送',
-      'status.danger': '该操作可能不可逆，请确认后发送',
-      'status.dismissed': '已忽略',
-      'status.conflict': '输入框已有内容',
-      'status.unavailable': '输入框暂不可用',
-      'preview.label': '将填入',
-      'conflict.compareTarget': '将填入',
-      'conflict.compareDraft': '当前草稿',
-      'conflict.appendPrimary': '追加到末尾',
-      'conflict.replace': '替换',
-      'conflict.cancel': '取消',
-      'conflict.expand': '展开全文',
-      'conflict.collapse': '收起全文',
-      'conflict.scrollRegion': '目标指令与当前草稿',
-      'fallback.context': '接下来可以：',
-      'note.invalidArguments': '工具参数无效',
-      'note.missingContext': '缺少上下文说明',
-      'note.noUsableSuggestions': '没有可用的建议',
-      'note.interrupted': '调用已中断',
       'row.title': '下一步建议',
-      'row.preparing': '正在准备建议',
-      'row.running': '正在生成建议',
+      'row.running': '正在生成',
       'row.ok': '已生成',
       'row.error': '未显示',
-      'row.stopped': '已中断',
-      'row.inspect': '查看调用',
-      'settings.title': '下一步建议',
-      'settings.hostGate': '卡片总开关已移到插件的 Host 配置（profile 的 cordis.patch.yml → dsh-next-actions → enabled）；关闭后不再注册工具与提示词。',
-      'settings.maxPerTurn': '每轮建议条数',
-      'settings.auto': '自动',
-      'settings.note': '点击建议只会填入输入框，不会自动发送；危险建议会标记「需确认」。',
-      'settings.reset': '重置卡片状态',
-      'settings.saved': '已保存',
-      'settings.resetDone': '卡片状态已清理',
-      'settings.resetEmpty': '没有可清理的状态',
-      'settings.storageUnavailable': '当前浏览器无法保存',
     })
 
     // -----------------------------------------------------------------------
-    // Client helpers
+    // Data: fold this tool's events into turn data
     // -----------------------------------------------------------------------
+
+    /** A persisted meta with a boolean `shown` is authoritative; otherwise use the arguments. */
+    function modelOf(meta, args) {
+      const source = meta !== null && typeof meta === 'object' && typeof meta.shown === 'boolean'
+        ? (meta.shown ? meta : null)
+        : args
+      if (source === null || source === undefined) return null
+      const model = buildMeta(source)
+      return model.shown ? model : null
+    }
+
+    /** run_code callId → turn; PTC dispatch records carry no turn themselves. */
+    const runCodeTurns = new Map()
+    const ptcTurn = (data) => runCodeTurns.get(data.rootCallId ?? data.parentCallId)
+    const turnId = (turn) => (Number.isSafeInteger(turn) && turn >= 0 ? String(turn) : null)
+    const route = (turn, role) => {
+      const id = turnId(turn)
+      return id === null ? null : { id, role }
+    }
+
+    function matchTurn(match) {
+      const location = match.location
+      const turn = location?.kind === 'turn' || location?.kind === 'step' ? location.turn?.turn : undefined
+      return Number.isSafeInteger(turn) ? turn : match.event?.data?.turn
+    }
+
+    const definition = {
+      kind: KEY,
+      match(event) {
+        const data = event.data
+        switch (event.type) {
+          case 'turn/start':
+            return route(data.turn, 'start')
+          case 'tool/call':
+            if (data.name === RUN_CODE && typeof data.callId === 'string' && turnId(data.turn) !== null) {
+              if (runCodeTurns.size >= 1024) runCodeTurns.delete(runCodeTurns.keys().next().value)
+              runCodeTurns.set(data.callId, data.turn)
+            }
+            return data.name === TOOL_NAME ? route(data.turn, 'update') : null
+          case 'tool/result':
+            // Replacement copies of a result must not re-publish the card.
+            return event.surfaceOp === 'append' ? route(data.turn, 'update') : null
+          case 'tool/ptc-dispatch-start':
+            return data.name === TOOL_NAME ? route(ptcTurn(data), 'start') : null
+          case 'tool/ptc-dispatch':
+            return data.name === TOOL_NAME ? route(ptcTurn(data), 'update') : null
+          default:
+            return null
+        }
+      },
+      start(context, match) {
+        const state = { turn: matchTurn(match), args: new Map(), model: null }
+        return match.event.type === 'turn/start' ? state : definition.update({ state }, match)
+      },
+      update({ state }, { event }) {
+        const data = event.data
+        if (event.type === 'tool/call' && data.name === TOOL_NAME) {
+          return { ...state, args: new Map(state.args).set(String(data.callId), data.arguments) }
+        }
+        let model = null
+        if (event.type === 'tool/result' && event.surfaceOp === 'append') {
+          const message = data.message
+          if (message === undefined || message.isError === true) return state
+          const callId = String(message.source?.callId ?? message.toolCallId ?? '')
+          if (!state.args.has(callId)) return state
+          model = modelOf(data.meta, state.args.get(callId))
+        } else if (event.type === 'tool/ptc-dispatch' && data.isError !== true) {
+          model = modelOf(data.meta, data.arguments)
+        }
+        return model === null ? state : { ...state, model }
+      },
+      buildLocationData({ state }, scope, previous) {
+        if (scope !== 'turn' || state?.model == null || turnId(state.turn) === null) return null
+        if (previous?.key === KEY && previous.turn === state.turn && previous.value.model === state.model) return previous
+        return { kind: 'turn', turn: state.turn, key: KEY, value: { model: state.model } }
+      },
+    }
+
+    // -----------------------------------------------------------------------
+    // Card
+    // -----------------------------------------------------------------------
+
+    /** Empty drafts and drafts the card wrote itself are replaced; anything else gets the step added. */
+    function fillMode(draft, owned) {
+      return draft.trim() === '' || draft === owned ? 'replace' : 'insert'
+    }
 
     let sharedCtx = null
 
-    function injectStyles(css) {
-      const element = document.createElement('style')
-      element.dataset.plugin = PKG
-      element.dataset.pluginCss = `${PKG}/client.css`
-      element.textContent = css
-      document.head.appendChild(element)
-      return element
-    }
-
-    function readSettings() {
-      return readSettingsFrom(window.localStorage)
-    }
-
-    function readTurnState(sessionId, turn) {
-      try {
-        return decodeTurnState(window.localStorage.getItem(storageKeys.turn(sessionId, turn)))
-      } catch {
-        return decodeTurnState(undefined)
+    function fill(actions, draft, owned, prompt, sessionId) {
+      let next = prompt
+      if (fillMode(draft, owned) === 'insert') {
+        next = null
+        try {
+          // One editor edit at the caret: keeps @ references, undoable with ⌘Z.
+          if (actions.insertText(`\n\n${prompt}`, actions.captureInsertion()) !== true) next = `${draft.trimEnd()}\n\n${prompt}`
+        } catch {
+          next = `${draft.trimEnd()}\n\n${prompt}`
+        }
       }
-    }
-
-    function writeTurnState(sessionId, turn, state) {
-      try {
-        window.localStorage.setItem(storageKeys.turn(sessionId, turn), serializeTurnState(state))
-      } catch {
-        // Storage can be unavailable (privacy mode, quota); the card still works.
-      }
-    }
-
-    /** Focus the composer through the conversation service when it is available. */
-    function focusComposer(sessionId) {
+      if (next !== null) actions.setDraft(next)
       try {
         sharedCtx?.get?.('conversation')?.input?.shell?.(sessionId)?.focus?.()
       } catch {
-        // Focusing is optional; the draft is already filled.
+        // Focus is a convenience; the draft is already filled.
       }
+      return next === prompt ? prompt : null
     }
 
-    // -----------------------------------------------------------------------
-    // Live reveal (M9) — see CARD_REVEAL / shouldRevealCard
-    // -----------------------------------------------------------------------
-
-    const REVEAL_EASING = 'cubic-bezier(0.4, 0, 0.2, 1)'
-
-    /**
-     * First-render box of the reveal wrapper: collapsed so DSH's same-commit
-     * instant-fold measurement (which runs after this commit's DOM mutations)
-     * sees no card height. The layout effect below either expands it with the
-     * reveal transition or clears the style before the first paint.
-     * A stable object identity keeps React from rewriting the imperative
-     * transition styles on later re-renders of the same card.
-     */
-    const REVEAL_INITIAL_STYLE = Object.freeze({ overflow: 'hidden', maxHeight: '0px', opacity: 0 })
-
-    /** Nearest transcript scrollport: DSH's shared one, or a scrolling ancestor. */
-    function findCardScrollport(element) {
-      let node = element === null || element === undefined ? null : element.parentElement
-      while (node !== null) {
-        if (node.hasAttribute('data-conversation-scroll')) return node
-        const overflowY = window.getComputedStyle(node).overflowY
-        if (overflowY === 'auto' || overflowY === 'scroll') return node
-        node = node.parentElement
-      }
-      return null
+    function Mark() {
+      return h('svg', { width: 16, height: 16, viewBox: '0 0 36 36', fill: 'none', className: 'dshns-mark', 'aria-hidden': 'true' },
+        h('g', { transform: 'translate(-1.5 0.5)' },
+          h('rect', { x: 5, y: 7.6, width: 21, height: 5.4, rx: 2.7, fill: '#5E9DF5' }),
+          h('rect', { x: 5, y: 15.3, width: 16, height: 5.4, rx: 2.7, fill: '#7AAEFF' }),
+          h('rect', { x: 5, y: 23, width: 11, height: 5.4, rx: 2.7, fill: '#9CC3FF' }),
+          h('path', { d: 'M29.6 6.6C29.88 8.65 31.25 10.02 33.3 10.3C31.25 10.58 29.88 11.95 29.6 14C29.32 11.95 27.95 10.58 25.9 10.3C27.95 10.02 29.32 8.65 29.6 6.6Z', fill: '#41E1AC' })))
     }
 
-    /** Distance from the scrollport floor, or null when it cannot be measured. */
-    function distanceFromTail(scrollport) {
-      if (scrollport === null) return null
-      const distance = scrollport.scrollHeight - scrollport.clientHeight - scrollport.scrollTop
-      return Number.isFinite(distance) ? Math.max(0, distance) : null
+    function WarnIcon() {
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshns-warn', 'aria-hidden': 'true' },
+        h('path', { d: 'M8 1.8 14.6 13.2H1.4L8 1.8Z', stroke: 'currentColor', strokeWidth: 1.2, strokeLinejoin: 'round' }),
+        h('path', { d: 'M8 6v3.4', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
+        h('circle', { cx: 8, cy: 11.4, r: 0.7, fill: 'currentColor' }))
     }
 
-    function prefersReducedMotion() {
-      try {
-        return typeof window.matchMedia === 'function'
-          && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      } catch {
-        return false
-      }
-    }
+    function NextStepsCard({ turn, inputActions, useInput, useChat, useSession, sessionId, t }) {
+      const ownedRef = React.useRef(null)
+      const draft = useInput?.((state) => state?.draft ?? '') ?? ''
+      const latest = useChat?.((snapshot) => snapshot?.timeline?.turnOrder?.at(-1))
+      const subagent = useSession?.((state) => state?.subagent ?? null)
 
-    /** Age of the turn's `turn/end` event in milliseconds, or undefined. */
-    function turnEndAge(turn) {
-      const end = turn === undefined || turn === null ? undefined : turn.end
-      const time = end === undefined || end === null ? undefined : end.time
-      const value = typeof time === 'number' ? time : typeof time === 'string' ? Date.parse(time) : NaN
-      return Number.isFinite(value) ? Date.now() - value : undefined
-    }
+      const model = turn?.end === undefined ? undefined : turn.data?.get(KEY)?.model
+      const closing = turn?.data?.get('turn-tail')?.closing
+      // Suggestions only make sense right after the answer they follow.
+      if (!model || !closing || subagent || (latest !== undefined && latest !== turn.turn)) return null
 
-    /** Remove the reveal transition styles, leaving the card at its natural box. */
-    function clearReveal(wrapper) {
-      if (wrapper === null) return
-      delete wrapper.dataset.revealing
-      wrapper.style.transition = ''
-      wrapper.style.maxHeight = ''
-      wrapper.style.opacity = ''
-      wrapper.style.overflow = ''
-    }
-
-    /** Height the wrapper must reach for the card plus its own vertical margins to fit. */
-    function revealTargetHeight(card) {
-      try {
-        const rect = card.getBoundingClientRect()
-        const computed = window.getComputedStyle(card)
-        const marginTop = Number.parseFloat(computed.marginTop) || 0
-        const marginBottom = Number.parseFloat(computed.marginBottom) || 0
-        const height = rect.height + marginTop + marginBottom
-        return Number.isFinite(height) && height > 0 ? Math.ceil(height) : 0
-      } catch {
-        return 0
-      }
-    }
-
-    // -----------------------------------------------------------------------
-    // Copied primitives (markup + CSS behavior; see official guidance)
-    // -----------------------------------------------------------------------
-
-    function Button({ variant = 'ghost', size = 'md', icon, className, children, ...rest }) {
-      const classes = ['dshns-btn', `dshns-btn-${variant}`, size === 'sm' ? 'dshns-btn-sm' : '', className ?? '']
-        .filter((value) => value !== '')
-        .join(' ')
-      return h('button', { type: 'button', className: classes, ...rest },
-        icon !== undefined && icon !== null ? h('span', { className: 'dshns-btn-icon' }, icon) : null,
-        children)
-    }
-
-    // -----------------------------------------------------------------------
-    // FoldedText — two-line clamp with a measured expand/collapse
-    // -----------------------------------------------------------------------
-
-    /**
-     * Long text is clamped to two lines. The toggle renders only when the
-     * rendered text actually overflows (DOM measurement, not a character
-     * budget), so card-width and font changes cannot leave a dead or missing
-     * affordance. Expanding is always an explicit click: hovering never
-     * changes the card height.
-     */
-    function FoldedText({ text, lead, expandLabel, collapseLabel }) {
-      const id = React.useId()
-      const [expanded, setExpanded] = React.useState(false)
-      const [overflow, setOverflow] = React.useState(false)
-      const textRef = React.useRef(null)
-      React.useLayoutEffect(() => {
-        const element = textRef.current
-        if (element === null || expanded) return undefined
-        const measure = () => {
-          try {
-            setOverflow(element.scrollHeight > element.clientHeight + 1)
-          } catch {
-            setOverflow(false)
-          }
-        }
-        measure()
-        if (typeof ResizeObserver === 'function') {
-          const observer = new ResizeObserver(measure)
-          observer.observe(element)
-          return () => { observer.disconnect() }
-        }
-        return undefined
-      }, [text, expanded])
-      return h(React.Fragment, null,
-        h('p', {
-          id,
-          ref: textRef,
-          className: expanded ? 'dshns-text' : 'dshns-text dshns-text-clamped',
-        }, lead ?? null, text),
-        overflow || expanded
-          ? h(Button, {
-            variant: 'ghost',
-            size: 'sm',
-            className: 'dshns-toggle',
-            'aria-expanded': expanded,
-            'aria-controls': id,
-            onClick: () => { setExpanded((value) => !value) },
-          }, expanded ? collapseLabel : expandLabel)
-          : null)
-    }
-
-    // -----------------------------------------------------------------------
-    // ConflictCompare — target + current draft, expandable on click
-    // -----------------------------------------------------------------------
-
-    /**
-     * The compact conflict decision block. Target prompt and current draft are
-     * each clamped to one line while collapsed; the expand control appears only
-     * when text actually overflows and swapping in/out changes height only
-     * after an explicit click. This keeps the default conflict card compact and
-     * never ties height changes to pointer movement.
-     *
-     * Expanded content can be much taller than the card (a draft is not capped),
-     * so the two lines sit in a region capped at 240px with `overflow-y: auto`;
-     * the toggle stays outside it and the region becomes a focusable group only
-     * when it really scrolls, so keyboard users can reach the hidden lines.
-     */
-    function ConflictCompare({ prompt, draft, t }) {
-      const id = React.useId()
-      const [expanded, setExpanded] = React.useState(false)
-      const [overflow, setOverflow] = React.useState(false)
-      const [scrollable, setScrollable] = React.useState(false)
-      const compareRef = React.useRef(null)
-      const linesRef = React.useRef(null)
-      React.useLayoutEffect(() => {
-        const root = compareRef.current
-        if (root === null || expanded) return undefined
-        const measure = () => {
-          try {
-            let next = false
-            for (const element of root.querySelectorAll('.dshns-conflict-text')) {
-              if (element.scrollWidth > element.clientWidth + 1) next = true
-            }
-            setOverflow(next)
-          } catch {
-            setOverflow(false)
-          }
-        }
-        measure()
-        if (typeof ResizeObserver === 'function') {
-          const observer = new ResizeObserver(measure)
-          observer.observe(root)
-          return () => { observer.disconnect() }
-        }
-        return undefined
-      }, [prompt, draft, expanded])
-      React.useLayoutEffect(() => {
-        const element = linesRef.current
-        if (element === null || !expanded) {
-          setScrollable(false)
-          return undefined
-        }
-        const measure = () => {
-          try {
-            setScrollable(element.scrollHeight > element.clientHeight + 1)
-          } catch {
-            setScrollable(false)
-          }
-        }
-        measure()
-        if (typeof ResizeObserver === 'function') {
-          const observer = new ResizeObserver(measure)
-          observer.observe(element)
-          return () => { observer.disconnect() }
-        }
-        return undefined
-      }, [expanded, prompt, draft])
-      return h('div', {
-        id,
-        ref: compareRef,
-        className: 'dshns-conflict-compare',
-        role: 'note',
-        'data-expanded': expanded ? '' : undefined,
-      },
-      h('div', {
-        ref: linesRef,
-        className: 'dshns-conflict-lines',
-        role: scrollable ? 'group' : undefined,
-        tabIndex: scrollable ? 0 : undefined,
-        'aria-label': scrollable ? t('conflict.scrollRegion') : undefined,
-      },
-      h('p', { className: 'dshns-conflict-line' },
-        h('span', { className: 'dshns-conflict-label' }, t('conflict.compareTarget')),
-        h('span', { className: 'dshns-conflict-text' }, prompt)),
-      h('p', { className: 'dshns-conflict-line' },
-        h('span', { className: 'dshns-conflict-label' }, t('conflict.compareDraft')),
-        h('span', { className: 'dshns-conflict-text' }, draft))),
-      overflow || expanded
-        ? h(Button, {
-          variant: 'ghost',
-          size: 'sm',
-          className: 'dshns-conflict-toggle',
-          'aria-expanded': expanded,
-          'aria-controls': id,
-          onClick: () => { setExpanded((value) => !value) },
-        }, expanded ? t('conflict.collapse') : t('conflict.expand'))
-        : null)
-    }
-
-    /**
-     * Small brand mark: the plugin icon reduced to an inline glyph. Solid fills
-     * only (no gradient defs) so several cards on one page cannot collide on a
-     * document-wide SVG id. Decorative: the card still carries its aria-label.
-     */
-    function NextStepsMark({ size = 16 }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 36 36',
-        fill: 'none',
-        className: 'dshns-mark',
-        'aria-hidden': 'true',
-      },
-      h('g', { transform: 'translate(-1.5 0.5)' },
-        h('rect', { x: 5, y: 7.6, width: 21, height: 5.4, rx: 2.7, fill: '#5E9DF5' }),
-        h('rect', { x: 5, y: 15.3, width: 16, height: 5.4, rx: 2.7, fill: '#7AAEFF' }),
-        h('rect', { x: 5, y: 23, width: 11, height: 5.4, rx: 2.7, fill: '#9CC3FF' }),
-        h('path', {
-          d: 'M29.6 6.6C29.88 8.65 31.25 10.02 33.3 10.3C31.25 10.58 29.88 11.95 29.6 14C29.32 11.95 27.95 10.58 25.9 10.3C27.95 10.02 29.32 8.65 29.6 6.6Z',
-          fill: '#41E1AC',
-        })))
-    }
-
-    // -----------------------------------------------------------------------
-    // Turn-tail card (M3)
-    // -----------------------------------------------------------------------
-
-    function NextStepsCard(props) {
-      const { turn, inputActions, useInput, useSession, sessionId, t } = props
-      const turnNumber = turn === undefined || turn === null ? undefined : turn.turn
-
-      const [settings] = React.useState(readSettings)
-      const [turnState, setTurnState] = React.useState(() => readTurnState(sessionId, turnNumber))
-      const [expanded, setExpanded] = React.useState(false)
-      const [conflict, setConflict] = React.useState(null)
-      const [peek, setPeek] = React.useState(null)
-      const appliedRef = React.useRef(null)
-      const cardRef = React.useRef(null)
-      const pendingFocusRef = React.useRef(null)
-
-      const draft = typeof useInput === 'function'
-        ? useInput((state) => (state === undefined || state === null ? '' : state.draft))
-        : ''
-      const subagent = typeof useSession === 'function'
-        ? useSession((state) => (state === undefined || state === null ? null : state.subagent))
-        : null
-
-      // Resolve the card data before the reveal effect so `hasCard` can gate it.
-      // The normal turn/tail event order makes the card available on its first
-      // render; a late-published model must not leave the wrapper collapsed.
-      const tail = turn === undefined || turn === null || turn.end === undefined || turn.data === undefined
-        ? undefined
-        : turn.data.get('turn-tail')
-      const data = turn === undefined || turn === null || turn.data === undefined
-        ? undefined
-        : turn.data.get(DEFINITION_KEY)
-      const model = data === undefined || data === null ? undefined : data.model
-      const display = model === undefined ? null : buildDisplay(model, settings)
-      const hasCard = turn !== undefined && turn !== null && turn.end !== undefined
-        && tail !== undefined && tail !== null
-        && tail.closing !== undefined && tail.closing !== null
-        && !subagent && display !== null
-
-      // M9: reveal the card instead of inserting its full height in one frame.
-      // The wrapper starts collapsed so DSH's instant-fold measurement in this
-      // same commit sees no card height; then either the transition runs or the
-      // style is cleared before the first paint.
-      const revealRef = React.useRef(null)
-      const revealStartedRef = React.useRef(false)
-      React.useLayoutEffect(() => {
-        const wrapper = revealRef.current
-        if (!hasCard || wrapper === null || revealStartedRef.current) return undefined
-        revealStartedRef.current = true
-        const card = wrapper.firstElementChild
-        let targetHeight = 0
-        try {
-          const animate = card !== null && shouldRevealCard({
-            reducedMotion: prefersReducedMotion(),
-            distanceFromTail: distanceFromTail(findCardScrollport(wrapper)),
-            turnAgeMs: turnEndAge(turn),
-          })
-          targetHeight = animate ? revealTargetHeight(card) : 0
-        } catch {
-          // A layout or matchMedia failure must never leave the card collapsed.
-          targetHeight = 0
-        }
-        if (targetHeight <= 0) {
-          clearReveal(wrapper)
-          return undefined
-        }
-        let timer = null
-        const finish = () => {
-          if (timer !== null) window.clearTimeout(timer)
-          timer = null
-          wrapper.removeEventListener('transitionend', onEnd)
-          clearReveal(wrapper)
-        }
-        const onEnd = (event) => {
-          if (event.target === wrapper && event.propertyName === 'max-height') finish()
-        }
-        wrapper.dataset.revealing = ''
-        wrapper.style.transition = 'none'
-        wrapper.style.overflow = 'hidden'
-        wrapper.style.maxHeight = '0px'
-        wrapper.style.opacity = '0'
-        // Commit the collapsed box before transitioning; otherwise the first
-        // resolved style is already the target and no transition runs.
-        void wrapper.offsetHeight
-        wrapper.style.transition = `max-height ${CARD_REVEAL.durationMs}ms ${REVEAL_EASING}, `
-          + `opacity ${CARD_REVEAL.opacityMs}ms ease-out`
-        wrapper.style.maxHeight = `${targetHeight}px`
-        wrapper.style.opacity = '1'
-        wrapper.addEventListener('transitionend', onEnd)
-        timer = window.setTimeout(finish, CARD_REVEAL.durationMs + 160)
-        return finish
-      }, [hasCard])
-
-      // Focus continuity across state switches. Handlers record where focus
-      // should go before the re-render; this layout effect moves it once the new
-      // DOM exists (no visible flicker, and the next Tab starts from the new
-      // control). Chip targets are matched by the card's data-chip-id values
-      // instead of CSS.escape so model-provided ids cannot break the selector.
-      React.useLayoutEffect(() => {
-        const pending = pendingFocusRef.current
-        if (pending === null) return
-        pendingFocusRef.current = null
-        const root = cardRef.current
-        if (root === null) return
-        let element = null
-        if (typeof pending === 'string') {
-          element = root.querySelector(FOCUS_TARGETS[pending])
-        } else {
-          for (const candidate of root.querySelectorAll('[data-chip-id]')) {
-            if (candidate.getAttribute('data-chip-id') === pending.chip) {
-              element = candidate
-              break
-            }
-          }
-        }
-        if (element !== null && typeof element.focus === 'function') element.focus()
-      })
-
-      if (!hasCard) return null
-
-      const canWrite = inputActions !== undefined && inputActions !== null && typeof inputActions.setDraft === 'function'
-      const mode = cardControlMode({ dismissed: turnState.dismissed, conflict: conflict !== null })
-      // The draft is authoritative for the "filled" marker and the danger
-      // warning: a click or a restored id only counts while the composer still
-      // contains exactly what the card wrote.
-      const view = deriveCardView({
-        suggestions: model.suggestions,
-        draft,
-        persistedId: turnState.filledId,
-        applied: appliedRef.current,
-        conflict: conflict !== null,
-        dismissed: turnState.dismissed,
-        canWrite,
-      })
-      const status = view.statusKey
-      const items = expanded ? model.suggestions : display.items
-      const moreCount = expanded ? 0 : display.moreCount
-      const title = t('card.title')
-
-      function applyFill(text, suggestion, owned = true) {
-        if (!canWrite) return
-        const danger = suggestion.danger === true
-        inputActions.setDraft(text)
-        // Keep the exact text we wrote and whether the card owns it: an
-        // appended draft contains the user's own text, so a later click must
-        // ask before replacing it. This record also decides the "filled" marker
-        // and danger warning, but only while `draft` still equals `text`.
-        appliedRef.current = {
-          id: suggestion.id,
-          text,
-          prompt: suggestion.prompt,
-          danger,
-          owned,
-        }
-        const next = { ...turnState, filledId: suggestion.id }
-        setTurnState(next)
-        writeTurnState(sessionId, turnNumber, next)
-        setConflict(null)
-        setPeek(null)
-        focusComposer(sessionId)
-      }
-
-      function onPick(suggestion) {
-        if (!canWrite) return
-        const applied = appliedRef.current
-        const action = resolveDraftAction({
-          draft,
-          appliedPrompt: applied !== null && applied.owned === true ? applied.text : '',
-        })
-        if (action.kind === 'conflict') {
-          setConflict(suggestion)
-          setPeek(null)
-          // The clicked chip disappears into the conflict layout; start from the
-          // safe default action so keyboard users do not tab in from the top.
-          pendingFocusRef.current = 'conflictPrimary'
-          return
-        }
-        applyFill(suggestion.prompt, suggestion)
-      }
-
-      // Esc and the explicit 「取消」 both leave the conflict state. Focus goes
-      // back to the suggestion that opened it, which is re-rendered a moment
-      // later with the same data-chip-id.
-      function cancelConflict() {
-        const triggerId = conflict === null ? null : conflict.id
-        setConflict(null)
-        setPeek(null)
-        pendingFocusRef.current = triggerId === null ? null : { chip: triggerId }
-      }
-
-      function onConflictChoice(choice) {
-        if (conflict === null) return
-        if (choice === 'cancel') {
-          cancelConflict()
-          return
-        }
-        setConflict(null)
-        setPeek(null)
-        const merged = mergeDraft({ mode: choice, draft, prompt: conflict.prompt })
-        if (merged === null) return
-        applyFill(merged, conflict, choice === 'replace')
-      }
-
-      function onCardKeyDown(event) {
-        if (event.key !== 'Escape' || conflict === null) return
-        event.preventDefault()
-        event.stopPropagation()
-        cancelConflict()
-      }
-
-      function onDismiss() {
-        const next = { ...turnState, dismissed: true }
-        setTurnState(next)
-        writeTurnState(sessionId, turnNumber, next)
-        setConflict(null)
-        setPeek(null)
-        // The dismiss control is replaced by the restore control in the same row.
-        pendingFocusRef.current = 'restore'
-      }
-
-      function onRestore() {
-        const next = { ...turnState, dismissed: false }
-        setTurnState(next)
-        writeTurnState(sessionId, turnNumber, next)
-        setConflict(null)
-        setPeek(null)
-        pendingFocusRef.current = 'dismiss'
-      }
-
-      function renderChip(suggestion) {
-        const marker = deriveChipMarker({ suggestion, filledId: view.filledId })
-        // WCAG 2.5.3: the accessible name has to contain the visible label, so
-        // the full prompt is appended after it instead of replacing it.
-        const accessibleName = suggestion.prompt === suggestion.label
-          ? suggestion.label
-          : `${suggestion.label}：${suggestion.prompt}`
-        const markerNode = marker === 'danger'
-          ? h('span', { className: 'dshns-marker dshns-marker-danger' },
-            h(WarningIcon, { className: 'dshns-warn' }),
-            t('chip.danger'))
-          : marker === 'filled'
-            ? h('span', { className: 'dshns-marker' }, t('chip.filled'))
-            : marker === 'recommended'
-              ? h('span', { className: 'dshns-marker' }, t('chip.recommended'))
-              : null
-        return h(Button, {
-          key: suggestion.id,
-          variant: suggestion.recommended === true ? 'primary' : 'ghost',
-          size: 'sm',
-          className: 'dshns-chip',
-          'aria-label': accessibleName,
-          'data-chip-id': suggestion.id,
-          disabled: !canWrite,
-          onClick: () => { onPick(suggestion) },
-          onMouseEnter: () => { setPeek(suggestion.prompt) },
-          onMouseLeave: () => { setPeek(null) },
-          onFocus: () => { setPeek(suggestion.prompt) },
-          onBlur: () => { setPeek(null) },
-        },
-        h('span', { className: 'dshns-chip-label' }, suggestion.label),
-        markerNode)
-      }
-
-      const controls = mode === 'suggestions'
-        ? h('div', { className: 'dshns-controls' },
-          ...items.map(renderChip),
-          moreCount > 0
-            ? h(Button, {
-              variant: 'ghost',
-              size: 'sm',
-              className: 'dshns-toggle',
-              'data-card-more': '',
+      const canWrite = typeof inputActions?.setDraft === 'function'
+      return h('div', { className: 'dshns-reveal' },
+        h('section', { className: 'dshns-card', 'aria-label': t('card.title') },
+          h('p', { className: 'dshns-context' }, h(Mark), model.context),
+          h('div', { className: 'dshns-chips' },
+            model.suggestions.map((suggestion, index) => h('button', {
+              key: index,
+              type: 'button',
+              className: 'dshns-chip',
+              disabled: !canWrite,
+              title: suggestion.prompt,
+              'aria-label': suggestion.danger
+                ? `${suggestion.label}（${t('chip.danger')}）：${suggestion.prompt}`
+                : `${suggestion.label}：${suggestion.prompt}`,
               onClick: () => {
-                setExpanded(true)
-                pendingFocusRef.current = 'collapse'
+                ownedRef.current = fill(inputActions, draft, ownedRef.current, suggestion.prompt, sessionId)
               },
-            }, t('card.more').replace('{n}', String(moreCount)))
-            : null,
-          expanded
-            ? h(Button, {
-              variant: 'ghost',
-              size: 'sm',
-              className: 'dshns-toggle',
-              'data-card-collapse': '',
-              onClick: () => {
-                setExpanded(false)
-                pendingFocusRef.current = 'more'
-              },
-            }, t('card.collapse'))
-            : null)
-        : mode === 'conflict'
-          ? h('div', { className: 'dshns-conflict' },
-            h(ConflictCompare, {
-              key: conflict.id,
-              prompt: conflict.prompt,
-              draft,
-              t,
-            }))
-          : null
-
-      // Hover/focus only swaps text inside the existing status row. Nothing is
-      // inserted, so pointer movement can never change the card's geometry.
-      const peekText = canWrite && mode === 'suggestions' && peek !== null
-        ? `${t('preview.label')} · ${peek}`
-        : null
-      const statusText = peekText !== null
-        ? peekText
-        : (status === null || status === undefined ? null : t(status))
-      // Conflict actions share the status row: keeping them there instead of a
-      // separate row keeps the conflict card close to the resting card height.
-      const conflictActions = mode === 'conflict'
-        ? [
-          h(Button, { key: 'append', variant: 'primary', size: 'sm', 'data-conflict-primary': '', onClick: () => { onConflictChoice('append') } }, t('conflict.appendPrimary')),
-          h(Button, { key: 'replace', variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('replace') } }, t('conflict.replace')),
-          h(Button, { key: 'cancel', variant: 'ghost', size: 'sm', onClick: () => { onConflictChoice('cancel') } }, t('conflict.cancel')),
-        ]
-        : null
-      // One quiet state toggle at the end of the status row: minus dismisses the
-      // suggestions, plus restores them. The label is visible, not tooltip-only.
-      const dismissed = turnState.dismissed === true
-      const stateActions = conflictActions ?? (mode === 'suggestions'
-        ? [h(Button, {
-          key: 'dismiss',
-          variant: 'ghost',
-          size: 'sm',
-          className: 'dshns-dismiss',
-          icon: h(MinusIcon, { size: 16 }),
-          onClick: onDismiss,
-          'data-card-dismiss': '',
-          'aria-label': t('card.dismiss'),
-        }, t('card.dismiss'))]
-        : dismissed
-          ? [h(Button, {
-            key: 'restore',
-            variant: 'ghost',
-            size: 'sm',
-            className: 'dshns-restore',
-            icon: h(PlusIcon, { size: 16 }),
-            onClick: onRestore,
-            'data-card-restore': '',
-            'aria-label': t('card.restore'),
-          }, t('card.restore'))]
-          : [])
-      const statusBar = statusText === null && stateActions.length === 0
-        ? null
-        : h('div', { className: `dshns-statusbar${mode === 'conflict' ? ' dshns-statusbar-conflict' : ''}` },
-          statusText === null ? null : h('p', {
-            className: peekText === null ? 'dshns-status' : 'dshns-status dshns-status-peek',
-            // The peek is a transient visual hint; keep it out of the polite
-            // live region so focus/pointer movement does not make a screen
-            // reader announce the prompt on every chip.
-            role: peekText === null ? 'status' : undefined,
-          }, statusText),
-          ...stateActions)
-
-      return h('div', {
-        className: 'dshns-reveal',
-        ref: revealRef,
-        style: REVEAL_INITIAL_STYLE,
-      },
-      h('section', {
-        className: 'dshns-card',
-        ref: cardRef,
-        'aria-label': title,
-        'data-next-steps-card': '',
-        onKeyDown: onCardKeyDown,
-      },
-      h('div', { className: 'dshns-body' },
-        h(FoldedText, {
-          text: model.context === '' ? t('fallback.context') : model.context,
-          lead: h(NextStepsMark, { size: 16 }),
-          expandLabel: t('card.expand'),
-          collapseLabel: t('card.collapse'),
-        }),
-        controls,
-        statusBar)))
+            },
+            suggestion.danger ? h(WarnIcon) : null,
+            h('span', { className: 'dshns-chip-label' }, suggestion.label))))))
     }
 
     // -----------------------------------------------------------------------
-    // Settings section (M6): copied SegmentedControl primitive + row layout.
-    // The old "show cards" Switch moved to the Host config, so the section only
-    // renders a read-only note pointing at that gate.
+    // Process row (one line in the tool group, like the official propose_action row)
     // -----------------------------------------------------------------------
 
-    function SegmentedControl({ value, options, onChange, label }) {
-      const index = Math.max(0, options.findIndex((option) => option.value === value))
-      const style = {
-        '--dsh-segment-count': String(options.length),
-        '--dsh-segment-index': String(index),
-      }
-      const onKeyDown = (event) => {
-        const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown'
-          ? 1
-          : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-            ? -1
-            : 0
-        if (delta === 0) return
-        event.preventDefault()
-        const next = options[(index + delta + options.length) % options.length]
-        if (next.value !== value) onChange(next.value)
-      }
-      return h('div', {
-        role: 'tablist',
-        'aria-label': label,
-        className: 'dshns-segmented',
-        style,
-        onKeyDown,
-      },
-      h('span', { 'aria-hidden': 'true', className: 'dshns-segmented-indicator' }),
-      ...options.map((option) => h('button', {
-        key: String(option.value),
-        type: 'button',
-        role: 'tab',
-        'aria-selected': option.value === value,
-        tabIndex: option.value === value ? 0 : -1,
-        className: 'dshns-segmented-tab',
-        onClick: () => { if (option.value !== value) onChange(option.value) },
-      }, option.label)))
+    function rowState(phase, block) {
+      if (phase === 'preparing' || phase === 'start') return 'running'
+      if (block?.isError === true || block?.error !== undefined) return 'error'
+      return block?.meta?.shown === false ? 'error' : 'ok'
     }
 
-    function SettingsSection(props) {
-      const { t } = props
-      const [settings, setSettings] = React.useState(() => readSettings())
-      const [status, setStatus] = React.useState(null)
-
-      function update(patch) {
-        const next = clampSettings({ ...settings, ...patch })
-        setSettings(next)
-        setStatus(writeSettingsTo(window.localStorage, next) ? 'settings.saved' : 'settings.storageUnavailable')
-      }
-
-      function resetStates() {
-        const removed = clearTurnStates(window.localStorage)
-        setStatus(removed > 0 ? 'settings.resetDone' : 'settings.resetEmpty')
-      }
-
-      const options = [
-        { value: 'auto', label: t('settings.auto') },
-        ...[1, 2, 3, 4, 5, 6].map((value) => ({ value, label: String(value) })),
-      ]
-      const row = (key, label, control) => h('div', { className: 'dshns-setting-row', key },
-        h('span', { className: 'dshns-setting-label' }, label),
-        control)
-      return h('div', { className: 'dshns-settings' },
-        h('h2', { className: 'dshns-settings-heading' }, t('settings.title')),
-        h('p', { className: 'dshns-setting-note' }, t('settings.hostGate')),
-        row('maxPerTurn', t('settings.maxPerTurn'), h(SegmentedControl, {
-          value: settings.maxPerTurn,
-          options,
-          onChange: (value) => { update({ maxPerTurn: value }) },
-          label: t('settings.maxPerTurn'),
-        })),
-        h('p', { className: 'dshns-setting-note' }, t('settings.note')),
-        h('div', { className: 'dshns-settings-actions' },
-          h(Button, { variant: 'ghost', size: 'sm', onClick: resetStates }, t('settings.reset')),
-          status === null ? null : h('span', { className: 'dshns-settings-status', role: 'status' }, t(status))))
-    }
-
-    // -----------------------------------------------------------------------
-    // Process-group row (M5) — one-line record, copied from the official
-    // ProposeRow + DisclosureRow markup/CSS and behavior.
-    // -----------------------------------------------------------------------
-
-    function AppsAddIcon({ size = 14, className }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 16 16',
-        fill: 'none',
-        stroke: 'currentColor',
-        strokeWidth: 1,
-        className,
-        'aria-hidden': 'true',
-      },
-      h('rect', { x: '2.25', y: '2.25', width: '4', height: '4', rx: '1' }),
-      h('rect', { x: '2.25', y: '9.75', width: '4', height: '4', rx: '1' }),
-      h('rect', { x: '9.75', y: '9.75', width: '4', height: '4', rx: '1' }),
-      h('path', { d: 'M11.75 1.75v5M9.25 4.25h5' }))
-    }
-
-    function MinusIcon({ size = 16, className }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 16 16',
-        fill: 'none',
-        className,
-        'aria-hidden': 'true',
-      }, h('path', {
-        d: 'M4 8H12',
-        stroke: 'currentColor',
-        strokeWidth: 1.5,
-        strokeLinecap: 'round',
-      }))
-    }
-
-    function PlusIcon({ size = 16, className }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 16 16',
-        fill: 'none',
-        className,
-        'aria-hidden': 'true',
-      },
-      h('path', {
-        d: 'M4 8H12M8 4V12',
-        stroke: 'currentColor',
-        strokeWidth: 1.5,
-        strokeLinecap: 'round',
-      }))
-    }
-
-    function WarningIcon({ size = 12, className }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 16 16',
-        fill: 'none',
-        className,
-        'aria-hidden': 'true',
-      },
-      h('path', {
-        d: 'M8 1.8 14.6 13.2H1.4L8 1.8Z',
-        stroke: 'currentColor',
-        strokeWidth: 1.2,
-        strokeLinejoin: 'round',
-      }),
-      h('path', { d: 'M8 6v3.4', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
-      h('circle', { cx: '8', cy: '11.4', r: '.7', fill: 'currentColor' }))
-    }
-
-    function ChevronDownIcon({ size = 14, className }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 16 16',
-        fill: 'none',
-        strokeWidth: 1,
-        className,
-        'aria-hidden': 'true',
-      }, h('path', {
-        d: 'M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6',
-        stroke: 'currentColor',
-      }))
-    }
-
-    function ChevronUpIcon({ size = 14, className }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 16 16',
-        fill: 'none',
-        strokeWidth: 1,
-        className,
-        'aria-hidden': 'true',
-      }, h('path', {
-        d: 'M12 10L8.70711 6.70711C8.31658 6.31658 7.68342 6.31658 7.29289 6.70711L4 10',
-        stroke: 'currentColor',
-      }))
-    }
-
-    /**
-     * Monochrome 16px companion to `icon.svg`: the same suggestion-list + sparkle
-     * mark, inked in `currentColor` for the Settings navigation row.
-     */
-    function SectionIcon({ size = 16 }) {
-      return h('svg', {
-        width: size,
-        height: size,
-        viewBox: '0 0 16 16',
-        fill: 'none',
-        'aria-hidden': 'true',
-      },
-      h('path', {
-        d: 'M2.8 4.3H9.6',
-        stroke: 'currentColor',
-        strokeWidth: 1.4,
-        strokeLinecap: 'round',
-      }),
-      h('path', {
-        d: 'M2.8 7.8H7.4',
-        stroke: 'currentColor',
-        strokeWidth: 1.4,
-        strokeLinecap: 'round',
-      }),
-      h('path', {
-        d: 'M2.8 11.3H6',
-        stroke: 'currentColor',
-        strokeWidth: 1.4,
-        strokeLinecap: 'round',
-      }),
-      h('path', {
-        d: 'M12.5 2.2C12.7 3.45 13.5 4.25 14.75 4.45C13.5 4.65 12.7 5.45 12.5 6.7C12.3 5.45 11.5 4.65 10.25 4.45C11.5 4.25 12.3 3.45 12.5 2.2Z',
-        fill: 'currentColor',
-      }))
-    }
-
-    // -----------------------------------------------------------------------
-    // TextShimmer (copied from the official primitive): the running-state sweep
-    // over a row's title/summary. Context flag avoids double-decoration inside
-    // the duplicated highlight copy.
-    // -----------------------------------------------------------------------
-
-    const ShimmerContext = React.createContext(undefined)
-
-    function ShimmerText({ children, className }) {
-      const inside = React.useContext(ShimmerContext) === true && typeof children === 'string'
-      return h('span', {
-        className: `dshns-shimmer-text ${className ?? ''}`,
-        'data-shimmer-text': inside ? children : undefined,
-      }, inside ? null : children)
-    }
-
-    const TextShimmer = React.memo(function TextShimmer({ children, active = false, className, contentClassName }) {
-      const inside = React.useContext(ShimmerContext)
-      if (inside !== undefined) return h(ShimmerText, { className }, children)
-      const content = typeof children === 'string'
-        ? h(ShimmerText, null, children)
-        : children
-      return h('span', {
-        className: `dshns-shimmer ${className ?? ''}`,
-        'data-shimmer': active ? '' : undefined,
-      },
-      h(ShimmerContext.Provider, { value: false },
-        h('span', { className: `dshns-shimmer-content ${contentClassName ?? ''}` }, content)),
-      active
-        ? h('span', { className: 'dshns-shimmer-decoration', 'aria-hidden': 'true', inert: '' },
-          h('span', { className: 'dshns-shimmer-sweep' },
-            h(ShimmerContext.Provider, { value: true },
-              h('span', { className: `dshns-shimmer-content dshns-shimmer-highlight ${contentClassName ?? ''}` }, content))))
-        : null)
-    })
-
-    /**
-     * Copied DisclosureRow: root[data-open] > header[data-disclosure-header] >
-     * row[data-disclosure-row][data-expandable] with leading icon/chevron and a
-     * title + collapsedContent; expands on row click or Enter/Space.
-     */
-    function DisclosureRow({
-      icon,
-      title,
-      open,
-      expandable,
-      onToggle,
-      running = false,
-      expandOnRowClick = false,
-      previewChevron = true,
-      keepContentWhenOpen = false,
-      collapsedContent,
-      headerAccessory,
-      children,
-      className,
-      rowClassName,
-      leadingClassName,
-      chevronClassName,
-      titleClassName,
-    }) {
-      const rowExpandable = expandable === true && expandOnRowClick === true
-      const onKeyDown = (event) => {
-        if (!rowExpandable) return
-        if (event.key !== 'Enter' && event.key !== ' ') return
-        event.preventDefault()
-        onToggle()
-      }
-      const idle = previewChevron
-        ? h(React.Fragment, null,
-          h('span', { className: 'dshns-disc-iconIdle' }, icon),
-          h(ChevronDownIcon, { className: `dshns-disc-chevronHover ${chevronClassName ?? ''}` }))
-        : icon
-      const leadingIcon = open ? h(ChevronUpIcon, { className: chevronClassName }) : idle
-      const leading = expandable === true && rowExpandable === false
-        ? h('button', {
-          type: 'button',
-          className: `dshns-disc-leading ${leadingClassName ?? ''}`,
-          'aria-label': title,
-          'aria-expanded': open,
-          onClick: (event) => {
-            event.stopPropagation()
-            onToggle()
-          },
-        }, leadingIcon)
-        : h('span', { className: `dshns-disc-leading ${leadingClassName ?? ''}` }, leadingIcon)
-      return h('div', {
-        className: `dshns-disc-root ${className ?? ''}`,
-        'data-open': open ? '' : undefined,
-      },
-      h('div', {
-        className: 'dshns-disc-header',
-        'data-disclosure-header': '',
-        'data-has-accessory': headerAccessory === undefined || headerAccessory === null ? undefined : '',
-      },
-      h('div', {
-        className: `dshns-disc-row ${rowClassName ?? ''}`,
-        'data-disclosure-row': '',
-        'data-expandable': rowExpandable ? '' : undefined,
-        role: rowExpandable ? 'button' : undefined,
-        tabIndex: rowExpandable ? 0 : undefined,
-        'aria-expanded': rowExpandable ? open : undefined,
-        onClick: rowExpandable ? onToggle : undefined,
-        onKeyDown: rowExpandable ? onKeyDown : undefined,
-      },
-      leading,
-      h(TextShimmer, {
-        active: running,
-        contentClassName: 'dshns-disc-content',
-      },
-      h(ShimmerText, { className: `dshns-disc-title ${titleClassName ?? ''}` }, title),
-      keepContentWhenOpen || !open ? collapsedContent : null)),
-      headerAccessory),
-      open && children !== undefined && children !== null ? children : null)
-    }
-
-    /** Localize the machine-readable reasons the view model returns. */
-    function localizeProcessReason(reason, t) {
-      if (reason === '') return ''
-      if (reason === 'interrupted') return t('note.interrupted')
-      const key = noteToLocaleKey(reason)
-      return key === null ? reason : t(key)
-    }
-
-    /** Context snippet shown after the status in the collapsed row. */
-    function processSummary(phase, block) {
-      try {
-        if (phase === 'result') {
-          const meta = parseMeta(block === undefined ? undefined : block.meta)
-          return meta.shown === true ? meta.context : ''
-        }
-        if (phase === 'start' && block !== undefined && block.args !== undefined) {
-          return block.args.text('context') ?? ''
-        }
-        return ''
-      } catch {
-        return ''
-      }
-    }
-
-    function ProcessRow(props) {
-      const { phase, block, inspect, t } = props
-      const [open, setOpen] = React.useState(false)
-      const isError = block !== undefined && block !== null && block.isError === true
-      const errorCode = block !== undefined && block !== null && block.error !== undefined
-        ? block.error.code
-        : undefined
-      const meta = block !== undefined && block !== null ? block.meta : undefined
-      const state = deriveProcessState({ phase, isError, errorCode, meta })
-      const reason = localizeProcessReason(
-        processReason({
-          phase,
-          isError,
-          errorCode,
-          meta,
-          content: block !== undefined && block !== null ? block.content : undefined,
-        }),
-        t,
-      )
-      const summary = processSummary(phase, block)
-      const expandable = reason !== ''
-      const collapsedContent = h('span', { className: 'dshns-row-summary' },
-        h('span', null, t(`row.${state}`)),
-        summary === '' ? null : h('span', { className: 'dshns-row-title' }, summary))
-      return h('div', { 'data-tool': TOOL_NAME, 'data-state': state },
-        h(DisclosureRow, {
-          icon: h(AppsAddIcon, { size: 14 }),
-          title: t('row.title'),
-          open: open && expandable,
-          expandable,
-          running: state === 'preparing' || state === 'running',
-          onToggle: () => { setOpen((value) => !value) },
-          expandOnRowClick: true,
-          keepContentWhenOpen: true,
-          collapsedContent,
-        },
-        h('pre', { className: 'dshns-row-reason' }, reason),
-        typeof inspect === 'function'
-          ? h('button', {
-            type: 'button',
-            className: 'dshns-row-inspect',
-            onClick: () => { inspect() },
-          }, t('row.inspect'))
-          : null))
-    }
-
-    // -----------------------------------------------------------------------
-    // Conversation Definition (turn-scoped fold of this tool's events)
-    //
-    // Two transports reach the Session log:
-    //   - native: `tool/call` (arguments are a JSON string) plus an append
-    //     `tool/result` whose `message` carries the result and whose `meta`
-    //     carries the normalized display model;
-    //   - PTC (`run_code` programs): `tool/ptc-dispatch-start` and
-    //     `tool/ptc-dispatch`, where `arguments` is already a JSON value and
-    //     `meta`/`isError` hang directly off `data`. Those records carry no
-    //     `turn`; only the outer `run_code` call names it, so the matcher
-    //     keeps a small call-id -> turn index while it forwards events.
-    // -----------------------------------------------------------------------
-
-    const SURFACE_EVENT_TYPES = new Set([
-      'system/message',
-      'developer/message',
-      'user/message',
-      'assistant/message',
-      'tool/result',
-    ])
-    const isSurfaceEvent = (event) => SURFACE_EVENT_TYPES.has(event.type) && event.surfaceOp !== undefined
-    const isAppendSurfaceEvent = (event) => isSurfaceEvent(event) && event.surfaceOp === 'append'
-
-    /** Reserved PTC transport: its `tool/call` record is the only turn owner. */
-    const RUN_CODE_TOOL = 'run_code'
-    const MAX_RUN_CODE_TURNS = 1024
-    /** run_code callId -> turn, for PTC dispatches that carry no turn themselves. */
-    const runCodeTurns = new Map()
-
-    /**
-     * Remember one `run_code` call's turn. The matcher sees the outer call
-     * before its dispatch records, so a bounded insertion-ordered index is
-     * enough; it only ever maps immutable call identities.
-     */
-    function rememberRunCodeTurn(event) {
-      const data = event.data
-      if (typeof data.callId !== 'string' || !Number.isSafeInteger(data.turn)) return
-      if (runCodeTurns.size >= MAX_RUN_CODE_TURNS) {
-        const oldest = runCodeTurns.keys().next().value
-        if (oldest !== undefined) runCodeTurns.delete(oldest)
-      }
-      runCodeTurns.set(data.callId, data.turn)
-    }
-
-    /** Turn of a PTC dispatch event, resolved through its outer `run_code` call. */
-    function ptcTurnOf(event) {
-      const data = event.data
-      const callId = typeof data.rootCallId === 'string' ? data.rootCallId : data.parentCallId
-      return typeof callId === 'string' ? runCodeTurns.get(callId) : undefined
-    }
-
-    /** Turn carried by a native call/result event. */
-    function eventTurn(event) {
-      const turn = event.data.turn
-      return Number.isSafeInteger(turn) && turn >= 0 ? turn : undefined
-    }
-
-    /**
-     * Turn of one framework Match. Matcher functions only receive the raw
-     * event (0.2.2), while `start`, `update` and `buildLocationData` also
-     * receive the resolved Match location; prefer the location and fall back
-     * to the event payload for direct (test) folds.
-     */
-    function matchTurn(match) {
-      const location = match.location
-      if (location !== undefined && location !== null && (location.kind === 'turn' || location.kind === 'step')) {
-        const turn = location.turn === undefined || location.turn === null ? undefined : location.turn.turn
-        if (Number.isSafeInteger(turn) && turn >= 0) return turn
-      }
-      const event = match.event
-      return event === undefined || event === null ? undefined : eventTurn(event)
-    }
-
-    const nextStepsDefinition = {
-      kind: DEFINITION_KEY,
-      match: (event) => {
-        if (event.type === 'turn/start') {
-          return { id: String(event.data.turn), role: 'start' }
-        }
-        if (event.type === 'tool/call') {
-          if (event.data.name === RUN_CODE_TOOL) rememberRunCodeTurn(event)
-          return event.data.name === TOOL_NAME
-            ? { id: String(event.data.turn), role: 'update' }
-            : null
-        }
-        if (event.type === 'tool/result' && isAppendSurfaceEvent(event)) {
-          return { id: String(event.data.turn), role: 'update' }
-        }
-        if (event.type === 'tool/ptc-dispatch-start' && event.data.name === TOOL_NAME) {
-          const turn = ptcTurnOf(event)
-          return turn === undefined ? null : { id: String(turn), role: 'start' }
-        }
-        if (event.type === 'tool/ptc-dispatch' && event.data.name === TOOL_NAME) {
-          const turn = ptcTurnOf(event)
-          return turn === undefined ? null : { id: String(turn), role: 'update' }
-        }
-        return null
-      },
-      start: (_context, match) => {
-        const event = match.event
-        const calls = new Map()
-        // A window can begin at the dispatch instead of `turn/start`; record
-        // that first call here so the settled record can still fall back to it.
-        if (event.type === 'tool/ptc-dispatch-start') {
-          calls.set(String(event.data.subCallId), {
-            argsRaw: JSON.stringify(event.data.arguments === undefined ? {} : event.data.arguments),
-            seq: event.seq,
-          })
-        }
-        return { turn: matchTurn(match), calls, model: null }
-      },
-      update: (context, match) => {
-        const state = context.state
-        const event = match.event
-        if (event.type === 'tool/call') {
-          const calls = new Map(state.calls)
-          calls.set(String(event.data.callId), {
-            argsRaw: event.data.arguments,
-            seq: event.seq,
-          })
-          return { ...state, calls }
-        }
-        if (event.type === 'tool/ptc-dispatch-start') {
-          const calls = new Map(state.calls)
-          calls.set(String(event.data.subCallId), {
-            argsRaw: JSON.stringify(event.data.arguments === undefined ? {} : event.data.arguments),
-            seq: event.seq,
-          })
-          return { ...state, calls }
-        }
-        // Both transports expose the same durable meta; the recorded arguments
-        // only back a pruned or missing meta.
-        let callId
-        let meta
-        if (event.type === 'tool/result') {
-          // Replacement copies of a result must not re-publish the card.
-          if (!isAppendSurfaceEvent(event)) return state
-          const message = event.data.message
-          if (message === undefined || message.isError === true) return state
-          const source = message.source ?? {}
-          callId = String(source.callId ?? message.toolCallId ?? '')
-          meta = event.data.meta
-        } else if (event.type === 'tool/ptc-dispatch') {
-          if (event.data.isError === true) return state
-          callId = String(event.data.subCallId)
-          meta = event.data.meta
-        } else {
-          return state
-        }
-        const call = state.calls.get(callId)
-        if (call === undefined) return state
-        // A persisted meta with a boolean `shown` is authoritative even when it
-        // says "no card"; only a missing/corrupt meta falls back to the arguments.
-        const model = isAuthoritativeMeta(meta) ? parseMeta(meta) : modelFromArgs(call.argsRaw)
-        if (model === null || model.shown !== true || state.model === model) return state
-        return { ...state, model }
-      },
-      buildLocationData: (context, scope, previous) => {
-        if (scope !== 'turn' || context.state === undefined || context.state.model === null) return null
-        const turn = context.state.turn
-        if (!Number.isSafeInteger(turn) || turn < 0) return null
-        const value = { turn, model: context.state.model }
-        if (
-          previous !== undefined
-          && previous !== null
-          && previous.kind === 'turn'
-          && previous.turn === value.turn
-          && previous.key === DEFINITION_KEY
-          && previous.value === value
-        ) {
-          return previous
-        }
-        return { kind: 'turn', turn: value.turn, key: DEFINITION_KEY, value }
-      },
+    function ProcessRow({ phase, block, t }) {
+      const state = rowState(phase, block)
+      const count = state === 'ok' && Array.isArray(block?.meta?.suggestions) ? block.meta.suggestions.length : 0
+      return h('div', { className: 'dshns-row', 'data-tool': TOOL_NAME, 'data-state': state, title: block?.meta?.note },
+        h('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1, 'aria-hidden': 'true' },
+          h('rect', { x: 2.25, y: 2.25, width: 4, height: 4, rx: 1 }),
+          h('rect', { x: 2.25, y: 9.75, width: 4, height: 4, rx: 1 }),
+          h('rect', { x: 9.75, y: 9.75, width: 4, height: 4, rx: 1 }),
+          h('path', { d: 'M11.75 1.75v5M9.25 4.25h5' })),
+        h('span', { className: 'dshns-row-title' }, t('row.title')),
+        h('span', { className: 'dshns-row-summary' }, count > 0 ? `${t(`row.${state}`)} · ${count}` : t(`row.${state}`)))
     }
 
     // -----------------------------------------------------------------------
@@ -2501,59 +360,28 @@ button.dshns-disc-leading { cursor: pointer; }
 
     function apply(ctx) {
       sharedCtx = ctx
-
       ctx.effect(() => ctx.locale.register(NS, { en: EN, zh: ZH }), 'dsh-next-actions: locale')
-      const t = ctx.locale.bind(NS)
-      if (STYLES !== '') {
-        ctx.effect(() => {
-          const element = injectStyles(STYLES)
-          return () => element.remove()
-        }, 'dsh-next-actions: styles')
-      }
-
-      ctx.effect(
-        () => ctx.uiConversation.events.register(nextStepsDefinition),
-        'dsh-next-actions: definition',
-      )
-
+      ctx.effect(() => {
+        const element = document.createElement('style')
+        element.dataset.plugin = PKG
+        element.textContent = STYLES
+        document.head.appendChild(element)
+        return () => element.remove()
+      }, 'dsh-next-actions: styles')
+      ctx.effect(() => ctx.uiConversation.events.register(definition), 'dsh-next-actions: definition')
       ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
-        name: 'conversation.chat.turnTail',
-        id: PKG,
-        order: CARD_ORDER,
-        locale: NS,
+        name: 'conversation.chat.turnTail', id: PKG, order: -10, locale: NS,
       }, NextStepsCard))
-
       ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
-        name: 'tool.call.toolview',
-        key: TOOL_NAME,
-        locale: NS,
+        name: 'tool.call.toolview', key: TOOL_NAME, locale: NS,
       }, ProcessRow))
-
-      ctx.slots.inject('settings.section', () => ctx.slots.register({
-        name: 'settings.section',
-        id: PKG,
-        order: 60,
-        label: () => t('settings.title'),
-        locale: NS,
-      }, SettingsSection))
-
-      ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
-        name: 'settings.section.icon',
-        id: PKG,
-        order: 60,
-        label: () => t('settings.title'),
-        locale: NS,
-      }, SectionIcon))
     }
 
     return {
-      // `uiConversation` is injected (not looked up lazily) so the plugin only
-      // activates once the Conversation service exists; otherwise a cold boot
-      // would skip the definition registration and lose the card after restart.
+      // `uiConversation` is injected so the definition registers on a cold boot.
       inject: ['slots', 'locale', 'uiConversation'],
       apply,
-      // Test seam for the built bundle (DSH ignores additional exports).
-      __test: { nextStepsDefinition, parseMeta, modelFromArgs, buildDisplay },
+      __test: { definition, modelOf, fillMode, fill, rowState },
     }
   },
 })

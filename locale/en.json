@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Suggested next steps",
-    "description": "Shows a card under completed replies with one or two sentences of context and clickable next steps that fill the input draft."
+    "description": "Shows 1–3 clickable next steps under the latest reply, with one or two sentences of context. Clicking one fills the input; nothing is sent automatically."
   }
 }

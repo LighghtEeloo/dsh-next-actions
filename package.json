@@ -2,7 +2,7 @@
   "name": "@local/dsh-next-actions",
   "version": "0.1.0",
   "private": true,
-  "description": "Shows a card under completed replies with one or two sentences of context and clickable next steps that fill the input draft.",
+  "description": "Shows 1–3 clickable next steps under the latest reply; clicking one fills the input draft, never sends.",
   "icon": "./icon.svg",
   "type": "module",
   "exports": {
@@ -16,7 +16,6 @@
     "client.js",
     "cordis.patch.yml",
     "lib/normalize.js",
-    "lib/view-model.js",
     "locale/*.json",
     "icon.svg",
     "README.md"
