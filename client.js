@@ -415,10 +415,14 @@ window.__ModuleLoader__.load({
 
       const model = turn?.end === undefined ? undefined : turn.data?.get(KEY)?.model
       const closing = turn?.data?.get('turn-tail')?.closing
-      if (!model || !closing || subagent) return null
+      const suggestions = closing && !subagent ? model?.suggestions : undefined
+      const usages = React.useMemo(
+        () => suggestions?.map(({ prompt }) => usageOf(prompt, sent)),
+        [suggestions, sent],
+      )
+      if (!suggestions) return null
 
       const canWrite = typeof inputActions?.setDraft === 'function'
-      const usages = model.suggestions.map((suggestion) => usageOf(suggestion.prompt, sent))
       const chip = (suggestion, index) => {
         const usage = usages[index]
         const marks = [
@@ -453,7 +457,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'dshna-reveal', 'data-fresh': isFresh(turn) ? '' : undefined },
         h('section', { className: 'dshna-card', 'aria-label': t('card.title') },
           h('p', { className: 'dshna-context' }, h(Mark), model.context),
-          h('div', { className: 'dshna-chips' }, model.suggestions.map(chip))))
+          h('div', { className: 'dshna-chips' }, suggestions.map(chip))))
     }
 
     // -----------------------------------------------------------------------

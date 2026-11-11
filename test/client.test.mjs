@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
 const TOOL = 'suggest_next_actions'
+let cardMemo
 
 /** Load client.js with a stub module loader and a tree-building React stub. */
 function loadBundle() {
@@ -13,6 +14,12 @@ function loadBundle() {
   const react = {
     createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat() }),
     useRef: (current) => ({ current }),
+    useMemo: (compute, deps) => {
+      if (cardMemo.deps?.length !== deps.length || deps.some((dep, index) => !Object.is(dep, cardMemo.deps[index]))) {
+        Object.assign(cardMemo, { deps, value: compute() })
+      }
+      return cardMemo.value
+    },
   }
   return bundle.factory((name) => {
     if (name === 'react') return react
@@ -267,10 +274,11 @@ test('fill appends with setDraft when the editor refuses or lacks insertText', (
   assert.deepEqual(legacy.calls, ['我的草稿\n\n跑一下测试。'])
 })
 
-function renderCard({ sent = '', end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', lang = 'zh' } = {}) {
+function renderCard({ sent = '', end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', lang = 'zh', memo = {} } = {}) {
   const Card = cardComponent()
   const messages = locales[lang]
   const data = new Map([['next-actions', { model }], ['turn-tail', { closing: closing ? {} : undefined }]])
+  cardMemo = memo
   return Card({
     turn: { turn: 1, end: end ? {} : undefined, data },
     inputActions,
@@ -410,6 +418,22 @@ test('regression: "sent with edits" keeps the prompt in order and is not diluted
 test('each chip is judged on its own: one message can fully use one and partly use another', () => {
   const chips = chipsOf(renderCard({ sent: '跑一下测试。\ngit push origin' }))
   assert.deepEqual(chips.map((chip) => chip.props['data-used']), ['full', 'partial'])
+})
+
+test('card reuses usage on draft edits and recomputes for new sent text or suggestions', () => {
+  const memo = {}
+  const model = buildModel()
+  const initial = { model, memo, sent: '跑一下测试。' }
+  assert.equal(chipsOf(renderCard(initial))[0].props['data-used'], 'full')
+  const usages = memo.value
+  assert.deepEqual(usages, ['full', null])
+  assert.equal(chipsOf(renderCard({ ...initial, draft: '我的草稿' }))[0].props['data-used'], 'full')
+  assert.equal(memo.value, usages)
+
+  const updated = { ...initial, sent: '跑一下单元测试' }
+  assert.equal(chipsOf(renderCard(updated))[0].props['data-used'], 'partial')
+  const replacement = { ...model, suggestions: [{ label: '跑测试', prompt: updated.sent }] }
+  assert.equal(chipsOf(renderCard({ ...updated, model: replacement }))[0].props['data-used'], 'full')
 })
 
 test('chips show a check for sent and a pencil for edited', () => {

@@ -11,6 +11,7 @@ function loadCard() {
   const plugin = bundle.factory(() => ({
     createElement: (type, props, ...children) => ({ type, props, children: children.flat() }),
     useRef: (current) => ({ current }),
+    useMemo: (compute) => compute(),
   }))
   let Card
   plugin.apply({
