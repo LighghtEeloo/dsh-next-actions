@@ -139,9 +139,9 @@ window.__ModuleLoader__.load({
     // -----------------------------------------------------------------------
 
     /**
-     * The card model is the Host-normalized `meta` on the tool result. The log is
-     * append-only and compaction copies `meta` into any replacement, so it is
-     * always there; older metas may carry up to six suggestions.
+     * The card model is the Host-normalized `meta` on the original tool result.
+     * Compaction retains the original event; replacement copies are ignored.
+     * Older metas may carry up to six suggestions.
      */
     function modelOf(meta) {
       if (meta?.shown !== true || typeof meta.context !== 'string' || !Array.isArray(meta.suggestions)) return null
