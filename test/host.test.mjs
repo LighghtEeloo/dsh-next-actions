@@ -23,14 +23,9 @@ test('buildMeta keeps context and suggestions, collapsing whitespace', () => {
   })
 })
 
-test('buildMeta accepts a JSON string and an older persisted meta', () => {
-  assert.equal(buildMeta(JSON.stringify(args())).shown, true)
-  const old = { shown: true, context: 'Done.', suggestions: [{ id: 's1', label: 'Run', prompt: 'Run tests', stance: 'verify', recommended: true }] }
-  assert.deepEqual(buildMeta(old).suggestions, [{ label: 'Run', prompt: 'Run tests', recommended: true }])
-})
-
 test('buildMeta rejects invalid input with a stable note', () => {
-  assert.deepEqual(buildMeta('{oops'), { shown: false, note: 'invalid-arguments' })
+  // Arguments reach buildMeta parsed; a JSON string is invalid, not reparsed.
+  assert.deepEqual(buildMeta(JSON.stringify(args())), { shown: false, note: 'invalid-arguments' })
   assert.deepEqual(buildMeta([]), { shown: false, note: 'invalid-arguments' })
   assert.deepEqual(buildMeta({ suggestions: [] }), { shown: false, note: 'missing-context' })
   assert.deepEqual(buildMeta({ context: 'x', suggestions: [{ label: ' ' }, null] }), { shown: false, note: 'no-usable-suggestions' })
