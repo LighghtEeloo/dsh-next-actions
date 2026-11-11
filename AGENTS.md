@@ -33,7 +33,7 @@
 
 ## 验证
 
-迭代时先运行受影响的测试。运行时代码变更完成后执行项目的完整测试与检查；发行时按项目说明打包。具体命令与验证重点见 `README.md`。本项目的完整检查为 `node --test`（含 `client.js` 是否最新的检查）；Client 改动后用 `node scripts/build-client.mjs` 重建 `client.js`，打包检查用 `npm pack --dry-run`。安装、升级与卸载验证使用假 `DSH_HOME` 的 `dsh plugin` 命令，不操作真实 profile。
+迭代时先运行受影响的测试。运行时代码变更完成后执行项目的完整测试与检查；发行时按项目说明打包。具体命令与验证重点见 `README.md`。本项目的完整检查为 `node --test`；`client.js` 是手写源码，无构建步骤；打包检查用 `npm pack --dry-run`。安装、升级与卸载验证使用假 `DSH_HOME` 的 `dsh plugin` 命令，不操作真实 profile。
 
 行为或校验变更同时覆盖有效输入与对应的拒绝、缺失或冲突情形。断言具体结果及关键状态，将问题复现保留为回归测试。
 

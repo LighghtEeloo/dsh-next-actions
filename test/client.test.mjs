@@ -1,11 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
 const TOOL = 'suggest_next_actions'
 
-/** Load the built bundle with a stub module loader and a tree-building React stub. */
+/** Load client.js with a stub module loader and a tree-building React stub. */
 function loadBundle() {
   let bundle
   new Function('window', readFileSync(new URL('../client.js', import.meta.url), 'utf8'))({
@@ -28,10 +27,11 @@ const args = {
   context: '修复已完成。',
   suggestions: [
     { label: '跑测试', prompt: '跑一下测试。' },
-    { label: '推送', prompt: 'git push --force' },
+    { label: '推送', prompt: 'git push --force', danger: true },
   ],
 }
 const meta = { shown: true, context: '修复已完成。', suggestions: [{ label: '跑测试', prompt: '跑一下测试。' }] }
+const model = { context: meta.context, suggestions: meta.suggestions }
 
 function fold(events) {
   const matches = events.map((event) => (event.event ? event : { event }))
@@ -47,23 +47,29 @@ const result = (turn = 1, extra = {}) => ({
   data: { turn, message: { isError: false, source: { callId: 'c1' } }, ...extra },
 })
 
-test('built client.js is up to date', () => {
-  execFileSync(process.execPath, ['scripts/build-client.mjs', '--check'], { cwd: new URL('..', import.meta.url) })
-})
-
 test('native call + result folds the persisted meta into turn data', () => {
   const state = fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result(1, { meta })])
-  assert.deepEqual(state.model, meta)
+  assert.deepEqual(state.model, model)
   const location = definition.buildLocationData({ state }, 'turn', undefined)
-  assert.deepEqual(location, { kind: 'turn', turn: 1, key: 'next-actions', value: { model: meta, sent: '' } })
+  assert.deepEqual(location, { kind: 'turn', turn: 1, key: 'next-actions', value: { model: state.model, sent: '' } })
   assert.equal(definition.buildLocationData({ state }, 'turn', location), location)
   assert.equal(definition.buildLocationData({ state }, 'session', undefined), null)
 })
 
-test('missing meta falls back to the call arguments; a not-shown meta is authoritative', () => {
-  assert.equal(fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result()]).model.suggestions.length, 2)
+test('a missing, not-shown or malformed meta publishes no card', () => {
+  assert.equal(fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result()]).model, null)
   assert.equal(fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result(1, { meta: { shown: false, note: 'x' } })]).model, null)
-  assert.equal(modelOf({ shown: true, context: '', suggestions: [] }, args), null)
+  assert.equal(modelOf({ shown: true, context: 'c', suggestions: [] }), null)
+  assert.equal(modelOf({ shown: true, suggestions: meta.suggestions }), null)
+  assert.equal(modelOf({ shown: true, context: 'c', suggestions: [{ label: 'x' }, null] }), null)
+})
+
+test('older metas keep at most three suggestions with their marks', () => {
+  const suggestions = [1, 2, 3, 4, 5].map((n) => ({ id: `s${n}`, label: `L${n}`, prompt: `P${n}`, stance: 'continue' }))
+  suggestions[0].recommended = true
+  const kept = modelOf({ shown: true, context: 'c', suggestions }).suggestions
+  assert.deepEqual(kept.map((item) => item.label), ['L1', 'L2', 'L3'])
+  assert.equal(kept[0].recommended, true)
 })
 
 test('errors, replacement results and unknown calls never publish a card', () => {
@@ -85,7 +91,7 @@ test('PTC dispatch resolves its turn through the outer run_code call', () => {
   const location = { kind: 'turn', turn: { turn: 4 } }
   const state = fold([{ event: ptc('tool/ptc-dispatch-start'), location }, { event: ptc('tool/ptc-dispatch', { meta }), location }])
   assert.equal(state.turn, 4)
-  assert.deepEqual(state.model, meta)
+  assert.deepEqual(state.model, model)
   assert.equal(fold([{ event: ptc('tool/ptc-dispatch-start'), location }, { event: ptc('tool/ptc-dispatch', { isError: true }), location }]).model, null)
 })
 
@@ -148,7 +154,7 @@ function renderCard({ sent = '', end = true, closing = true, subagent = false, m
 }
 
 function buildModel() {
-  return modelOf(undefined, args)
+  return modelOf({ shown: true, ...args })
 }
 
 let Card
@@ -204,8 +210,8 @@ test('chips are disabled without input actions and a click fills the draft', () 
 
 const chipsOf = (tree) => find(tree, (node) => node.props?.className === 'dshns-chip')
 
-test('a recommended chip is marked and leads the card', () => {
-  const model = modelOf(undefined, { context: 'c', suggestions: [{ label: 'A', prompt: 'a' }, { label: 'B', prompt: 'b', recommended: true }] })
+test('a recommended chip is marked (the Host already put it first)', () => {
+  const model = modelOf({ shown: true, context: 'c', suggestions: [{ label: 'B', prompt: 'b', recommended: true }, { label: 'A', prompt: 'a' }] })
   const chips = chipsOf(renderCard({ model }))
   assert.equal(chips[0].props['data-recommended'], '')
   assert.equal(chips[0].props['aria-label'], 'B（推荐）：b')

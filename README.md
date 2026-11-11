@@ -18,10 +18,8 @@
 
 ```text
 index.js            Host：工具 + 根 agent 常驻提示 + enabled 门控
-lib/normalize.js    参数规范化（Host 与 Client 共用）
-src/client.js       Client 模板：Definition、卡片、过程行
-src/styles.js       卡片与过程行 CSS
-client.js           构建产物（勿手改）
+lib/normalize.js    参数规范化，结果写入 tool/result.meta
+client.js           Client（手写单文件）：Definition、卡片、过程行与 CSS
 cordis.patch.yml    插件行 patch
 test/               node --test
 ```
@@ -29,10 +27,8 @@ test/               node --test
 ## 开发
 
 ```sh
-node --test                            # 测试
-node scripts/build-client.mjs          # 重建 client.js
-node scripts/build-client.mjs --check  # 检查 client.js 是否最新
-npm pack --dry-run                     # 打包检查
+node --test         # 测试
+npm pack --dry-run  # 打包检查
 ```
 
 安装/卸载用 `plugin_manager` 的 `install_bundle` / `remove_bundle`；验证使用假 `DSH_HOME`。

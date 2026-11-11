@@ -53,9 +53,10 @@
 | 部分 | 文件 | 职责 |
 | --- | --- | --- |
 | Host | `index.js` | 为根 agent 注册 `suggest_next_actions` 与一段常驻提示；子代理不注册；`enabled:false` 时什么都不注册 |
-| 规范化 | `lib/normalize.js` | 参数 → `{ shown, context, suggestions[≤3] }`：折叠空白、截断、按指令去重、风险词标记、推荐至多一条且置顶。Host 写入 `tool/result.meta`；Client 内联同一份代码重读 meta，meta 被压缩修剪时回退到调用参数 |
-| Client | `src/client.js` + `src/styles.js` → `client.js` | Conversation Definition 把本工具事件（native 与 PTC `run_code` 两条通路）和用户自己发出的 `user/message` 折叠进 `turn.data.get('next-actions')`；`conversation.chat.turnTail` 渲染卡片；`tool.call.toolview` 渲染过程行 |
+| 规范化 | `lib/normalize.js` | 参数 → `{ shown, context, suggestions[≤3] }`：折叠空白、截断、按指令去重、风险词标记、推荐至多一条且置顶。结果作为 `tool/result.meta` 写入会话日志 |
+| Client | `client.js`（手写单文件，含 CSS） | Conversation Definition 把本工具结果上的 meta（native 与 PTC `run_code` 两条通路）和用户自己发出的 `user/message` 折叠进 `turn.data.get('next-actions')`；`conversation.chat.turnTail` 渲染卡片；`tool.call.toolview` 渲染过程行 |
 
-第 N 轮的卡片通过 `useChat` 的 `timeline.turnOrder` / `timeline.turns` 读第 N+1 轮的 `sent` 文本来判定
+会话日志只追加；压缩修剪工具结果时会把 meta 原样复制进替换事件，原事件也保留，所以客户端直接读 meta，
+不重算参数，也不需要构建步骤。第 N 轮的卡片通过 `useChat` 的 `timeline.turnOrder` / `timeline.turns` 读第 N+1 轮的 `sent` 文本来判定
 "已使用"。外部插件不能 require Harness Client 包，所以卡片样式按官方动作卡重写，类名用 `dshns-` 前缀；
 刚结束的回合用 CSS `grid-template-rows` 展开卡片，避免回答被一帧顶起，`prefers-reduced-motion` 下不做动画。

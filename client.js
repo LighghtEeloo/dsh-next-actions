@@ -1,5 +1,5 @@
 /**
- * Browser half of @local/dsh-next-actions (template).
+ * Browser half of @local/dsh-next-actions.
  *
  * - A Conversation Definition folds this tool's events into
  *   `turn.data.get('next-actions')`: native `tool/call` + `tool/result.meta`, and
@@ -13,8 +13,8 @@
  *
  * External plugins must not require Harness Client packages, so the markup and
  * CSS follow the official action card with renamed `dshns-` classes and theme
- * tokens only. scripts/build-client.mjs inlines lib/normalize.js and
- * src/styles.js at the markers and writes client.js.
+ * tokens only. DSH serves this file as one classic script; it is hand-written
+ * source, not a build output.
  */
 window.__ModuleLoader__.load({
   id: '@local/dsh-next-actions',
@@ -22,74 +22,9 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
 
-    /**
- * Normalize `suggest_next_actions` arguments into the card model.
- *
- * Shared by both halves: the Host persists the result as `tool/result.meta`,
- * and the browser bundle inlines this file to re-read that meta (or the raw
- * arguments when compaction dropped it). Import-free and side-effect-free.
- */
-
-const LIMITS = Object.freeze({ suggestions: 3, context: 240, label: 24, prompt: 500 })
-
-/** A hit marks a suggestion as needing confirmation; clicking still only fills the input. */
-const RISK = /\brm\s+-rf\b|\bforce[- ]?push\b|--force\b|\bdrop\s+(table|database)\b|\bsudo\b|\bdeploy\b|\bpublish\b|\bproduction\b|删除|清空|重置|强制推送|强推|发布|部署|上线|付费|支付|授权|卸载|回滚|销毁/i
-
-const text = (value) => (typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '')
-
-function clip(value, max) {
-  const characters = Array.from(value)
-  return characters.length <= max ? value : `${characters.slice(0, max - 1).join('')}…`
-}
-
-/**
- * @param {unknown} raw - tool arguments (object or JSON string), or a persisted meta.
- * @returns {{ shown: true, context: string, suggestions: { label: string, prompt: string, danger?: true }[] } | { shown: false, note: string }}
- */
-function buildMeta(raw) {
-  let args = raw
-  if (typeof args === 'string') {
-    try {
-      args = JSON.parse(args)
-    } catch {
-      args = null
-    }
-  }
-  if (args === null || typeof args !== 'object' || Array.isArray(args)) return { shown: false, note: 'invalid-arguments' }
-
-  const context = clip(text(args.context), LIMITS.context)
-  if (context === '') return { shown: false, note: 'missing-context' }
-
-  const seen = new Set()
-  const entries = []
-  let recommended = null
-  for (const item of Array.isArray(args.suggestions) ? args.suggestions : []) {
-    if (item === null || typeof item !== 'object') continue
-    const prompt = clip(text(item.prompt) || text(item.label), LIMITS.prompt)
-    const key = prompt.toLowerCase()
-    if (prompt === '' || seen.has(key)) continue
-    seen.add(key)
-    const label = clip(text(item.label) || prompt, LIMITS.label)
-    const entry = { label, prompt }
-    if (item.danger === true || RISK.test(`${label}\n${prompt}`)) entry.danger = true
-    // At most one recommendation; it always leads the card.
-    if (item.recommended === true && recommended === null) {
-      entry.recommended = true
-      recommended = entry
-    } else {
-      entries.push(entry)
-    }
-  }
-  const suggestions = recommended === null ? entries : [recommended, ...entries]
-  if (suggestions.length === 0) return { shown: false, note: 'no-usable-suggestions' }
-  return { shown: true, context, suggestions: suggestions.slice(0, LIMITS.suggestions) }
-}
-
-    /**
- * Card and process-row CSS. Frame values follow the official DSH action card
- * and propose_action row; classes use the `dshns-` prefix and only theme tokens.
- */
-const STYLES = `
+    // Card and process-row CSS: values follow the official action card and
+    // propose_action row; only theme tokens are referenced.
+    const STYLES = `
 .dshns-reveal {
   display: grid;
   grid-template-rows: 1fr;
@@ -142,7 +77,7 @@ const STYLES = `
   outline-offset: 2px;
 }
 .dshns-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Recommended: tinted border + spark. Used (next message): check, pencil when edited; quieter label. */
+    /* Recommended: tinted border + spark. Used (next message): check, pencil when edited; quieter label. */
 .dshns-chip[data-recommended] { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, transparent); }
 .dshns-spark { flex: none; color: var(--dsw-alias-state-business-primary); }
 .dshns-chip[data-used] { color: var(--dsw-alias-label-secondary); }
@@ -194,14 +129,17 @@ const STYLES = `
     // Data: fold this tool's events into turn data
     // -----------------------------------------------------------------------
 
-    /** A persisted meta with a boolean `shown` is authoritative; otherwise use the arguments. */
-    function modelOf(meta, args) {
-      const source = meta !== null && typeof meta === 'object' && typeof meta.shown === 'boolean'
-        ? (meta.shown ? meta : null)
-        : args
-      if (source === null || source === undefined) return null
-      const model = buildMeta(source)
-      return model.shown ? model : null
+    /**
+     * The card model is the Host-normalized `meta` on the tool result. The log is
+     * append-only and compaction copies `meta` into any replacement, so it is
+     * always there; older metas may carry up to six suggestions.
+     */
+    function modelOf(meta) {
+      if (meta?.shown !== true || typeof meta.context !== 'string' || !Array.isArray(meta.suggestions)) return null
+      const suggestions = meta.suggestions
+        .filter((suggestion) => typeof suggestion?.label === 'string' && typeof suggestion.prompt === 'string')
+        .slice(0, 3)
+      return suggestions.length === 0 ? null : { context: meta.context, suggestions }
     }
 
     /** run_code callId → turn; PTC dispatch records carry no turn themselves. */
@@ -260,13 +198,14 @@ const STYLES = `
         }
       },
       start(context, match) {
-        const state = { turn: matchTurn(match), args: new Map(), model: null, sent: '' }
+        const state = { turn: matchTurn(match), calls: new Set(), model: null, sent: '' }
         return match.event.type === 'turn/start' ? state : definition.update({ state }, match)
       },
       update({ state }, { event }) {
         const data = event.data
+        // A result names only its call id, so remember which calls are ours.
         if (event.type === 'tool/call' && data.name === TOOL_NAME) {
-          return { ...state, args: new Map(state.args).set(String(data.callId), data.arguments) }
+          return { ...state, calls: new Set(state.calls).add(String(data.callId)) }
         }
         if (event.type === 'user/message') {
           const text = textOf(data.content)
@@ -277,10 +216,10 @@ const STYLES = `
           const message = data.message
           if (message === undefined || message.isError === true) return state
           const callId = String(message.source?.callId ?? message.toolCallId ?? '')
-          if (!state.args.has(callId)) return state
-          model = modelOf(data.meta, state.args.get(callId))
+          if (!state.calls.has(callId)) return state
+          model = modelOf(data.meta)
         } else if (event.type === 'tool/ptc-dispatch' && data.isError !== true) {
-          model = modelOf(data.meta, data.arguments)
+          model = modelOf(data.meta)
         }
         return model === null ? state : { ...state, model }
       },
