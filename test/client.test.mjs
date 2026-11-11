@@ -267,8 +267,9 @@ test('fill appends with setDraft when the editor refuses or lacks insertText', (
   assert.deepEqual(legacy.calls, ['我的草稿\n\n跑一下测试。'])
 })
 
-function renderCard({ sent = '', end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '' } = {}) {
+function renderCard({ sent = '', end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', lang = 'zh' } = {}) {
   const Card = cardComponent()
+  const messages = locales[lang]
   const data = new Map([['next-actions', { model }], ['turn-tail', { closing: closing ? {} : undefined }]])
   return Card({
     turn: { turn: 1, end: end ? {} : undefined, data },
@@ -279,7 +280,8 @@ function renderCard({ sent = '', end = true, closing = true, subagent = false, m
     }),
     useSession: (select) => select({ subagent }),
     sessionId: 's',
-    t: (key) => ({ 'card.title': '下一步建议', 'chip.recommended': '推荐', 'chip.danger': '需确认', 'chip.sent': '已发送', 'chip.edited': '改后发送' })[key] ?? key,
+    // Same `{name}` interpolation as DSH's locale `t`.
+    t: (key, params = {}) => (messages[key] ?? key).replace(/\{(\w+)\}/g, (whole, name) => params[name] ?? whole),
   })
 }
 
@@ -288,12 +290,13 @@ function buildModel() {
 }
 
 let Card
+let locales
 function cardComponent() {
   if (Card !== undefined) return Card
   const slots = []
   const ctx = {
     effect: (fn) => fn(),
-    locale: { register: () => () => {} },
+    locale: { register: (_ns, tables) => { locales = tables; return () => {} } },
     uiConversation: { events: { register: () => () => {} } },
     slots: { inject: (_name, fn) => fn(), register: (options, component) => slots.push({ options, component }) },
   }
@@ -421,6 +424,20 @@ test('chips show a check for sent and a pencil for edited', () => {
   assert.equal(edited[1].props['aria-label'], '推送（需确认，改后发送）：git push --force')
   assert.equal(edited[1].children[0].type.name, 'EditedIcon')
   assert.equal(chipsOf(renderCard())[0].props['data-used'], undefined)
+})
+
+test('chip accessible names follow the locale, punctuation included', () => {
+  const plain = chipsOf(renderCard({ lang: 'en' }))
+  assert.equal(plain[0].props['aria-label'], '跑测试: 跑一下测试。')
+  assert.equal(plain[1].props['aria-label'], '推送 (Needs confirmation): git push --force')
+
+  const edited = chipsOf(renderCard({ lang: 'en', sent: 'git push origin' }))
+  assert.equal(edited[1].props['aria-label'], '推送 (Needs confirmation, Sent with edits): git push --force')
+})
+
+test('English and Chinese locales define the same keys', () => {
+  cardComponent()
+  assert.deepEqual(Object.keys(locales.en).sort(), Object.keys(locales.zh).sort())
 })
 
 test('process row maps call phases to running, ok and error', () => {

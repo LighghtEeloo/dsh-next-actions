@@ -111,6 +111,9 @@ window.__ModuleLoader__.load({
       'chip.danger': 'Needs confirmation',
       'chip.sent': 'Sent',
       'chip.edited': 'Sent with edits',
+      'chip.aria': '{label}: {prompt}',
+      'chip.ariaMarked': '{label} ({marks}): {prompt}',
+      'chip.markSeparator': ', ',
       'row.title': 'Next actions',
       'row.running': 'Writing',
       'row.ok': 'Shown',
@@ -122,6 +125,9 @@ window.__ModuleLoader__.load({
       'chip.danger': '需确认',
       'chip.sent': '已发送',
       'chip.edited': '改后发送',
+      'chip.aria': '{label}：{prompt}',
+      'chip.ariaMarked': '{label}（{marks}）：{prompt}',
+      'chip.markSeparator': '，',
       'row.title': '下一步建议',
       'row.running': '正在生成',
       'row.ok': '已生成',
@@ -433,7 +439,9 @@ window.__ModuleLoader__.load({
           'data-used': usage ?? undefined,
           disabled: !canWrite,
           title: suggestion.prompt,
-          'aria-label': `${suggestion.label}${marks.length > 0 ? `（${marks.join('，')}）` : ''}：${suggestion.prompt}`,
+          'aria-label': marks.length > 0
+            ? t('chip.ariaMarked', { label: suggestion.label, marks: marks.join(t('chip.markSeparator')), prompt: suggestion.prompt })
+            : t('chip.aria', { label: suggestion.label, prompt: suggestion.prompt }),
           onClick: () => {
             ownedRef.current = fill(inputActions, draft, ownedRef.current, suggestion.prompt, sessionId)
           },
