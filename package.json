@@ -2,6 +2,7 @@
   "name": "@local/dsh-next-actions",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "Shows 1–3 clickable next actions under replies; clicking one fills the input draft, never sends.",
   "icon": "./icon.svg",
   "type": "module",
@@ -18,7 +19,9 @@
     "lib/normalize.js",
     "locale/*.json",
     "icon.svg",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "dsh": {
     "bundle": {

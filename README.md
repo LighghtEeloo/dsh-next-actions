@@ -44,4 +44,4 @@ Host 改动需重启 DSH，Client 改动需刷新页面。
 
 ## 许可
 
-许可证未定；卡片外观参照 MIT 许可的 DSH 官方动作卡。非 DeepSeek 官方插件。
+MIT（见 [LICENSE](LICENSE)）。卡片外观参照 MIT 许可的 DSH 官方动作卡，归属说明见 [NOTICE](NOTICE)。非 DeepSeek 官方插件。
