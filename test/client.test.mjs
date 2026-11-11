@@ -348,23 +348,60 @@ test('a recommended chip is marked (the Host already put it first)', () => {
   assert.equal(chips[1].props['data-recommended'], undefined)
 })
 
-test('nextSent reads the following turn of the timeline', () => {
-  const snapshot = { timeline: { turnOrder: [3, 5], turns: new Map([[5, { data: new Map([['next-actions-sent', { text: 'hi' }]]) }]]) } }
+const timeline = (entries) => ({
+  timeline: {
+    turnOrder: entries.map(([turn]) => turn),
+    turns: new Map(entries.map(([turn, data]) => [turn, { data: new Map(Object.entries(data)) }])),
+  },
+})
+
+test('nextSent reads the next turn opened by a human message', () => {
+  const snapshot = timeline([[3, {}], [5, { 'next-actions-sent': { text: 'hi' } }]])
   assert.equal(nextSent(snapshot, 3), 'hi')
   assert.equal(nextSent(snapshot, 5), '')
   assert.equal(nextSent(snapshot, 4), '')
   assert.equal(nextSent(undefined, 3), '')
 })
 
+test('regression: turns without a human message are skipped, unless they show their own card', () => {
+  const skipped = timeline([[3, {}], [4, {}], [5, { 'next-actions-sent': { text: 'hi' } }]])
+  assert.equal(nextSent(skipped, 3), 'hi')
+  const ownCard = timeline([[3, {}], [4, { 'next-actions': { model } }], [5, { 'next-actions-sent': { text: 'hi' } }]])
+  assert.equal(nextSent(ownCard, 3), '', 'the message answers the newer card of turn 4')
+  assert.equal(nextSent(ownCard, 4), 'hi')
+  const answeredWithCard = timeline([[3, {}], [4, { 'next-actions-sent': { text: 'hi' }, 'next-actions': { model } }]])
+  assert.equal(nextSent(answeredWithCard, 3), 'hi', 'a turn opened by the human answers the card before it')
+})
+
 test('usageOf tells sent as-is, sent with edits, and unrelated apart', () => {
   const prompt = '跑一下测试，只跑 src/api 相关用例。'
   assert.equal(usageOf(prompt, `先说一句\n\n${prompt}`), 'full')
+  assert.equal(usageOf(prompt, `先说一句\n${prompt}\n最后一句`), 'full')
   assert.equal(usageOf(prompt, '跑一下测试，只跑src/api相关用例。'), 'full')
+  assert.equal(usageOf('第一行\n第二行', '前言\n第一行\n第二行'), 'full')
   assert.equal(usageOf(prompt, '跑一下测试，只跑 src/api 和 src/db 的相关用例'), 'partial')
+  assert.equal(usageOf('跑一下测试', '跑一下单元测试'), 'partial')
   assert.equal(usageOf(prompt, '帮我写一份发布说明'), null)
   assert.equal(usageOf(prompt, ''), null)
-  assert.equal(usageOf('ok', 'ok then'), 'full')
-  assert.equal(usageOf('okay', 'kay'), null)
+  assert.equal(usageOf('', 'anything'), null)
+})
+
+test('regression: a prompt inside a longer line is not "sent as-is"', () => {
+  assert.equal(usageOf('ok', 'Look okay?'), null)
+  assert.equal(usageOf('ok', 'ok then'), null)
+  assert.equal(usageOf('ok', 'ok'), 'full')
+  assert.equal(usageOf('好', '好的，不过先别动'), null)
+  assert.equal(usageOf('好', '好'), 'full')
+  // Negation is still an edit of the text; the pencil says "sent with edits", never the check.
+  assert.equal(usageOf('git push --force', '不要 git push --force'), 'partial')
+})
+
+test('regression: "sent with edits" keeps the prompt in order and is not diluted', () => {
+  assert.equal(usageOf('跑一下测试', '测试一下跑'), null)
+  assert.equal(usageOf('okay', 'kay'), 'partial', 'deleting a character is an edit')
+  assert.equal(usageOf('跑测试', '跑测试吧'), null, 'prompts under four characters only count as-is')
+  const scattered = '我们讨论一下测试策略：先跑一下所有的单元测试，然后只看 src/api 目录下相关的用例结果，再决定下一步。'
+  assert.equal(usageOf('跑一下测试，只跑 src/api 相关用例。', scattered), null)
 })
 
 test('each chip is judged on its own: one message can fully use one and partly use another', () => {

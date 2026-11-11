@@ -318,38 +318,80 @@ window.__ModuleLoader__.load({
     }
 
     // -----------------------------------------------------------------------
-    // Usage: which suggestions the next user message actually used
+    // Usage: which suggestions the next human message used
+    //
+    // An inference from the sent text, not a click record: typing similar text
+    // by hand is marked too. Clicking fills the prompt as whole lines (the
+    // empty draft replaced, or "\n\n" + prompt inserted), so "sent as-is"
+    // means whole lines equal to the prompt.
     // -----------------------------------------------------------------------
+
+    /** Prompts shorter than this (whitespace removed) only count when sent as-is. */
+    const EDITED_MIN_LENGTH = 4
+    /** Order-aware similarity (Dice over the longest common subsequence) that counts as "sent with edits". */
+    const EDITED_SIMILARITY = 0.6
 
     const squash = (value) => value.replace(/\s+/g, '').toLowerCase()
 
-    function pairsOf(value) {
-      const characters = Array.from(value)
-      const pairs = new Set()
-      for (let index = 0; index + 1 < characters.length; index += 1) pairs.add(characters[index] + characters[index + 1])
-      return pairs
+    /** Characters of `left` kept in order in `right`. */
+    function commonLength(left, right) {
+      let row = new Array(right.length + 1).fill(0)
+      for (const character of left) {
+        const next = [0]
+        for (let index = 0; index < right.length; index += 1) {
+          next.push(character === right[index] ? row[index] + 1 : Math.max(row[index + 1], next[index]))
+        }
+        row = next
+      }
+      return row[right.length]
     }
 
-    /** 'full' when the sent text contains the prompt, 'partial' when it keeps at least half of its character pairs. */
+    function similarity(target, text) {
+      // Dice cannot reach the threshold when lengths differ too much; skip the quadratic work.
+      if ((2 * Math.min(target.length, text.length)) / (target.length + text.length) < EDITED_SIMILARITY) return 0
+      return (2 * commonLength(target, text)) / (target.length + text.length)
+    }
+
+    /**
+     * 'full' when whole consecutive lines of the sent text equal the prompt;
+     * 'partial' when one line or paragraph keeps most of the prompt in order.
+     */
     function usageOf(prompt, sent) {
-      const target = squash(prompt)
-      const text = squash(sent)
-      if (target === '' || text === '') return null
-      if (text.includes(target)) return 'full'
-      const pairs = pairsOf(target)
-      if (pairs.size < 4) return null
-      const sentPairs = pairsOf(text)
-      let kept = 0
-      for (const pair of pairs) if (sentPairs.has(pair)) kept += 1
-      return kept / pairs.size >= 0.5 ? 'partial' : null
+      const target = Array.from(squash(prompt))
+      if (target.length === 0) return null
+      const lines = sent.split('\n').map(squash).filter((line) => line !== '')
+      const joined = target.join('')
+      for (let first = 0; first < lines.length; first += 1) {
+        let run = ''
+        for (let last = first; last < lines.length && run.length < joined.length; last += 1) {
+          run += lines[last]
+          if (run === joined) return 'full'
+        }
+      }
+      if (target.length < EDITED_MIN_LENGTH) return null
+      const paragraphs = sent.split(/\n\s*\n/).map(squash).filter((paragraph) => paragraph !== '')
+      for (const candidate of new Set([...lines, ...paragraphs])) {
+        if (similarity(target, Array.from(candidate)) >= EDITED_SIMILARITY) return 'partial'
+      }
+      return null
     }
 
-    /** Text the user opened the turn after `turn` with, from the session log. */
+    /**
+     * Text the user answered the card of `turn` with: the next turn opened by a
+     * human message. Turns without one (injected context, wake-ups) are skipped,
+     * unless they produced a card of their own, which the message answers instead.
+     */
     function nextSent(snapshot, turn) {
       const order = snapshot?.timeline?.turnOrder
       const index = Array.isArray(order) ? order.indexOf(turn) : -1
-      if (index < 0 || index + 1 >= order.length) return ''
-      return snapshot.timeline.turns?.get(order[index + 1])?.data?.get(SENT_KEY)?.text ?? ''
+      if (index < 0) return ''
+      for (const later of order.slice(index + 1)) {
+        const data = snapshot.timeline.turns?.get(later)?.data
+        const text = data?.get(SENT_KEY)?.text
+        if (typeof text === 'string' && text !== '') return text
+        if (data?.get(KEY)?.model) return ''
+      }
+      return ''
     }
 
     /** Only a card mounted right after its turn ends animates in; history mounts instantly. */
