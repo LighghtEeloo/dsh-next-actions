@@ -3,7 +3,7 @@
 > Suggested next actions under DeepSeek Harness replies — clicking one fills the input, never sends.
 > DSH Web/Desktop 插件：在回复下方显示 1–3 条「下一步建议」，点击只填入输入框。
 
-**状态：v0.1.0，已发布到 npm。** 设计与理念见 [`DESIGN.md`](DESIGN.md)，版本记录见 [`CHANGELOG.md`](CHANGELOG.md)。
+**状态：v0.1.0，已发布到 npm（[dsh-next-actions](https://www.npmjs.com/package/dsh-next-actions)）。** 设计与理念见 [`DESIGN.md`](DESIGN.md)，版本记录见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 安装
 
@@ -49,6 +49,21 @@ npm pack --dry-run  # 打包检查
 
 安装/卸载用 `plugin_manager` 的 `install_bundle` / `remove_bundle`；验证使用假 `DSH_HOME`。
 Host 改动需重启 DSH，Client 改动需刷新页面。
+
+## 发布
+
+改 `package.json` 版本与 `CHANGELOG.md` 后：
+
+```sh
+node --test
+npm pack --dry-run
+git tag -a v<version> -m "v<version>"
+git push origin main --tags
+npm publish --access public
+npm view dsh-next-actions version   # 确认 latest 指向新版本
+```
+
+发布后用假 `DSH_HOME` 从 registry 装一次；本机 `link:` 安装不需要切换。
 
 关闭功能：在 profile 的 `cordis.patch.yml` 写
 
