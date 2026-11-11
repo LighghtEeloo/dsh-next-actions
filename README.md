@@ -3,7 +3,7 @@
 > Suggested next steps under DeepSeek Harness replies — clicking one fills the input, never sends.
 > DSH Web/Desktop 插件：在回复下方显示 1–3 条「下一步建议」，点击只填入输入框。
 
-**状态：v0.1.0，本地 `link:` 安装试用，未公开发布。** 设计见 [`docs/design.md`](docs/design.md)。
+**状态：v0.1.0，本地 `link:` 安装试用，未公开发布。** 设计与理念见 [`DESIGN.md`](DESIGN.md)。
 
 ## 功能
 
@@ -45,6 +45,13 @@ Host 改动需重启 DSH，Client 改动需刷新页面。
   name: '@local/dsh-next-actions'
   config: { enabled: false }
 ```
+
+## 待实机确认
+
+- `insertText` 在含 `@` 引用的草稿里插入的位置与撤销行为（失败时退回 `setDraft` 追加，引用会变成纯文本）。
+- 0.2.2-rc.1 的 `useChat` 快照提供 `timeline.turns` 及其 `data`，`user/message.content` 为文本块数组。
+- 改后发送的阈值（相邻字对保留 ≥50%）在真实消息上的效果。
+- `turn.end.time` 的格式（决定只有刚结束的卡片才播放展开动画）。
 
 ## 许可
 
