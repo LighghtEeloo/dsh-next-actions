@@ -37,7 +37,7 @@
 - **建议**：最多 3 条，按模型给出的顺序排列；悬停显示完整指令（原生提示），不改变布局。
 - **推荐**：模型至多标 1 条，固定排第一；按钮描边带品牌蓝，前置 ✦。
 - **危险**：模型标记或本地词表命中时前置 ⚠，可访问名带「需确认」。
-- **已使用**：按用户在下一轮实际发出的消息，对每个选项各自判定——原样包含该指令 → ✓；
+- **已使用**：按用户在下一轮发出的第一条消息，对每个选项各自判定——原样包含该指令 → ✓；
   保留了它至少一半的相邻字对（改后发送）→ 铅笔；删光或无关 → 不标。已使用的按钮文字转为二级色。
   每个按钮只放一个前置图标：✓ 或铅笔 > ⚠ > ✦；所有状态都写进可访问名。
 - **点击 = 填入**：草稿为空，或仍是卡片刚填入且未改动的文字 → 整段替换；草稿里有用户自己的内容 →
@@ -54,9 +54,14 @@
 | --- | --- | --- |
 | Host | `index.js` | 为根 agent 注册 `suggest_next_actions` 与一段常驻提示；子代理不注册；`enabled:false` 时什么都不注册 |
 | 规范化 | `lib/normalize.js` | 参数 → `{ shown, context, suggestions[≤3] }`：折叠空白、截断、按指令去重、风险词标记、推荐至多一条且置顶。结果作为 `tool/result.meta` 写入会话日志 |
-| Client | `client.js`（手写单文件，含 CSS） | Conversation Definition 把本工具结果上的 meta（native 与 PTC `run_code` 两条通路）和用户自己发出的 `user/message` 折叠进 `turn.data.get('next-actions')`；`conversation.chat.turnTail` 渲染卡片；`tool.call.toolview` 渲染过程行 |
+| Client | `client.js`（手写单文件，含 CSS） | 两个 Conversation Definition：`next-actions` 把本工具结果上的 meta（native 与 PTC `run_code` 两条通路）发布为该轮卡片；`next-actions-sent` 把用户在该轮发出的第一条 `user/message` 发布为 `sent` 文本。`conversation.chat.turnTail` 渲染卡片；`tool.call.toolview` 渲染过程行 |
 
 会话日志只追加；压缩修剪工具结果时会把 meta 原样复制进替换事件，原事件也保留，所以客户端直接读 meta，
 不重算参数，也不需要构建步骤。第 N 轮的卡片通过 `useChat` 的 `timeline.turnOrder` / `timeline.turns` 读第 N+1 轮的 `sent` 文本来判定
-"已使用"。外部插件不能 require Harness Client 包，所以卡片样式按官方动作卡重写，类名用 `dshna-` 前缀；
+"已使用"。
+
+事件归到哪一轮由引擎决定。同一个 Definition 服务页面里所有会话的 assembler，翻页加载旧历史（`prepend`）时还会对更早的事件重跑 `match`，
+所以 `match` 只看当前事件、不持有状态：卡片按调用 id（PTC 按根调用 id）、消息按消息 id 建 Context，
+轮次在 `start` 里从引擎解析好的 `match.location` 读取。引擎规定每轮的同一个 Location key 只能有一个 owner，
+因此同一轮里第一个产出卡片的调用拥有卡片，第一条用户消息拥有 `sent`；后来者通过 `reader.previous` 看到前驱已占用就不再发布。外部插件不能 require Harness Client 包，所以卡片样式按官方动作卡重写，类名用 `dshna-` 前缀；
 刚结束的回合用 CSS `grid-template-rows` 展开卡片，避免回答被一帧顶起，`prefers-reduced-motion` 下不做动画。

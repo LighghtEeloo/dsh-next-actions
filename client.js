@@ -1,10 +1,13 @@
 /**
  * Browser half of @local/dsh-next-actions.
  *
- * - A Conversation Definition folds this tool's events into
- *   `turn.data.get('next-actions')`: native `tool/call` + `tool/result.meta`, and
- *   PTC (`run_code`) `tool/ptc-dispatch` records, whose turn is only known
- *   through the outer `run_code` call.
+ * - Two Conversation Definitions publish turn data. `next-actions` holds the
+ *   card from this tool's `tool/result.meta` (native) or `tool/ptc-dispatch`
+ *   meta (PTC `run_code`); `next-actions-sent` holds the text of the turn's
+ *   first human `user/message`. `match()` reads only the current event; the
+ *   turn always comes from the Engine-resolved `match.location`, because one
+ *   Definition serves every session's assembler and `prepend` re-matches
+ *   older pages.
  * - A `conversation.chat.turnTail` entry renders the card under every turn
  *   that produced one; clicking a suggestion fills the composer and never
  *   sends. A chip whose prompt the next user message sent as-is gets a check;
@@ -99,8 +102,8 @@ window.__ModuleLoader__.load({
     const PKG = '@local/dsh-next-actions'
     const NS = 'nextActions'
     const TOOL_NAME = 'suggest_next_actions'
-    const RUN_CODE = 'run_code'
     const KEY = 'next-actions'
+    const SENT_KEY = 'next-actions-sent'
 
     const EN = Object.freeze({
       'card.title': 'Suggested next actions',
@@ -142,17 +145,29 @@ window.__ModuleLoader__.load({
       return suggestions.length === 0 ? null : { context: meta.context, suggestions }
     }
 
-    /** run_code callId → turn; PTC dispatch records carry no turn themselves. */
-    const runCodeTurns = new Map()
-    const ptcTurn = (data) => runCodeTurns.get(data.rootCallId ?? data.parentCallId)
-    const turnId = (turn) => (Number.isSafeInteger(turn) && turn >= 0 ? String(turn) : null)
-    const route = (turn, role) => {
-      const id = turnId(turn)
-      return id === null ? null : { id, role }
+    const isTurn = (turn) => Number.isSafeInteger(turn) && turn >= 0
+    const isId = (value) => (typeof value === 'string' && value !== '') || Number.isSafeInteger(value)
+
+    /**
+     * Turn of a Match as the Engine resolved it for this session's window. Only
+     * the Engine knows which session and position an event has, so `match()`
+     * never guesses a turn from earlier events.
+     */
+    function turnOf(match) {
+      const location = match.location
+      const turn = location?.kind === 'turn' || location?.kind === 'step' ? location.turn?.turn : undefined
+      return isTurn(turn) ? turn : isTurn(match.event?.data?.turn) ? match.event.data.turn : null
     }
 
-    /** Turn opened by the latest `turn/start`; a user/message names no turn itself. */
-    let openTurn = null
+    /**
+     * A turn's Location key has one owner. Contexts of one kind form a chain by
+     * start order; `taken` says an earlier Context of the same turn already
+     * owns the key. The Engine replays a Context when its predecessor changes.
+     */
+    function takenBefore(reader, kind, turn, owns) {
+      const previous = reader.previous(kind)?.state
+      return previous !== undefined && previous.turn === turn && (previous.taken || owns(previous))
+    }
 
     /** Plain text of a message's content blocks. */
     function textOf(content) {
@@ -161,62 +176,43 @@ window.__ModuleLoader__.load({
       return content.map((block) => (block?.type === 'text' && typeof block.text === 'string' ? block.text : '')).join('')
     }
 
-    function matchTurn(match) {
-      const location = match.location
-      const turn = location?.kind === 'turn' || location?.kind === 'step' ? location.turn?.turn : undefined
-      return Number.isSafeInteger(turn) ? turn : match.event?.data?.turn
-    }
-
-    const definition = {
+    /**
+     * Card: one Context per call, keyed like the official tool Definition.
+     * Native calls by `callId`; PTC (`run_code`) dispatches by their root call.
+     * The first call of a turn that produced a card owns the turn's card.
+     */
+    const hasCard = (state) => state.model !== null
+    const cardDefinition = {
       kind: KEY,
       match(event) {
         const data = event.data
         switch (event.type) {
-          case 'turn/start':
-            openTurn = turnId(data.turn) === null ? null : data.turn
-            return route(data.turn, 'start')
-          case 'user/message':
-            // What the human sent is the record of which suggestion they used.
-            return event.surfaceOp === 'append' && data.source?.kind === 'user' && openTurn !== null
-              ? route(openTurn, 'update')
-              : null
           case 'tool/call':
-            if (data.name === RUN_CODE && typeof data.callId === 'string' && turnId(data.turn) !== null) {
-              if (runCodeTurns.size >= 1024) runCodeTurns.delete(runCodeTurns.keys().next().value)
-              runCodeTurns.set(data.callId, data.turn)
-            }
-            return data.name === TOOL_NAME ? route(data.turn, 'update') : null
-          case 'tool/result':
+            return data.name === TOOL_NAME && isId(data.callId) ? { id: String(data.callId), role: 'start' } : null
+          case 'tool/result': {
             // Replacement copies of a result must not re-publish the card.
-            return event.surfaceOp === 'append' ? route(data.turn, 'update') : null
+            const callId = data.message?.source?.callId ?? data.message?.toolCallId
+            return event.surfaceOp === 'append' && isId(callId) ? { id: String(callId), role: 'update' } : null
+          }
           case 'tool/ptc-dispatch-start':
-            return data.name === TOOL_NAME ? route(ptcTurn(data), 'start') : null
           case 'tool/ptc-dispatch':
-            return data.name === TOOL_NAME ? route(ptcTurn(data), 'update') : null
+            return data.name === TOOL_NAME && isId(data.rootCallId)
+              ? { id: `ptc:${data.rootCallId}`, role: event.type === 'tool/ptc-dispatch-start' ? 'start' : 'update' }
+              : null
           default:
             return null
         }
       },
-      start(context, match) {
-        const state = { turn: matchTurn(match), calls: new Set(), model: null, sent: '' }
-        return match.event.type === 'turn/start' ? state : definition.update({ state }, match)
+      start(_context, match, reader) {
+        const turn = turnOf(match)
+        const state = { turn, model: null, taken: turn !== null && takenBefore(reader, KEY, turn, hasCard) }
+        return cardDefinition.update({ state }, match)
       },
       update({ state }, { event }) {
         const data = event.data
-        // A result names only its call id, so remember which calls are ours.
-        if (event.type === 'tool/call' && data.name === TOOL_NAME) {
-          return { ...state, calls: new Set(state.calls).add(String(data.callId)) }
-        }
-        if (event.type === 'user/message') {
-          const text = textOf(data.content)
-          return text === '' ? state : { ...state, sent: state.sent === '' ? text : `${state.sent}\n${text}` }
-        }
         let model = null
         if (event.type === 'tool/result' && event.surfaceOp === 'append') {
-          const message = data.message
-          if (message === undefined || message.isError === true) return state
-          const callId = String(message.source?.callId ?? message.toolCallId ?? '')
-          if (!state.calls.has(callId)) return state
+          if (data.message === undefined || data.message.isError === true) return state
           model = modelOf(data.meta)
         } else if (event.type === 'tool/ptc-dispatch' && data.isError !== true) {
           model = modelOf(data.meta)
@@ -224,11 +220,36 @@ window.__ModuleLoader__.load({
         return model === null ? state : { ...state, model }
       },
       buildLocationData({ state }, scope, previous) {
-        if (scope !== 'turn' || state === undefined || turnId(state.turn) === null) return null
-        if (state.model === null && state.sent === '') return null
-        if (previous?.key === KEY && previous.turn === state.turn
-          && previous.value.model === state.model && previous.value.sent === state.sent) return previous
-        return { kind: 'turn', turn: state.turn, key: KEY, value: { model: state.model, sent: state.sent } }
+        if (scope !== 'turn' || state === undefined || state.turn === null || state.model === null || state.taken) return null
+        if (previous?.key === KEY && previous.turn === state.turn && previous.value.model === state.model) return previous
+        return { kind: 'turn', turn: state.turn, key: KEY, value: { model: state.model } }
+      },
+    }
+
+    /**
+     * Sent text: one Context per human message. The first message of a turn
+     * owns the turn's `sent`; it is what the card of the turn before is judged by.
+     */
+    const hasSent = () => true
+    const sentDefinition = {
+      kind: SENT_KEY,
+      match(event) {
+        const data = event.data
+        return event.type === 'user/message' && event.surfaceOp === 'append' && data.source?.kind === 'user' && isId(data.id)
+          ? { id: String(data.id), role: 'start' }
+          : null
+      },
+      start(_context, match, reader) {
+        const turn = turnOf(match)
+        return { turn, text: textOf(match.event.data.content), taken: turn !== null && takenBefore(reader, SENT_KEY, turn, hasSent) }
+      },
+      update({ state }) {
+        return state
+      },
+      buildLocationData({ state }, scope, previous) {
+        if (scope !== 'turn' || state === undefined || state.turn === null || state.text === '' || state.taken) return null
+        if (previous?.key === SENT_KEY && previous.turn === state.turn && previous.value.text === state.text) return previous
+        return { kind: 'turn', turn: state.turn, key: SENT_KEY, value: { text: state.text } }
       },
     }
 
@@ -323,12 +344,12 @@ window.__ModuleLoader__.load({
       return kept / pairs.size >= 0.5 ? 'partial' : null
     }
 
-    /** Text the user sent in the turn after `turn`, from the same session-log fold. */
+    /** Text the user opened the turn after `turn` with, from the session log. */
     function nextSent(snapshot, turn) {
       const order = snapshot?.timeline?.turnOrder
       const index = Array.isArray(order) ? order.indexOf(turn) : -1
       if (index < 0 || index + 1 >= order.length) return ''
-      return snapshot.timeline.turns?.get(order[index + 1])?.data?.get(KEY)?.sent ?? ''
+      return snapshot.timeline.turns?.get(order[index + 1])?.data?.get(SENT_KEY)?.text ?? ''
     }
 
     /** Only a card mounted right after its turn ends animates in; history mounts instantly. */
@@ -422,7 +443,8 @@ window.__ModuleLoader__.load({
         document.head.appendChild(element)
         return () => element.remove()
       }, 'dsh-next-actions: styles')
-      ctx.effect(() => ctx.uiConversation.events.register(definition), 'dsh-next-actions: definition')
+      ctx.effect(() => ctx.uiConversation.events.register(cardDefinition), 'dsh-next-actions: card definition')
+      ctx.effect(() => ctx.uiConversation.events.register(sentDefinition), 'dsh-next-actions: sent definition')
       ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
         name: 'conversation.chat.turnTail', id: PKG, order: -10, locale: NS,
       }, NextActionsCard))
@@ -435,7 +457,7 @@ window.__ModuleLoader__.load({
       // `uiConversation` is injected so the definition registers on a cold boot.
       inject: ['slots', 'locale', 'uiConversation'],
       apply,
-      __test: { definition, modelOf, fillMode, fill, rowState, usageOf, nextSent },
+      __test: { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent },
     }
   },
 })

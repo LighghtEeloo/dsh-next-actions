@@ -21,7 +21,7 @@ function loadBundle() {
 }
 
 const plugin = loadBundle()
-const { definition, modelOf, fillMode, fill, rowState, usageOf, nextSent } = plugin.__test
+const { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent } = plugin.__test
 
 const args = {
   context: '修复已完成。',
@@ -33,32 +33,105 @@ const args = {
 const meta = { shown: true, context: '修复已完成。', suggestions: [{ label: '跑测试', prompt: '跑一下测试。' }] }
 const model = { context: meta.context, suggestions: meta.suggestions }
 
-function fold(events) {
-  const matches = events.map((event) => (event.event ? event : { event }))
-  let state = definition.start({}, matches[0])
-  for (const match of matches.slice(1)) state = definition.update({ state }, match)
-  return state
+/**
+ * Minimal stand-in for the DSH ConversationNodeAssembler: Location comes from
+ * the event's position in its own session window (like the Engine's index),
+ * Contexts are keyed by kind + id, `reader.previous` sees the nearest earlier
+ * started Context of a kind, and a turn's Location key may have one owner.
+ */
+const definitions = [cardDefinition, sentDefinition]
+
+function locate(events) {
+  const locations = new Map()
+  let current
+  for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (event.type === 'turn/start') current = event.data.turn
+    const turn = Number.isSafeInteger(event.data?.turn) ? event.data.turn : current
+    locations.set(event.seq, turn === undefined ? { kind: 'session' } : { kind: 'turn', turn: { turn } })
+    if (event.type === 'turn/end' && current === event.data.turn) current = undefined
+  }
+  return locations
 }
 
-const call = (turn = 1, payload = args) => ({ type: 'tool/call', data: { turn, callId: 'c1', name: TOOL, arguments: JSON.stringify(payload) } })
-const result = (turn = 1, extra = {}) => ({
+/** Run `match` over events in the given order (a prepend matches older pages later). */
+function collect(events) {
+  const records = []
+  for (const event of events) {
+    for (const definition of definitions) {
+      const result = definition.match(event)
+      if (result !== null) records.push({ definition, ...result, event })
+    }
+  }
+  return records
+}
+
+/** Fold collected matches over the session window the way the Engine settles them; returns turn → key → value. */
+function build(records, window) {
+  const locations = locate(window)
+  const contexts = new Map()
+  for (const record of [...records].sort((a, b) => a.event.seq - b.event.seq)) {
+    const key = `${record.definition.kind}:${record.id}`
+    if (!contexts.has(key)) contexts.set(key, { definition: record.definition, matches: [] })
+    contexts.get(key).matches.push({ event: record.event, role: record.role, location: locations.get(record.event.seq) })
+  }
+  const started = [...contexts.values()]
+    .filter((context) => context.matches[0].role === 'start')
+    .sort((a, b) => a.matches[0].event.seq - b.matches[0].event.seq)
+  const done = []
+  for (const context of started) {
+    const [first, ...rest] = context.matches
+    const kind = context.definition.kind
+    const reader = { previous: (wanted) => {
+      const previous = done.filter((other) => other.definition.kind === wanted).at(-1)
+      return previous === undefined ? undefined : { state: previous.state }
+    } }
+    context.state = context.definition.start({}, first, reader)
+    for (const match of rest) context.state = context.definition.update({ state: context.state }, match)
+    done.push(context)
+    assert.equal(kind, context.definition.kind)
+  }
+  const turns = new Map()
+  for (const context of done) {
+    const data = context.definition.buildLocationData({ state: context.state }, 'turn', null)
+    if (data === null) continue
+    assert.equal(data.key, context.definition.kind, 'Location data key must be the Definition kind')
+    const values = turns.get(data.turn) ?? new Map()
+    assert.equal(values.has(data.key), false, `turn ${data.turn} already has ${data.key}`)
+    values.set(data.key, data.value)
+    turns.set(data.turn, values)
+  }
+  return turns
+}
+
+const assemble = (events) => build(collect(events), events)
+const dataOf = (turns, turn, key) => turns.get(turn)?.get(key)
+
+let seq = 0
+const at = (event) => ({ seq: ++seq, ...event })
+const turnStart = (turn) => at({ type: 'turn/start', data: { turn } })
+const turnEnd = (turn) => at({ type: 'turn/end', data: { turn, reason: 'completed' } })
+const call = (turn, callId = 'c1') => at({ type: 'tool/call', data: { turn, step: 1, callId, name: TOOL, arguments: JSON.stringify(args) } })
+const result = (turn, callId = 'c1', extra = {}) => at({
   type: 'tool/result',
   surfaceOp: 'append',
-  data: { turn, message: { isError: false, source: { callId: 'c1' } }, ...extra },
+  data: { turn, step: 1, message: { isError: false, source: { callId } }, ...extra },
 })
+const user = (text, { id = text, kind = 'user', surfaceOp = 'append' } = {}) =>
+  at({ type: 'user/message', surfaceOp, data: { id, role: 'user', content: [{ type: 'text', text }], source: { kind } } })
 
-test('native call + result folds the persisted meta into turn data', () => {
-  const state = fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result(1, { meta })])
-  assert.deepEqual(state.model, model)
-  const location = definition.buildLocationData({ state }, 'turn', undefined)
-  assert.deepEqual(location, { kind: 'turn', turn: 1, key: 'next-actions', value: { model: state.model, sent: '' } })
-  assert.equal(definition.buildLocationData({ state }, 'turn', location), location)
-  assert.equal(definition.buildLocationData({ state }, 'session', undefined), null)
+test('native call + result publishes the persisted meta as the turn card', () => {
+  const turns = assemble([turnStart(1), call(1), result(1, 'c1', { meta })])
+  assert.deepEqual(dataOf(turns, 1, 'next-actions'), { model })
+  const state = { turn: 1, model, taken: false }
+  const location = cardDefinition.buildLocationData({ state }, 'turn', null)
+  assert.deepEqual(location, { kind: 'turn', turn: 1, key: 'next-actions', value: { model } })
+  assert.equal(cardDefinition.buildLocationData({ state }, 'turn', location), location)
+  assert.equal(cardDefinition.buildLocationData({ state }, 'step', null), null)
 })
 
 test('a missing, not-shown or malformed meta publishes no card', () => {
-  assert.equal(fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result()]).model, null)
-  assert.equal(fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result(1, { meta: { shown: false, note: 'x' } })]).model, null)
+  assert.equal(assemble([turnStart(1), call(1), result(1)]).size, 0)
+  assert.equal(assemble([turnStart(1), call(1), result(1, 'c1', { meta: { shown: false, note: 'x' } })]).size, 0)
   assert.equal(modelOf({ shown: true, context: 'c', suggestions: [] }), null)
   assert.equal(modelOf({ shown: true, suggestions: meta.suggestions }), null)
   assert.equal(modelOf({ shown: true, context: 'c', suggestions: [{ label: 'x' }, null] }), null)
@@ -72,27 +145,84 @@ test('older metas keep at most three suggestions with their marks', () => {
   assert.equal(kept[0].recommended, true)
 })
 
-test('errors, replacement results and unknown calls never publish a card', () => {
-  const start = { type: 'turn/start', data: { turn: 1 } }
-  const error = { ...result(1, { meta }), data: { turn: 1, meta, message: { isError: true, source: { callId: 'c1' } } } }
-  assert.equal(fold([start, call(), error]).model, null)
-  assert.equal(fold([start, result(1, { meta })]).model, null)
-  assert.equal(definition.match({ ...result(1), surfaceOp: 'replace' }), null)
-  assert.equal(definition.match({ type: 'tool/call', data: { turn: 1, name: 'other' } }), null)
+test('errors, replacement results and other calls never publish a card', () => {
+  const error = at({ type: 'tool/result', surfaceOp: 'append', data: { turn: 1, meta, message: { isError: true, source: { callId: 'c1' } } } })
+  assert.equal(assemble([turnStart(1), call(1), error]).size, 0)
+  assert.equal(assemble([turnStart(1), result(1, 'c1', { meta })]).size, 0, 'a result without our call has no started Context')
+  assert.equal(assemble([turnStart(1), call(1), result(1, 'other', { meta })]).size, 0)
+  assert.equal(cardDefinition.match({ ...result(1), surfaceOp: 'replace' }), null)
+  assert.equal(cardDefinition.match({ type: 'tool/call', data: { turn: 1, callId: 'c9', name: 'other' } }), null)
+  assert.equal(cardDefinition.match({ type: 'tool/call', data: { turn: 1, name: TOOL } }), null)
 })
 
-test('PTC dispatch resolves its turn through the outer run_code call', () => {
-  const ptc = (type, extra = {}) => ({ type, data: { rootCallId: 'run-1', subCallId: 'run-1:1', name: TOOL, arguments: args, ...extra } })
-  assert.equal(definition.match(ptc('tool/ptc-dispatch')), null)
-  assert.equal(definition.match({ type: 'tool/call', data: { turn: 4, callId: 'run-1', name: 'run_code', arguments: '{}' } }), null)
-  assert.deepEqual(definition.match(ptc('tool/ptc-dispatch-start')), { id: '4', role: 'start' })
-  assert.deepEqual(definition.match(ptc('tool/ptc-dispatch', { meta })), { id: '4', role: 'update' })
+const ptc = (type, extra = {}) => at({ type, data: { rootCallId: 'run-1', subCallId: 'run-1:1', name: TOOL, arguments: args, ...extra } })
 
-  const location = { kind: 'turn', turn: { turn: 4 } }
-  const state = fold([{ event: ptc('tool/ptc-dispatch-start'), location }, { event: ptc('tool/ptc-dispatch', { meta }), location }])
-  assert.equal(state.turn, 4)
-  assert.deepEqual(state.model, model)
-  assert.equal(fold([{ event: ptc('tool/ptc-dispatch-start'), location }, { event: ptc('tool/ptc-dispatch', { isError: true }), location }]).model, null)
+test('PTC dispatch is keyed by its root call and placed by its resolved location', () => {
+  assert.deepEqual(cardDefinition.match(ptc('tool/ptc-dispatch-start')), { id: 'ptc:run-1', role: 'start' })
+  assert.deepEqual(cardDefinition.match(ptc('tool/ptc-dispatch', { meta })), { id: 'ptc:run-1', role: 'update' })
+  assert.equal(cardDefinition.match(ptc('tool/ptc-dispatch', { rootCallId: undefined })), null)
+
+  const runCode = at({ type: 'tool/call', data: { turn: 4, step: 1, callId: 'run-1', name: 'run_code', arguments: '{}' } })
+  assert.equal(cardDefinition.match(runCode), null)
+  const turns = assemble([turnStart(4), runCode, ptc('tool/ptc-dispatch-start'), ptc('tool/ptc-dispatch', { meta })])
+  assert.deepEqual(dataOf(turns, 4, 'next-actions'), { model })
+  assert.equal(assemble([turnStart(4), ptc('tool/ptc-dispatch-start'), ptc('tool/ptc-dispatch', { isError: true, meta })]).size, 0)
+  assert.equal(assemble([ptc('tool/ptc-dispatch-start'), ptc('tool/ptc-dispatch', { meta })]).size, 0, 'no turn, no card')
+})
+
+test('one card per turn: the first call that produced a card owns it', () => {
+  const second = { ...meta, context: '第二次。' }
+  const both = assemble([turnStart(1), call(1, 'a'), result(1, 'a', { meta }), call(1, 'b'), result(1, 'b', { meta: second })])
+  assert.deepEqual(dataOf(both, 1, 'next-actions'), { model })
+
+  const failedFirst = assemble([turnStart(1), call(1, 'a'), result(1, 'a'), call(1, 'b'), result(1, 'b', { meta: second })])
+  assert.equal(dataOf(failedFirst, 1, 'next-actions').model.context, '第二次。')
+
+  const parallel = assemble([turnStart(1), call(1, 'a'), call(1, 'b'), result(1, 'b', { meta: second }), result(1, 'a', { meta })])
+  assert.deepEqual(dataOf(parallel, 1, 'next-actions'), { model })
+
+  const mixed = assemble([turnStart(1), call(1, 'a'), result(1, 'a', { meta }), ptc('tool/ptc-dispatch-start'), ptc('tool/ptc-dispatch', { meta: second })])
+  assert.deepEqual(dataOf(mixed, 1, 'next-actions'), { model })
+})
+
+test('the first human message of a turn is its sent text', () => {
+  assert.deepEqual(sentDefinition.match(user('a')), { id: 'a', role: 'start' })
+  assert.equal(sentDefinition.match(user('a', { kind: 'inject' })), null)
+  assert.equal(sentDefinition.match(user('a', { surfaceOp: 'replace' })), null)
+  assert.equal(sentDefinition.match(user('a', { id: null })), null)
+
+  const turns = assemble([turnStart(2), user('跑一下测试。'), user('另外看下日志'), turnEnd(2), turnStart(3), user('', { id: 'empty' }), user('后来的')])
+  assert.deepEqual(dataOf(turns, 2, 'next-actions-sent'), { text: '跑一下测试。' })
+  assert.equal(dataOf(turns, 3, 'next-actions-sent'), undefined, 'an empty opening message still opens the turn')
+  assert.equal(assemble([user('before any turn')]).size, 0)
+})
+
+test('regression: a prepended older page does not move live messages to an older turn', () => {
+  const older = [turnStart(4), user('第四轮'), call(4), result(4, 'c1', { meta }), turnEnd(4)]
+  const tail = [turnStart(5)]
+  const live = user('跑一下测试。')
+  const inOrder = assemble([...older, ...tail, live])
+  // Open the tail, then load the older page (matched after the tail), then the live message arrives.
+  const prepended = build([...collect(tail), ...collect(older), ...collect([live])], [...older, ...tail, live])
+  assert.deepEqual(prepended, inOrder)
+  assert.deepEqual(dataOf(prepended, 5, 'next-actions-sent'), { text: '跑一下测试。' })
+  assert.deepEqual(dataOf(prepended, 4, 'next-actions-sent'), { text: '第四轮' })
+})
+
+test('regression: interleaved feeds of two sessions keep their own turns', () => {
+  const sessionA = [turnStart(4), call(4), result(4, 'c1', { meta }), turnEnd(4), turnStart(5), user('跑一下测试。', { id: 'a5' })]
+  const sessionB = [turnStart(6), turnEnd(6), turnStart(7), user('别的会话', { id: 'b7' })]
+  const records = { a: [], b: [] }
+  for (let index = 0; index < Math.max(sessionA.length, sessionB.length); index += 1) {
+    if (sessionB[index]) records.b.push(...collect([sessionB[index]]))
+    if (sessionA[index]) records.a.push(...collect([sessionA[index]]))
+  }
+  const a = build(records.a, sessionA)
+  const b = build(records.b, sessionB)
+  assert.deepEqual(dataOf(a, 5, 'next-actions-sent'), { text: '跑一下测试。' })
+  assert.equal(dataOf(a, 7, 'next-actions-sent'), undefined)
+  assert.deepEqual(dataOf(b, 7, 'next-actions-sent'), { text: '别的会话' })
+  assert.deepEqual(a, assemble(sessionA))
 })
 
 test('fillMode replaces empty or card-owned drafts and inserts otherwise', () => {
@@ -145,7 +275,7 @@ function renderCard({ sent = '', end = true, closing = true, subagent = false, m
     inputActions,
     useInput: (select) => select({ draft }),
     useChat: (select) => select({
-      timeline: { turnOrder: [1, 2], turns: new Map([[2, { data: new Map([['next-actions', { model: null, sent }]]) }]]) },
+      timeline: { turnOrder: [1, 2], turns: new Map([[2, { data: new Map([['next-actions-sent', { text: sent }]]) }]]) },
     }),
     useSession: (select) => select({ subagent }),
     sessionId: 's',
@@ -218,21 +348,8 @@ test('a recommended chip is marked (the Host already put it first)', () => {
   assert.equal(chips[1].props['data-recommended'], undefined)
 })
 
-test('user messages fold into their turn as the sent text', () => {
-  const user = (text, kind = 'user', surfaceOp = 'append') => ({ type: 'user/message', surfaceOp, data: { id: text, content: [{ type: 'text', text }], source: { kind } } })
-  assert.deepEqual(definition.match({ type: 'turn/start', data: { turn: 2 } }), { id: '2', role: 'start' })
-  assert.deepEqual(definition.match(user('a')), { id: '2', role: 'update' })
-  assert.equal(definition.match(user('a', 'inject')), null)
-  assert.equal(definition.match(user('a', 'user', 'replace')), null)
-
-  const state = fold([{ type: 'turn/start', data: { turn: 2 } }, user('跑一下测试。'), user('另外看下日志')])
-  assert.equal(state.sent, '跑一下测试。\n另外看下日志')
-  assert.deepEqual(definition.buildLocationData({ state }, 'turn', undefined).value, { model: null, sent: '跑一下测试。\n另外看下日志' })
-  assert.equal(definition.buildLocationData({ state: fold([{ type: 'turn/start', data: { turn: 2 } }]) }, 'turn', undefined), null)
-})
-
 test('nextSent reads the following turn of the timeline', () => {
-  const snapshot = { timeline: { turnOrder: [3, 5], turns: new Map([[5, { data: new Map([['next-actions', { sent: 'hi' }]]) }]]) } }
+  const snapshot = { timeline: { turnOrder: [3, 5], turns: new Map([[5, { data: new Map([['next-actions-sent', { text: 'hi' }]]) }]]) } }
   assert.equal(nextSent(snapshot, 3), 'hi')
   assert.equal(nextSent(snapshot, 5), '')
   assert.equal(nextSent(snapshot, 4), '')
