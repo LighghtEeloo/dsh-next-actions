@@ -7,7 +7,7 @@
  * Row config `enabled: false` registers nothing, so the feature costs no tokens.
  */
 
-import { buildMeta } from './lib/normalize.js'
+import { buildMeta, LIMITS } from './lib/normalize.js'
 
 export const name = '@local/dsh-next-actions'
 export const inject = ['tools', 'systemPrompt', 'agents']
@@ -47,7 +47,7 @@ const TOOL = {
           additionalProperties: false,
           required: ['label', 'prompt'],
           properties: {
-            label: { type: 'string', description: 'Short imperative button text, ≤16 chars, no ending punctuation.' },
+            label: { type: 'string', description: `Short imperative button text, ≤${LIMITS.label} chars, no ending punctuation.` },
             prompt: { type: 'string', description: "Message the user could send as-is (≤500 chars), citing this turn's files, commands or decisions." },
             recommended: { type: 'boolean', description: 'At most one: your pick when one action is clearly best.' },
             danger: { type: 'boolean', description: 'True only for destructive, irreversible, paid or permission-changing actions.' },

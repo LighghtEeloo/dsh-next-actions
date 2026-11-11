@@ -79,6 +79,14 @@ test('buildMeta clamps long text and marks risky suggestions', () => {
   assert.equal(meta.suggestions[2].danger, true)
 })
 
+test('buildMeta clips a label one character past the stated cap', () => {
+  const atCap = buildMeta(args([{ label: '标'.repeat(LIMITS.label), prompt: 'x' }]))
+  assert.equal(Array.from(atCap.suggestions[0].label).length, LIMITS.label)
+  const over = buildMeta(args([{ label: '标'.repeat(LIMITS.label + 1), prompt: 'x' }]))
+  assert.equal(Array.from(over.suggestions[0].label).length, LIMITS.label)
+  assert.ok(over.suggestions[0].label.endsWith('…'))
+})
+
 test('tool execute and render report whether a card is shown', () => {
   assert.deepEqual(tool.execute(args()), { shown: true, count: 2 })
   assert.deepEqual(tool.execute({}), { shown: false, count: 0 })
