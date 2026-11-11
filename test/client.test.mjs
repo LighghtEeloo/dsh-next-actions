@@ -200,7 +200,7 @@ test('the first human message of a turn is its sent text', () => {
 
   const turns = assemble([turnStart(2), user('跑一下测试。'), user('另外看下日志'), turnEnd(2), turnStart(3), user('', { id: 'empty' }), user('后来的')])
   assert.deepEqual(dataOf(turns, 2, 'next-actions-sent'), { text: '跑一下测试。' })
-  assert.equal(dataOf(turns, 3, 'next-actions-sent'), undefined, 'an empty opening message still opens the turn')
+  assert.deepEqual(dataOf(turns, 3, 'next-actions-sent'), { text: '' }, 'a textless opening message still owns the turn')
   assert.equal(assemble([user('before any turn')]).size, 0)
 })
 
@@ -377,6 +377,8 @@ test('nextSent reads the next turn opened by a human message', () => {
 test('regression: turns without a human message are skipped, unless they show their own card', () => {
   const skipped = timeline([[3, {}], [4, {}], [5, { 'next-actions-sent': { text: 'hi' } }]])
   assert.equal(nextSent(skipped, 3), 'hi')
+  const textless = timeline([[3, {}], [4, { 'next-actions-sent': { text: '' } }], [5, { 'next-actions-sent': { text: 'hi' } }]])
+  assert.equal(nextSent(textless, 3), '', 'an image-only reply stops the search instead of borrowing a later message')
   const ownCard = timeline([[3, {}], [4, { 'next-actions': { model } }], [5, { 'next-actions-sent': { text: 'hi' } }]])
   assert.equal(nextSent(ownCard, 3), '', 'the message answers the newer card of turn 4')
   assert.equal(nextSent(ownCard, 4), 'hi')

@@ -233,8 +233,9 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Sent text: one Context per human message. The first message of a turn
-     * owns the turn's `sent`; it is what the card of the turn before is judged by.
+     * Sent text: one Context per human message. The first message of a turn owns
+     * the turn's `sent`, text or not: a textless reply publishes an empty value
+     * so the card before it is not judged by a later message.
      */
     const hasSent = () => true
     const sentDefinition = {
@@ -253,7 +254,7 @@ window.__ModuleLoader__.load({
         return state
       },
       buildLocationData({ state }, scope, previous) {
-        if (scope !== 'turn' || state === undefined || state.turn === null || state.text === '' || state.taken) return null
+        if (scope !== 'turn' || state === undefined || state.turn === null || state.taken) return null
         if (previous?.key === SENT_KEY && previous.turn === state.turn && previous.value.text === state.text) return previous
         return { kind: 'turn', turn: state.turn, key: SENT_KEY, value: { text: state.text } }
       },
@@ -383,9 +384,11 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Text the user answered the card of `turn` with: the next turn opened by a
-     * human message. Turns without one (injected context, wake-ups) are skipped,
-     * unless they produced a card of their own, which the message answers instead.
+     * Text the user answered the card of `turn` with: the first message of the
+     * next turn opened by a human. Turns without a human message (injected
+     * context, wake-ups) are skipped, and a later turn showing its own card
+     * claims the next message instead. A human turn whose message has no text
+     * (an image-only reply) ends the search, so no later message is borrowed.
      */
     function nextSent(snapshot, turn) {
       const order = snapshot?.timeline?.turnOrder
@@ -393,8 +396,8 @@ window.__ModuleLoader__.load({
       if (index < 0) return ''
       for (const later of order.slice(index + 1)) {
         const data = snapshot.timeline.turns?.get(later)?.data
-        const text = data?.get(SENT_KEY)?.text
-        if (typeof text === 'string' && text !== '') return text
+        const sent = data?.get(SENT_KEY)
+        if (sent !== undefined) return typeof sent.text === 'string' ? sent.text : ''
         if (data?.get(KEY)?.model) return ''
       }
       return ''
