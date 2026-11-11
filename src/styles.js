@@ -7,11 +7,11 @@ export const STYLES = `
   display: grid;
   grid-template-rows: 1fr;
   margin: 16px 0;
-  animation: dshns-reveal .22s cubic-bezier(.4, 0, .2, 1) both;
 }
 .dshns-reveal > * { min-height: 0; }
+.dshns-reveal[data-fresh] { animation: dshns-reveal .22s cubic-bezier(.4, 0, .2, 1) both; }
 @keyframes dshns-reveal { from { grid-template-rows: 0fr; opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .dshns-reveal { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .dshns-reveal[data-fresh] { animation: none; } }
 .dshns-card {
   overflow: hidden;
   padding: 14px 20px 16px;
@@ -55,6 +55,11 @@ export const STYLES = `
   outline-offset: 2px;
 }
 .dshns-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Recommended: tinted border + spark. Used (next message): check, pencil when edited; quieter label. */
+.dshns-chip[data-recommended] { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, transparent); }
+.dshns-spark { flex: none; color: var(--dsw-alias-state-business-primary); }
+.dshns-chip[data-used] { color: var(--dsw-alias-label-secondary); }
+.dshns-check { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, var(--dsw-alias-label-primary)); }
 .dshns-warn { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary)); }
 .dshns-row {
   display: flex;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 
-const TOOL = 'suggest_next_steps'
+const TOOL = 'suggest_next_actions'
 
 /** Load the built bundle with a stub module loader and a tree-building React stub. */
 function loadBundle() {
@@ -22,7 +22,7 @@ function loadBundle() {
 }
 
 const plugin = loadBundle()
-const { definition, modelOf, fillMode, fill, rowState } = plugin.__test
+const { definition, modelOf, fillMode, fill, rowState, usageOf, usagesOf, nextSent } = plugin.__test
 
 const args = {
   context: '修复已完成。',
@@ -55,7 +55,7 @@ test('native call + result folds the persisted meta into turn data', () => {
   const state = fold([{ type: 'turn/start', data: { turn: 1 } }, call(), result(1, { meta })])
   assert.deepEqual(state.model, meta)
   const location = definition.buildLocationData({ state }, 'turn', undefined)
-  assert.deepEqual(location, { kind: 'turn', turn: 1, key: 'next-steps', value: { model: meta } })
+  assert.deepEqual(location, { kind: 'turn', turn: 1, key: 'next-actions', value: { model: meta, sent: '' } })
   assert.equal(definition.buildLocationData({ state }, 'turn', location), location)
   assert.equal(definition.buildLocationData({ state }, 'session', undefined), null)
 })
@@ -131,17 +131,19 @@ test('fill appends with setDraft when the editor refuses or lacks insertText', (
   assert.deepEqual(legacy.calls, ['我的草稿\n\n跑一下测试。'])
 })
 
-function renderCard({ latest = 1, end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '' } = {}) {
+function renderCard({ sent = '', end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '' } = {}) {
   const Card = cardComponent()
-  const data = new Map([['next-steps', { model }], ['turn-tail', { closing: closing ? {} : undefined }]])
+  const data = new Map([['next-actions', { model }], ['turn-tail', { closing: closing ? {} : undefined }]])
   return Card({
     turn: { turn: 1, end: end ? {} : undefined, data },
     inputActions,
     useInput: (select) => select({ draft }),
-    useChat: (select) => select({ timeline: { turnOrder: latest === undefined ? [] : [0, latest] } }),
+    useChat: (select) => select({
+      timeline: { turnOrder: [1, 2], turns: new Map([[2, { data: new Map([['next-actions', { model: null, sent }]]) }]]) },
+    }),
     useSession: (select) => select({ subagent }),
     sessionId: 's',
-    t: (key) => ({ 'card.title': '下一步建议', 'chip.danger': '需确认' })[key] ?? key,
+    t: (key) => ({ 'card.title': '下一步建议', 'chip.recommended': '推荐', 'chip.danger': '需确认', 'chip.sent': '已发送', 'chip.edited': '改后发送' })[key] ?? key,
   })
 }
 
@@ -173,7 +175,7 @@ const find = (node, predicate, found = []) => {
   return found
 }
 
-test('card renders context and one chip per suggestion on the latest ended turn', () => {
+test('card renders context and one chip per suggestion on an ended turn', () => {
   const tree = renderCard()
   assert.equal(tree.children[0].props['aria-label'], '下一步建议')
   const chips = find(tree, (node) => node.props?.className === 'dshns-chip')
@@ -184,13 +186,11 @@ test('card renders context and one chip per suggestion on the latest ended turn'
   assert.equal(chips[0].props.disabled, false)
 })
 
-test('card is hidden for older turns, unfinished turns, subagents and missing models', () => {
-  assert.equal(renderCard({ latest: 2 }), null)
+test('card is hidden for unfinished turns, subagents and missing models', () => {
   assert.equal(renderCard({ end: false }), null)
   assert.equal(renderCard({ closing: false }), null)
   assert.equal(renderCard({ subagent: true }), null)
   assert.equal(renderCard({ model: null }), null)
-  assert.notEqual(renderCard({ latest: undefined }), null)
 })
 
 test('chips are disabled without input actions and a click fills the draft', () => {
@@ -200,6 +200,68 @@ test('chips are disabled without input actions and a click fills the draft', () 
   const chips = find(renderCard({ inputActions: input }), (node) => node.props?.className === 'dshns-chip')
   chips[0].props.onClick()
   assert.deepEqual(input.calls, [['setDraft', '跑一下测试。']])
+})
+
+const chipsOf = (tree) => find(tree, (node) => node.props?.className === 'dshns-chip')
+
+test('a recommended chip is marked and leads the card', () => {
+  const model = modelOf(undefined, { context: 'c', suggestions: [{ label: 'A', prompt: 'a' }, { label: 'B', prompt: 'b', recommended: true }] })
+  const chips = chipsOf(renderCard({ model }))
+  assert.equal(chips[0].props['data-recommended'], '')
+  assert.equal(chips[0].props['aria-label'], 'B（推荐）：b')
+  assert.equal(chips[1].props['data-recommended'], undefined)
+})
+
+test('user messages fold into their turn as the sent text', () => {
+  const user = (text, kind = 'user', surfaceOp = 'append') => ({ type: 'user/message', surfaceOp, data: { id: text, content: [{ type: 'text', text }], source: { kind } } })
+  assert.deepEqual(definition.match({ type: 'turn/start', data: { turn: 2 } }), { id: '2', role: 'start' })
+  assert.deepEqual(definition.match(user('a')), { id: '2', role: 'update' })
+  assert.equal(definition.match(user('a', 'inject')), null)
+  assert.equal(definition.match(user('a', 'user', 'replace')), null)
+
+  const state = fold([{ type: 'turn/start', data: { turn: 2 } }, user('跑一下测试。'), user('另外看下日志')])
+  assert.equal(state.sent, '跑一下测试。\n另外看下日志')
+  assert.deepEqual(definition.buildLocationData({ state }, 'turn', undefined).value, { model: null, sent: '跑一下测试。\n另外看下日志' })
+  assert.equal(definition.buildLocationData({ state: fold([{ type: 'turn/start', data: { turn: 2 } }]) }, 'turn', undefined), null)
+})
+
+test('nextSent reads the following turn of the timeline', () => {
+  const snapshot = { timeline: { turnOrder: [3, 5], turns: new Map([[5, { data: new Map([['next-actions', { sent: 'hi' }]]) }]]) } }
+  assert.equal(nextSent(snapshot, 3), 'hi')
+  assert.equal(nextSent(snapshot, 5), '')
+  assert.equal(nextSent(snapshot, 4), '')
+  assert.equal(nextSent(undefined, 3), '')
+})
+
+test('usageOf tells sent as-is, sent with edits, and unrelated apart', () => {
+  const prompt = '跑一下测试，只跑 src/api 相关用例。'
+  assert.equal(usageOf(prompt, `先说一句\n\n${prompt}`), 'full')
+  assert.equal(usageOf(prompt, '跑一下测试，只跑src/api相关用例。'), 'full')
+  assert.equal(usageOf(prompt, '跑一下测试，只跑 src/api 和 src/db 的相关用例'), 'partial')
+  assert.equal(usageOf(prompt, '帮我写一份发布说明'), null)
+  assert.equal(usageOf(prompt, ''), null)
+  assert.equal(usageOf('ok', 'ok then'), 'full')
+  assert.equal(usageOf('okay', 'kay'), null)
+})
+
+test('a full match hides partial marks; otherwise several partial marks may show', () => {
+  const suggestions = [{ prompt: 'run the api tests' }, { prompt: 'run the db tests' }, { prompt: 'write docs' }]
+  assert.deepEqual(usagesOf(suggestions, 'run the api tests'), ['full', null, null])
+  assert.deepEqual(usagesOf(suggestions, 'run the tests'), ['partial', 'partial', null])
+})
+
+test('chips show a check for sent and a pencil for edited', () => {
+  const full = chipsOf(renderCard({ sent: '跑一下测试。' }))
+  assert.equal(full[0].props['data-used'], 'full')
+  assert.equal(full[0].props['aria-label'], '跑测试（已发送）：跑一下测试。')
+  assert.equal(full[0].children[0].type.name, 'CheckIcon')
+  assert.equal(full[1].props['data-used'], undefined)
+
+  const edited = chipsOf(renderCard({ sent: 'git push origin' }))
+  assert.equal(edited[1].props['data-used'], 'partial')
+  assert.equal(edited[1].props['aria-label'], '推送（需确认，改后发送）：git push --force')
+  assert.equal(edited[1].children[0].type.name, 'EditedIcon')
+  assert.equal(chipsOf(renderCard())[0].props['data-used'], undefined)
 })
 
 test('process row maps call phases to running, ok and error', () => {

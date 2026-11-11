@@ -26,7 +26,7 @@ test('buildMeta keeps context and suggestions, collapsing whitespace', () => {
 test('buildMeta accepts a JSON string and an older persisted meta', () => {
   assert.equal(buildMeta(JSON.stringify(args())).shown, true)
   const old = { shown: true, context: 'Done.', suggestions: [{ id: 's1', label: 'Run', prompt: 'Run tests', stance: 'verify', recommended: true }] }
-  assert.deepEqual(buildMeta(old).suggestions, [{ label: 'Run', prompt: 'Run tests' }])
+  assert.deepEqual(buildMeta(old).suggestions, [{ label: 'Run', prompt: 'Run tests', recommended: true }])
 })
 
 test('buildMeta rejects invalid input with a stable note', () => {
@@ -50,6 +50,19 @@ test('buildMeta de-duplicates prompts, falls back between label and prompt, and 
     { label: 'Only prompt', prompt: 'Only prompt' },
   ])
   assert.equal(meta.suggestions.length, LIMITS.suggestions)
+})
+
+test('buildMeta keeps one recommendation and moves it first', () => {
+  const meta = buildMeta(args([
+    { label: 'A', prompt: 'a' },
+    { label: 'B', prompt: 'b' },
+    { label: 'C', prompt: 'c' },
+    { label: 'D', prompt: 'd', recommended: true },
+    { label: 'E', prompt: 'e', recommended: true },
+  ]))
+  assert.deepEqual(meta.suggestions.map((item) => item.label), ['D', 'A', 'B'])
+  assert.equal(meta.suggestions[0].recommended, true)
+  assert.equal(meta.suggestions.filter((item) => item.recommended).length, 1)
 })
 
 test('buildMeta clamps long text and marks risky suggestions', () => {
@@ -136,7 +149,7 @@ test('apply registers the tool gated to root agents', () => {
   const sub = agent()
   const { registrations } = mount({ roots: [root] })
   assert.equal(registrations.length, 1)
-  assert.equal(registrations[0].definition.name, 'suggest_next_steps')
+  assert.equal(registrations[0].definition.name, 'suggest_next_actions')
   const { when } = registrations[0].options
   assert.equal(when({ agent: root }), true)
   assert.equal(when({ agent: sub }), false)

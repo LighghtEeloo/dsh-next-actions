@@ -1,13 +1,14 @@
 # dsh-next-actions
 
 > Suggested next steps under DeepSeek Harness replies — clicking one fills the input, never sends.
-> DSH Web/Desktop 插件：在最新一条回复下方显示 1–3 条「下一步建议」，点击只填入输入框。
+> DSH Web/Desktop 插件：在回复下方显示 1–3 条「下一步建议」，点击只填入输入框。
 
 **状态：v0.1.0，本地 `link:` 安装试用，未公开发布。** 设计见 [`docs/design.md`](docs/design.md)。
 
 ## 功能
 
-- 一两句上下文 + 最多 3 个建议按钮；只在最新一轮显示，继续对话后自然消失。
+- 一两句上下文 + 最多 3 个建议按钮；卡片随会话保存，刷新与回放后仍在。
+- 推荐项置顶并带 ✦ 与品牌色描边；下一条消息原样用了某条建议 → 实勾，改后发送 → 铅笔（都从会话日志推出）。
 - 空草稿直接填入；已有草稿时在光标处插入（保留 `@` 引用，⌘Z 撤销）；永不自动发送。
 - 危险建议带 ⚠ 标记，同样只填入。
 - 工具过程组里一行记录；子代理不注册工具；Host 配置 `enabled: false` 时零常驻 token。

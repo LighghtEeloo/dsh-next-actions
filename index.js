@@ -1,7 +1,7 @@
 /**
  * Host half of `@local/dsh-next-actions`.
  *
- * Registers the `suggest_next_steps` tool for root agents plus one standing
+ * Registers the `suggest_next_actions` tool for root agents plus one standing
  * prompt section that tells the model when to call it. Zero imports: the
  * package is installed with `link:` and cannot resolve `@deepseek-ai/*`.
  * Row config `enabled: false` registers nothing, so the feature costs no tokens.
@@ -12,17 +12,17 @@ import { buildMeta } from './lib/normalize.js'
 export const name = '@local/dsh-next-actions'
 export const inject = ['tools', 'systemPrompt', 'agents']
 
-const TOOL_NAME = 'suggest_next_steps'
+const TOOL_NAME = 'suggest_next_actions'
 
 const GUIDANCE = [
-  'Before your final answer, call suggest_next_steps once when this turn leaves real follow-up work:',
+  'Before your final answer, call suggest_next_actions once when this turn leaves real follow-up work:',
   'a task finished or advanced, tools ran, files changed, review or approval is due,',
   'or you were about to end with a list of next steps.',
   'Put those steps only in the card; the reply gets at most one lead-in sentence and never numbers or bullets them.',
   'Skip greetings, acknowledgements, pure knowledge answers, repeated cards, and turns that already asked a structured question.',
 ].join(' ')
 
-const PROMPT_SECTION = 'tool:suggest-next-steps'
+const PROMPT_SECTION = 'tool:suggest-next-actions'
 
 const TOOL = {
   name: TOOL_NAME,
@@ -49,6 +49,7 @@ const TOOL = {
           properties: {
             label: { type: 'string', description: 'Short imperative button text, ≤16 chars, no ending punctuation.' },
             prompt: { type: 'string', description: "Message the user could send as-is (≤500 chars), citing this turn's files, commands or decisions." },
+            recommended: { type: 'boolean', description: 'At most one: your pick when one step is clearly best.' },
             danger: { type: 'boolean', description: 'True only for destructive, irreversible, paid or permission-changing actions.' },
           },
         },
