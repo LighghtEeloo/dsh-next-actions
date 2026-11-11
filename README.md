@@ -1,6 +1,6 @@
 # dsh-next-actions
 
-> Suggested next steps under DeepSeek Harness replies — clicking one fills the input, never sends.
+> Suggested next actions under DeepSeek Harness replies — clicking one fills the input, never sends.
 > DSH Web/Desktop 插件：在回复下方显示 1–3 条「下一步建议」，点击只填入输入框。
 
 **状态：v0.1.0，本地 `link:` 安装试用，未公开发布。** 设计与理念见 [`DESIGN.md`](DESIGN.md)。

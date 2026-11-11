@@ -2,7 +2,7 @@
   "name": "@local/dsh-next-actions",
   "version": "0.1.0",
   "private": true,
-  "description": "Shows 1–3 clickable next steps under replies; clicking one fills the input draft, never sends.",
+  "description": "Shows 1–3 clickable next actions under replies; clicking one fills the input draft, never sends.",
   "icon": "./icon.svg",
   "type": "module",
   "exports": {

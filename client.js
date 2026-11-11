@@ -12,7 +12,7 @@
  * - A `tool.call.toolview` entry renders the one-line process row.
  *
  * External plugins must not require Harness Client packages, so the markup and
- * CSS follow the official action card with renamed `dshns-` classes and theme
+ * CSS follow the official action card with renamed `dshna-` classes and theme
  * tokens only. DSH serves this file as one classic script; it is hand-written
  * source, not a build output.
  */
@@ -25,16 +25,16 @@ window.__ModuleLoader__.load({
     // Card and process-row CSS: values follow the official action card and
     // propose_action row; only theme tokens are referenced.
     const STYLES = `
-.dshns-reveal {
+.dshna-reveal {
   display: grid;
   grid-template-rows: 1fr;
   margin: 16px 0;
 }
-.dshns-reveal > * { min-height: 0; }
-.dshns-reveal[data-fresh] { animation: dshns-reveal .22s cubic-bezier(.4, 0, .2, 1) both; }
-@keyframes dshns-reveal { from { grid-template-rows: 0fr; opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .dshns-reveal[data-fresh] { animation: none; } }
-.dshns-card {
+.dshna-reveal > * { min-height: 0; }
+.dshna-reveal[data-fresh] { animation: dshna-reveal .22s cubic-bezier(.4, 0, .2, 1) both; }
+@keyframes dshna-reveal { from { grid-template-rows: 0fr; opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .dshna-reveal[data-fresh] { animation: none; } }
+.dshna-card {
   overflow: hidden;
   padding: 14px 20px 16px;
   border: .5px solid var(--dsw-alias-border-l2);
@@ -43,16 +43,16 @@ window.__ModuleLoader__.load({
   color: var(--dsw-alias-label-primary);
   font-family: var(--dsw-font-family);
 }
-.dshns-context {
+.dshna-context {
   margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.dshns-mark { display: inline-block; vertical-align: -3px; margin-right: 6px; }
-.dshns-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-.dshns-chip {
+.dshna-mark { display: inline-block; vertical-align: -3px; margin-right: 6px; }
+.dshna-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.dshna-chip {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
@@ -69,21 +69,21 @@ window.__ModuleLoader__.load({
   line-height: 20px;
   cursor: pointer;
 }
-.dshns-chip:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
-.dshns-chip:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active); }
-.dshns-chip:disabled { cursor: not-allowed; opacity: .4; }
-.dshns-chip:focus-visible {
+.dshna-chip:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.dshna-chip:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active); }
+.dshna-chip:disabled { cursor: not-allowed; opacity: .4; }
+.dshna-chip:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
-.dshns-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dshna-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     /* Recommended: tinted border + spark. Used (next message): check, pencil when edited; quieter label. */
-.dshns-chip[data-recommended] { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, transparent); }
-.dshns-spark { flex: none; color: var(--dsw-alias-state-business-primary); }
-.dshns-chip[data-used] { color: var(--dsw-alias-label-secondary); }
-.dshns-check { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, var(--dsw-alias-label-primary)); }
-.dshns-warn { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary)); }
-.dshns-row {
+.dshna-chip[data-recommended] { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, transparent); }
+.dshna-spark { flex: none; color: var(--dsw-alias-state-business-primary); }
+.dshna-chip[data-used] { color: var(--dsw-alias-label-secondary); }
+.dshna-check { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, var(--dsw-alias-label-primary)); }
+.dshna-warn { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary)); }
+.dshna-row {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -91,24 +91,24 @@ window.__ModuleLoader__.load({
   height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
 }
-.dshns-row > svg { flex: none; }
-.dshns-row-title { flex: none; font-size: var(--dsh-content-font-size-secondary, 13px); }
-.dshns-row-summary { min-width: 0; margin-left: 2px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dshna-row > svg { flex: none; }
+.dshna-row-title { flex: none; font-size: var(--dsh-content-font-size-secondary, 13px); }
+.dshna-row-summary { min-width: 0; margin-left: 2px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 `
 
     const PKG = '@local/dsh-next-actions'
-    const NS = 'nextSteps'
+    const NS = 'nextActions'
     const TOOL_NAME = 'suggest_next_actions'
     const RUN_CODE = 'run_code'
     const KEY = 'next-actions'
 
     const EN = Object.freeze({
-      'card.title': 'Suggested next steps',
+      'card.title': 'Suggested next actions',
       'chip.recommended': 'Recommended',
       'chip.danger': 'Needs confirmation',
       'chip.sent': 'Sent',
       'chip.edited': 'Sent with edits',
-      'row.title': 'Next steps',
+      'row.title': 'Next actions',
       'row.running': 'Writing',
       'row.ok': 'Shown',
       'row.error': 'Not shown',
@@ -236,7 +236,7 @@ window.__ModuleLoader__.load({
     // Card
     // -----------------------------------------------------------------------
 
-    /** Empty drafts and drafts the card wrote itself are replaced; anything else gets the step added. */
+    /** Empty drafts and drafts the card wrote itself are replaced; anything else gets the action added. */
     function fillMode(draft, owned) {
       return draft.trim() === '' || draft === owned ? 'replace' : 'insert'
     }
@@ -264,7 +264,7 @@ window.__ModuleLoader__.load({
     }
 
     function Mark() {
-      return h('svg', { width: 16, height: 16, viewBox: '0 0 36 36', fill: 'none', className: 'dshns-mark', 'aria-hidden': 'true' },
+      return h('svg', { width: 16, height: 16, viewBox: '0 0 36 36', fill: 'none', className: 'dshna-mark', 'aria-hidden': 'true' },
         h('g', { transform: 'translate(-1.5 0.5)' },
           h('rect', { x: 5, y: 7.6, width: 21, height: 5.4, rx: 2.7, fill: '#5E9DF5' }),
           h('rect', { x: 5, y: 15.3, width: 16, height: 5.4, rx: 2.7, fill: '#7AAEFF' }),
@@ -273,26 +273,26 @@ window.__ModuleLoader__.load({
     }
 
     function WarnIcon() {
-      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshns-warn', 'aria-hidden': 'true' },
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-warn', 'aria-hidden': 'true' },
         h('path', { d: 'M8 1.8 14.6 13.2H1.4L8 1.8Z', stroke: 'currentColor', strokeWidth: 1.2, strokeLinejoin: 'round' }),
         h('path', { d: 'M8 6v3.4', stroke: 'currentColor', strokeWidth: 1.2, strokeLinecap: 'round' }),
         h('circle', { cx: 8, cy: 11.4, r: 0.7, fill: 'currentColor' }))
     }
 
     function SparkIcon() {
-      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', className: 'dshns-spark', 'aria-hidden': 'true' },
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', className: 'dshna-spark', 'aria-hidden': 'true' },
         h('path', { d: 'M8 2.5C8.4 5.6 10.4 7.6 13.5 8 10.4 8.4 8.4 10.4 8 13.5 7.6 10.4 5.6 8.4 2.5 8 5.6 7.6 7.6 5.6 8 2.5Z', fill: 'currentColor' }))
     }
 
     /** "Sent as-is". */
     function CheckIcon() {
-      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshns-check', 'aria-hidden': 'true' },
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-check', 'aria-hidden': 'true' },
         h('path', { d: 'M3.5 8.5 6.5 11.5 12.5 4.5', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }))
     }
 
     /** "Sent with edits". */
     function EditedIcon() {
-      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshns-check', 'aria-hidden': 'true' },
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-check', 'aria-hidden': 'true' },
         h('path', { d: 'M10.5 3 13 5.5 6 12.5 3 13l.5-3L10.5 3Z', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }))
     }
 
@@ -365,7 +365,7 @@ window.__ModuleLoader__.load({
         return h('button', {
           key: index,
           type: 'button',
-          className: 'dshns-chip',
+          className: 'dshna-chip',
           'data-recommended': suggestion.recommended ? '' : undefined,
           'data-used': usage ?? undefined,
           disabled: !canWrite,
@@ -376,13 +376,13 @@ window.__ModuleLoader__.load({
           },
         },
         icon,
-        h('span', { className: 'dshns-chip-label' }, suggestion.label))
+        h('span', { className: 'dshna-chip-label' }, suggestion.label))
       }
 
-      return h('div', { className: 'dshns-reveal', 'data-fresh': isFresh(turn) ? '' : undefined },
-        h('section', { className: 'dshns-card', 'aria-label': t('card.title') },
-          h('p', { className: 'dshns-context' }, h(Mark), model.context),
-          h('div', { className: 'dshns-chips' }, model.suggestions.map(chip))))
+      return h('div', { className: 'dshna-reveal', 'data-fresh': isFresh(turn) ? '' : undefined },
+        h('section', { className: 'dshna-card', 'aria-label': t('card.title') },
+          h('p', { className: 'dshna-context' }, h(Mark), model.context),
+          h('div', { className: 'dshna-chips' }, model.suggestions.map(chip))))
     }
 
     // -----------------------------------------------------------------------
@@ -398,14 +398,14 @@ window.__ModuleLoader__.load({
     function ProcessRow({ phase, block, t }) {
       const state = rowState(phase, block)
       const count = state === 'ok' && Array.isArray(block?.meta?.suggestions) ? block.meta.suggestions.length : 0
-      return h('div', { className: 'dshns-row', 'data-tool': TOOL_NAME, 'data-state': state, title: block?.meta?.note },
+      return h('div', { className: 'dshna-row', 'data-tool': TOOL_NAME, 'data-state': state, title: block?.meta?.note },
         h('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1, 'aria-hidden': 'true' },
           h('rect', { x: 2.25, y: 2.25, width: 4, height: 4, rx: 1 }),
           h('rect', { x: 2.25, y: 9.75, width: 4, height: 4, rx: 1 }),
           h('rect', { x: 9.75, y: 9.75, width: 4, height: 4, rx: 1 }),
           h('path', { d: 'M11.75 1.75v5M9.25 4.25h5' })),
-        h('span', { className: 'dshns-row-title' }, t('row.title')),
-        h('span', { className: 'dshns-row-summary' }, count > 0 ? `${t(`row.${state}`)} · ${count}` : t(`row.${state}`)))
+        h('span', { className: 'dshna-row-title' }, t('row.title')),
+        h('span', { className: 'dshna-row-summary' }, count > 0 ? `${t(`row.${state}`)} · ${count}` : t(`row.${state}`)))
     }
 
     // -----------------------------------------------------------------------

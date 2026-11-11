@@ -184,7 +184,7 @@ const find = (node, predicate, found = []) => {
 test('card renders context and one chip per suggestion on an ended turn', () => {
   const tree = renderCard()
   assert.equal(tree.children[0].props['aria-label'], '下一步建议')
-  const chips = find(tree, (node) => node.props?.className === 'dshns-chip')
+  const chips = find(tree, (node) => node.props?.className === 'dshna-chip')
   assert.equal(chips.length, 2)
   assert.equal(chips[0].props.title, '跑一下测试。')
   assert.equal(chips[0].props['aria-label'], '跑测试：跑一下测试。')
@@ -200,15 +200,15 @@ test('card is hidden for unfinished turns, subagents and missing models', () => 
 })
 
 test('chips are disabled without input actions and a click fills the draft', () => {
-  const disabled = find(renderCard({ inputActions: null }), (node) => node.props?.className === 'dshns-chip')
+  const disabled = find(renderCard({ inputActions: null }), (node) => node.props?.className === 'dshna-chip')
   assert.equal(disabled[0].props.disabled, true)
   const input = actions()
-  const chips = find(renderCard({ inputActions: input }), (node) => node.props?.className === 'dshns-chip')
+  const chips = find(renderCard({ inputActions: input }), (node) => node.props?.className === 'dshna-chip')
   chips[0].props.onClick()
   assert.deepEqual(input.calls, [['setDraft', '跑一下测试。']])
 })
 
-const chipsOf = (tree) => find(tree, (node) => node.props?.className === 'dshns-chip')
+const chipsOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-chip')
 
 test('a recommended chip is marked (the Host already put it first)', () => {
   const model = modelOf({ shown: true, context: 'c', suggestions: [{ label: 'B', prompt: 'b', recommended: true }, { label: 'A', prompt: 'a' }] })

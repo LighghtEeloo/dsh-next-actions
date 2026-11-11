@@ -17,8 +17,8 @@ const TOOL_NAME = 'suggest_next_actions'
 const GUIDANCE = [
   'Before your final answer, call suggest_next_actions once when this turn leaves real follow-up work:',
   'a task finished or advanced, tools ran, files changed, review or approval is due,',
-  'or you were about to end with a list of next steps.',
-  'Put those steps only in the card; the reply gets at most one lead-in sentence and never numbers or bullets them.',
+  'or you were about to end with a list of next actions.',
+  'Put those actions only in the card; the reply gets at most one lead-in sentence and never numbers or bullets them.',
   'Skip greetings, acknowledgements, pure knowledge answers, repeated cards, and turns that already asked a structured question.',
 ].join(' ')
 
@@ -27,7 +27,7 @@ const PROMPT_SECTION = 'tool:suggest-next-actions'
 const TOOL = {
   name: TOOL_NAME,
   description: [
-    'Show 1–3 clickable next steps as a card under your reply; clicking one fills the message input, never sends.',
+    'Show 1–3 clickable next actions as a card under your reply; clicking one fills the message input, never sends.',
     "Write them in the user's language and never repeat them in your prose.",
   ].join(' '),
   parameters: {
@@ -37,11 +37,11 @@ const TOOL = {
     properties: {
       context: {
         type: 'string',
-        description: 'One or two sentences (≤240 chars): what was just done and why these steps follow. Never restate the answer.',
+        description: 'One or two sentences (≤240 chars): what was just done and why these actions follow. Never restate the answer.',
       },
       suggestions: {
         type: 'array',
-        description: '1–3 distinct next steps, most useful first.',
+        description: '1–3 distinct next actions, most useful first.',
         items: {
           type: 'object',
           additionalProperties: false,
@@ -49,7 +49,7 @@ const TOOL = {
           properties: {
             label: { type: 'string', description: 'Short imperative button text, ≤16 chars, no ending punctuation.' },
             prompt: { type: 'string', description: "Message the user could send as-is (≤500 chars), citing this turn's files, commands or decisions." },
-            recommended: { type: 'boolean', description: 'At most one: your pick when one step is clearly best.' },
+            recommended: { type: 'boolean', description: 'At most one: your pick when one action is clearly best.' },
             danger: { type: 'boolean', description: 'True only for destructive, irreversible, paid or permission-changing actions.' },
           },
         },
@@ -66,7 +66,7 @@ const TOOL = {
     render: (_args, value) => [{
       type: 'text',
       text: value?.shown
-        ? `Next steps shown below your answer (${value.count}). Now write the final answer: do not list them, keep at most one lead-in sentence, and do not call this tool again this turn.`
+        ? `Next actions shown below your answer (${value.count}). Now write the final answer: do not list them, keep at most one lead-in sentence, and do not call this tool again this turn.`
         : 'No card shown. Answer normally; do not mention this tool.',
     }],
     // Persisted as tool/result.meta; the browser renders the card from it.

@@ -58,5 +58,5 @@
 
 会话日志只追加；压缩修剪工具结果时会把 meta 原样复制进替换事件，原事件也保留，所以客户端直接读 meta，
 不重算参数，也不需要构建步骤。第 N 轮的卡片通过 `useChat` 的 `timeline.turnOrder` / `timeline.turns` 读第 N+1 轮的 `sent` 文本来判定
-"已使用"。外部插件不能 require Harness Client 包，所以卡片样式按官方动作卡重写，类名用 `dshns-` 前缀；
+"已使用"。外部插件不能 require Harness Client 包，所以卡片样式按官方动作卡重写，类名用 `dshna-` 前缀；
 刚结束的回合用 CSS `grid-template-rows` 展开卡片，避免回答被一帧顶起，`prefers-reduced-motion` 下不做动画。
