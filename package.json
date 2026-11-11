@@ -4,6 +4,15 @@
   "license": "MIT",
   "description": "Shows 1–3 clickable next actions under replies; clicking one fills the input draft, never sends.",
   "icon": "./icon.svg",
+  "author": "LighghtEeloo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LighghtEeloo/dsh-next-actions.git"
+  },
+  "homepage": "https://github.com/LighghtEeloo/dsh-next-actions#readme",
+  "bugs": {
+    "url": "https://github.com/LighghtEeloo/dsh-next-actions/issues"
+  },
   "type": "module",
   "keywords": [
     "deepseek-harness",
