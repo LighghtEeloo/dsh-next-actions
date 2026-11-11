@@ -22,7 +22,7 @@ function loadBundle() {
 }
 
 const plugin = loadBundle()
-const { definition, modelOf, fillMode, fill, rowState, usageOf, usagesOf, nextSent } = plugin.__test
+const { definition, modelOf, fillMode, fill, rowState, usageOf, nextSent } = plugin.__test
 
 const args = {
   context: '修复已完成。',
@@ -244,10 +244,9 @@ test('usageOf tells sent as-is, sent with edits, and unrelated apart', () => {
   assert.equal(usageOf('okay', 'kay'), null)
 })
 
-test('a full match hides partial marks; otherwise several partial marks may show', () => {
-  const suggestions = [{ prompt: 'run the api tests' }, { prompt: 'run the db tests' }, { prompt: 'write docs' }]
-  assert.deepEqual(usagesOf(suggestions, 'run the api tests'), ['full', null, null])
-  assert.deepEqual(usagesOf(suggestions, 'run the tests'), ['partial', 'partial', null])
+test('each chip is judged on its own: one message can fully use one and partly use another', () => {
+  const chips = chipsOf(renderCard({ sent: '跑一下测试。\ngit push origin' }))
+  assert.deepEqual(chips.map((chip) => chip.props['data-used']), ['full', 'partial'])
 })
 
 test('chips show a check for sent and a pencil for edited', () => {

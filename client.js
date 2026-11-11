@@ -384,12 +384,6 @@ const STYLES = `
       return kept / pairs.size >= 0.5 ? 'partial' : null
     }
 
-    /** A full match settles the question: partial marks only show when nothing was sent as-is. */
-    function usagesOf(suggestions, sent) {
-      const usages = suggestions.map((suggestion) => usageOf(suggestion.prompt, sent))
-      return usages.includes('full') ? usages.map((usage) => (usage === 'full' ? usage : null)) : usages
-    }
-
     /** Text the user sent in the turn after `turn`, from the same session-log fold. */
     function nextSent(snapshot, turn) {
       const order = snapshot?.timeline?.turnOrder
@@ -416,7 +410,7 @@ const STYLES = `
       if (!model || !closing || subagent) return null
 
       const canWrite = typeof inputActions?.setDraft === 'function'
-      const usages = usagesOf(model.suggestions, sent)
+      const usages = model.suggestions.map((suggestion) => usageOf(suggestion.prompt, sent))
       const chip = (suggestion, index) => {
         const usage = usages[index]
         const marks = [
@@ -502,7 +496,7 @@ const STYLES = `
       // `uiConversation` is injected so the definition registers on a cold boot.
       inject: ['slots', 'locale', 'uiConversation'],
       apply,
-      __test: { definition, modelOf, fillMode, fill, rowState, usageOf, usagesOf, nextSent },
+      __test: { definition, modelOf, fillMode, fill, rowState, usageOf, nextSent },
     }
   },
 })
