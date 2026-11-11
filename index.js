@@ -50,7 +50,7 @@ const TOOL = {
             label: { type: 'string', description: `Short imperative button text, ≤${LIMITS.label} chars, no ending punctuation.` },
             prompt: { type: 'string', description: "Message the user could send as-is (≤500 chars), citing this turn's files, commands or decisions." },
             recommended: { type: 'boolean', description: 'At most one: your pick when one action is clearly best.' },
-            danger: { type: 'boolean', description: 'True only for destructive, irreversible, paid or permission-changing actions.' },
+            danger: { type: 'boolean', description: 'True only for destructive, irreversible, paid or permission-changing actions, e.g. 删除/清空/重置/发布/部署/回滚/付费/授权/卸载.' },
           },
         },
       },

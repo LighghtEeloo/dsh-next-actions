@@ -31,7 +31,7 @@ test('Host meta renders all three chips with their recommendation and danger mar
   const meta = buildMeta({
     context: '修复已完成。',
     suggestions: [
-      { label: '执行变更', prompt: 'deploy' },
+      { label: '强制推送', prompt: 'git push --force origin main' },
       { label: '查看日志', prompt: '查看错误日志' },
       { label: '看 diff', prompt: '查看完整 diff' },
       { label: '跑测试', prompt: '运行单元测试', recommended: true },
@@ -44,7 +44,7 @@ test('Host meta renders all three chips with their recommendation and danger mar
   assert.equal(chips.length, meta.suggestions.length, 'the client renders every suggestion from the Host')
   assert.deepEqual(chips.map((chip) => [chip.props.title, chip.children[0]?.type.name]), [
     ['运行单元测试', 'SparkIcon'],
-    ['deploy', 'WarnIcon'],
+    ['git push --force origin main', 'WarnIcon'],
     ['查看错误日志', undefined],
   ])
 })
