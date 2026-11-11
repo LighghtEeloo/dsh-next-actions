@@ -42,14 +42,6 @@ Host 改动需重启 DSH，Client 改动需刷新页面。
   config: { enabled: false }
 ```
 
-## 待实机确认
-
-- `insertText` 在含 `@` 引用的草稿里插入的位置与撤销行为（失败时退回 `setDraft` 追加，引用会变成纯文本）。
-- 0.2.2-rc.1 的 `useChat` 快照提供 `timeline.turns` 及其 `data`，`user/message.content` 为文本块数组。
-- 「已使用」标记在翻页加载旧历史后、两个会话并排时仍落在正确的卡片上（`next-actions-sent` 按引擎解析的 location 归轮）。
-- 改后发送的阈值（有序 Dice ≥ 0.6、指令至少 4 个字）在真实消息上的误标与漏标情况。
-- `turn.end.time` 的格式（决定只有刚结束的卡片才播放展开动画）。
-
 ## 许可
 
 许可证未定；卡片外观参照 MIT 许可的 DSH 官方动作卡。非 DeepSeek 官方插件。
