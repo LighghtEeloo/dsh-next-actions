@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>dsh-next-actions 宣传短片</title>
+<meta name="viewport" content="width=960">
+<!--
+  Promo for dsh-next-actions. Everything on screen is a pure function of time `t` (seconds):
+  - window.__T set (render-video.sh injects it per frame) → render that instant once;
+  - ?t=7 in the URL → render that instant;
+  - otherwise → play in a loop (Space pauses, ←/→ seeks 0.5 s).
+  Design size is 960×540 CSS px; render-html.sh renders at DSF 2 → 1920×1080.
+
+  The cue sheet below is shared: soundtrack.mjs reads the same JSON to place music and UI sounds.
+  `intro` times are absolute; `scene` times are relative to the end of the intro (one bar at `bpm`).
+-->
+<script>window.__T = null; /*FRAME_T*/</script>
+<script id="timeline" type="application/json">
+{
+  "duration": 17.5,
+  "bpm": 96,
+  "intro": {
+    "length": 2.5,
+    "typed": [0.5, 0.68],
+    "erased": [1.4, 1.56],
+    "dock": [1.8, 2.5]
+  },
+  "scene": {
+    "winIn": [-0.1, 0.5],
+    "stream": [0.45, 2.15],
+    "rowIn": [2.2, 2.4],
+    "rowDone": 2.7,
+    "reveal": [2.7, 3.2],
+    "chipsIn": [2.85, 0.08],
+    "click": 4.95,
+    "fly": [5.05, 5.5],
+    "fill": 5.42,
+    "typing": [7.55, 8.75],
+    "typedAt": [7.62, 7.77, 7.9, 8.07, 8.2, 8.36, 8.48, 8.63],
+    "sendClick": 9.8,
+    "send": 9.86,
+    "sentIn": [9.9, 10.32],
+    "used": 10.5,
+    "winOut": [11.5, 12.1],
+    "endHit": 11.875,
+    "sparkles": [12.5, 13.75]
+  }
+}
+</script>
+<style>
+:root {
+  --ink: #1f2329;
+  --ink-2: #5f6673;
+  --ink-3: #8f959e;
+  --brand: #3370ff;
+  --used: #2e9a24;
+  --warn: #e8820c;
+  --line: #e0e2e6;
+  --line-chip: #d9dbe0;
+  --bg-chat: #f7f8fa;
+  /* system-ui → SF for Latin even in a zh-CN page (-apple-system resolves to PingFang here). */
+  --sans: system-ui, "PingFang SC", "Helvetica Neue", sans-serif;
+  /* "SF Mono" / ui-monospace are not reachable headless and fall back to PingFang (long dashes). */
+  --mono: Menlo, Monaco, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 960px; height: 540px; overflow: hidden; background: #f3f4f7; }
+body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+
+#scene {
+  position: relative; width: 960px; height: 540px; overflow: hidden;
+  background:
+    radial-gradient(560px 380px at 8% 0%, rgba(51, 112, 255, .11), transparent 70%),
+    radial-gradient(560px 400px at 96% 100%, rgba(65, 225, 172, .13), transparent 70%),
+    #f3f4f7;
+}
+
+/* App window: centered, drawn at 1.1× by render() */
+#win {
+  position: absolute; left: 120px; top: 57px; width: 720px; height: 426px;
+  border-radius: 14px; background: var(--bg-chat); overflow: hidden;
+  box-shadow: 0 0 0 .5px rgba(17, 24, 39, .10), 0 26px 60px -18px rgba(30, 41, 80, .28), 0 6px 16px -8px rgba(30, 41, 80, .12);
+}
+.tb { position: relative; height: 34px; display: flex; align-items: center; padding-left: 14px; gap: 8px; background: #fbfbfc; border-bottom: .5px solid #e6e8eb; }
+.tb i { width: 10px; height: 10px; border-radius: 50%; }
+.tb span { position: absolute; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--ink-3); }
+#vp { position: absolute; left: 0; top: 34px; width: 720px; height: 392px; overflow: hidden; }
+#cam { position: absolute; left: 0; top: 0; width: 720px; height: 392px; transform-origin: 0 0; }
+#vp::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26px; background: linear-gradient(var(--bg-chat), rgba(247, 248, 250, 0)); }
+#chat { position: absolute; left: 0; top: 0; width: 720px; height: 314px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.col { width: 520px; margin: 0 auto; padding-bottom: 8px; }
+
+.msg { display: flex; justify-content: flex-end; }
+.msg > div { max-width: 78%; padding: 8px 13px; border-radius: 14px; background: #e8ebf0; font-size: 14px; line-height: 1.55; }
+.tools { margin-top: 10px; }
+.tools .row { margin-top: 0; }
+.reply { margin-top: 4px; font-size: 14px; line-height: 1.75; }
+.reply code { font-family: var(--mono); font-size: 12.5px; padding: 1px 5px; border-radius: 4px; background: #eceef2; color: #2b2f36; }
+
+/* Process row: 下一步建议 · 已生成 · 3 */
+#row { height: 0; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 5px; height: 24px; margin-top: 8px; color: var(--ink-3); }
+.row-title { font-size: 13px; }
+.row-sum { font-size: 12px; }
+.shimmer { background: linear-gradient(90deg, #9aa0a8 0%, #9aa0a8 35%, #d3d7dc 50%, #9aa0a8 65%, #9aa0a8 100%); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Card (mirrors client.js .dshna-card) */
+#reveal { height: 0; overflow: hidden; }
+#reveal > div { padding-top: 6px; }
+.card { padding: 13px 16px 15px; border: .5px solid var(--line); border-radius: 12px; background: #fff; }
+.ctx { display: flex; align-items: center; gap: 7px; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.chips { display: flex; gap: 8px; margin-top: 12px; }
+.chip { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: .5px solid var(--line-chip); border-radius: 7px; background: #fff; font-size: 13.5px; color: var(--ink); }
+.chip.rec { border-color: rgba(51, 112, 255, .6); }
+.ico { position: relative; flex: none; width: 12px; height: 12px; }
+.ico svg { position: absolute; inset: 0; }
+
+#sentWrap { height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+#sentWrap > div { padding-top: 14px; }
+
+/* Composer */
+#composer { position: absolute; left: 100px; top: 322px; width: 520px; height: 54px; border: .5px solid var(--line); border-radius: 14px; background: #fff; }
+#draft { position: absolute; left: 16px; right: 56px; top: 0; height: 54px; display: flex; align-items: center; font-size: 14px; white-space: nowrap; }
+.ph { color: #a8adb5; }
+.fill { border-radius: 3px; }
+#caret { display: inline-block; width: 1.5px; height: 18px; margin: 0 1px; background: var(--ink); }
+#send { position: absolute; right: 11px; top: 11px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dfe2e7; }
+
+/* Pointer, click ripple, flying draft */
+#ghost {
+  position: absolute; left: 0; top: 0; height: 30px; padding: 0 12px; display: flex; align-items: center;
+  border: .5px solid rgba(51, 112, 255, .55); border-radius: 8px; background: #fff; font-size: 13.5px; white-space: nowrap;
+  box-shadow: 0 8px 22px -6px rgba(51, 112, 255, .35); opacity: 0; pointer-events: none;
+}
+.ripple { position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(51, 112, 255, .28); opacity: 0; }
+#cursor { position: absolute; left: 0; top: 0; width: 20px; height: 24px; opacity: 0; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .25)); transform-origin: 2px 1.5px; }
+
+/* Intro: a standalone input (sized like #composer) that docks into the window's composer */
+#intro { position: absolute; left: 0; top: 0; width: 520px; height: 54px; transform-origin: 0 0; border: .5px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 18px 40px -20px rgba(30, 41, 80, .35); opacity: 0; }
+#introDraft { position: absolute; left: 16px; right: 56px; top: 0; height: 54px; display: flex; align-items: center; font-size: 14px; white-space: nowrap; }
+#introSend { position: absolute; right: 11px; top: 11px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dfe2e7; }
+
+/* End card */
+#end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#end > * { opacity: 0; }
+.e-icon { width: 84px; height: 84px; display: grid; place-items: center; border-radius: 22px; background: #fff; box-shadow: 0 0 0 .5px rgba(17, 24, 39, .08), 0 14px 30px -12px rgba(30, 41, 80, .30); }
+.e-name { margin-top: 22px; font-size: 40px; font-weight: 600; letter-spacing: -.5px; }
+.e-slogan { margin-top: 12px; font-size: 26px; font-weight: 500; letter-spacing: 1px; color: var(--ink-2); }
+.e-slogan b {
+  font-weight: 600; color: transparent;
+  background: linear-gradient(90deg, #3a9bf0, #3466e0); -webkit-background-clip: text; background-clip: text;
+}
+.e-cmd { margin-top: 32px; padding: 11px 18px; border: .5px solid #dcdfe4; border-radius: 10px; background: rgba(255, 255, 255, .9); font: 14px/1.4 var(--mono); color: var(--ink); }
+.e-cmd em { font-style: normal; color: #a0a6ae; margin-right: 8px; }
+.e-cmd b { font-weight: 500; color: var(--brand); }
+.e-foot { margin-top: 22px; font-size: 12.5px; color: var(--ink-3); letter-spacing: .3px; }
+</style>
+</head>
+<body>
+<div id="scene">
+
+  <div id="win">
+    <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>修复分页越界</span></div>
+    <div id="vp">
+      <div id="cam">
+        <div id="chat">
+          <div class="col">
+            <div class="msg dim"><div>列表接口翻到第二页就越界，帮我看看</div></div>
+            <div class="reply dim">问题在 <code>src/api/list.ts</code>：<code>offset</code> 直接用了页码，第二页起会越界。要我直接修吗？</div>
+            <div class="msg dim" style="margin-top:14px"><div>修吧，顺手补上边界判断</div></div>
+            <div class="tools dim">
+              <div class="row">
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.8 7 5 3 8.2Z" fill="currentColor"/></svg>
+                <span class="row-title">过程</span>
+                <span class="row-sum">· 读取 2 个文件 · 编辑 1 个文件 · 类型检查</span>
+              </div>
+            </div>
+            <div class="reply dim" id="reply"></div>
+            <div id="row">
+              <div class="row">
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.8 7 5 3 8.2Z" fill="currentColor"/></svg>
+                <span class="row-title">下一步建议</span>
+                <span class="row-sum" id="rowSum"></span>
+              </div>
+            </div>
+            <div id="reveal"><div>
+              <section class="card">
+                <p class="ctx">
+                  <svg width="16" height="16" viewBox="0 0 36 36" fill="none" aria-hidden="true"><g transform="translate(-1.5 0.5)"><rect x="5" y="7.6" width="21" height="5.4" rx="2.7" fill="#5E9DF5"/><rect x="5" y="15.3" width="16" height="5.4" rx="2.7" fill="#7AAEFF"/><rect x="5" y="23" width="11" height="5.4" rx="2.7" fill="#9CC3FF"/><path d="M29.6 6.6C29.88 8.65 31.25 10.02 33.3 10.3C31.25 10.58 29.88 11.95 29.6 14C29.32 11.95 27.95 10.58 25.9 10.3C27.95 10.02 29.32 8.65 29.6 6.6Z" fill="#41E1AC"/></g></svg>
+                  修复已完成，改动集中在 src/api；目前只跑了类型检查。
+                </p>
+                <div class="chips">
+                  <span class="chip rec" id="chip0">
+                    <span class="ico">
+                      <svg id="spark" viewBox="0 0 16 16"><path d="M8 2.5C8.4 5.6 10.4 7.6 13.5 8 10.4 8.4 8.4 10.4 8 13.5 7.6 10.4 5.6 8.4 2.5 8 5.6 7.6 7.6 5.6 8 2.5Z" fill="#3370ff"/></svg>
+                      <svg id="pencil" viewBox="0 0 16 16" fill="none" style="opacity:0"><path d="M10.5 3 13 5.5 6 12.5 3 13l.5-3L10.5 3Z" stroke="#2e9a24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                    <span id="chip0Label">跑一下测试</span>
+                  </span>
+                  <span class="chip" id="chip1">补回归用例</span>
+                  <span class="chip" id="chip2">
+                    <span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M8 1.8 14.6 13.2H1.4L8 1.8Z" stroke="#e8820c" stroke-width="1.2" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="#e8820c" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="11.4" r="0.7" fill="#e8820c"/></svg></span>
+                    推送到远端
+                  </span>
+                </div>
+              </section>
+            </div></div>
+            <div id="sentWrap"><div><div class="msg"><div id="sentText"></div></div></div></div>
+          </div>
+        </div>
+
+        <div id="composer">
+          <div id="draft"></div>
+          <div id="send"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 11.5V2.8M3 6.6 7 2.6l4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        </div>
+
+        <div id="ghost"></div>
+        <div class="ripple" id="ripple"></div>
+        <svg id="cursor" viewBox="0 0 20 24"><path d="M2 1.5v18.3l4.6-4.5 3.1 6.9 3.2-1.4-3.1-6.8h6.5Z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="intro">
+    <div id="introDraft"></div>
+    <div id="introSend"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 11.5V2.8M3 6.6 7 2.6l4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  </div>
+
+  <div id="end">
+    <div class="e-icon">
+      <svg width="62" height="62" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+        <defs><linearGradient id="naFill" x1="5" y1="8" x2="26" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#67C7FE"/><stop offset="1" stop-color="#3F77D8"/></linearGradient></defs>
+        <g transform="translate(-1.5 0.5)"><rect x="5" y="7.6" width="21" height="5.4" rx="2.7" fill="url(#naFill)"/><rect x="5" y="15.3" width="16" height="5.4" rx="2.7" fill="#7AAEFF"/><rect x="5" y="23" width="11" height="5.4" rx="2.7" fill="#9CC3FF"/><path id="star" d="M29.6 6.6C29.88 8.65 31.25 10.02 33.3 10.3C31.25 10.58 29.88 11.95 29.6 14C29.32 11.95 27.95 10.58 25.9 10.3C27.95 10.02 29.32 8.65 29.6 6.6Z" fill="#41E1AC" style="transform-box: fill-box; transform-origin: center"/></g>
+      </svg>
+    </div>
+    <div class="e-name" lang="en">dsh-next-actions</div>
+    <div class="e-slogan">别让「继续」代替<b>你的思考</b>。</div>
+    <div class="e-cmd"><em>$</em>dsh plugin --profile desktop add <b>dsh-next-actions</b></div>
+    <div class="e-foot">DSH Web / Desktop 插件 · MIT 开源</div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const TIMELINE = JSON.parse($('timeline').textContent);
+  const DURATION = TIMELINE.duration;
+  const I = TIMELINE.intro;
+  const T = TIMELINE.scene;
+
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const lerp = (a, b, p) => a + (b - a) * p;
+  const out3 = (p) => 1 - Math.pow(1 - p, 3);
+  const inOut3 = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+  const bell = (p) => Math.sin(Math.PI * clamp(p));
+
+  // ---------------------------------------------------------------- script
+  const REPLY = [
+    ['已修复：', false], ['offset', true], [' 改为 ', false], ['(page - 1) * size', true],
+    ['，并在 ', false], ['list.ts', true], [' 补上了边界判断。类型检查已通过。', false],
+  ];
+  const REPLY_LEN = REPLY.reduce((n, [s]) => n + s.length, 0);
+  const PROMPT = '运行测试，修复失败的用例';
+  const TYPED = '，顺便看看覆盖率';
+
+  // ---------------------------------------------------------------- nodes
+  const win = $('win'), cam = $('cam'), reply = $('reply'), row = $('row'), rowSum = $('rowSum');
+  const reveal = $('reveal'), sentWrap = $('sentWrap'), sentText = $('sentText');
+  const chips = [$('chip0'), $('chip1'), $('chip2')], spark = $('spark'), pencil = $('pencil'), chip0Label = $('chip0Label');
+  const composer = $('composer'), draft = $('draft'), send = $('send');
+  const ghost = $('ghost'), ripple = $('ripple'), cursor = $('cursor');
+  const end = $('end');
+  const dimmed = [...document.querySelectorAll('.dim')];
+  ghost.textContent = PROMPT;
+  sentText.textContent = PROMPT + TYPED;
+
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  function replyHTML(n) {
+    let html = '';
+    for (const [text, code] of REPLY) {
+      if (n <= 0) break;
+      const part = esc(text.slice(0, n));
+      html += code ? `<code>${part}</code>` : part;
+      n -= text.length;
+    }
+    return html;
+  }
+
+  // Box of `el` in #cam's own (unscaled) coordinates; call while #cam has no transform.
+  function box(el) {
+    const c = cam.getBoundingClientRect(), r = el.getBoundingClientRect(), k = c.width / 720;
+    const x = (r.left - c.left) / k, y = (r.top - c.top) / k, w = r.width / k, h = r.height / k;
+    return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, r: x + w, b: y + h };
+  }
+
+  // ---------------------------------------------------------------- frame
+  /** The chat scene and end card; `t` is scene time (negative during the intro). */
+  function renderScene(t) {
+    // 0. Reset transforms so measurement sees plain layout.
+    cam.style.transform = 'none';
+    chips[0].style.transform = 'none';
+
+    // 1. Window in / out. It fades in around the docked intro input, so it does not move on entry.
+    const wIn = out3(seg(t, ...T.winIn)), wOut = inOut3(seg(t, ...T.winOut));
+    win.style.opacity = (wIn * (1 - wOut)).toFixed(3);
+    win.style.transform = `scale(${(1.1 * (1 - 0.035 * wOut)).toFixed(4)})`;
+    win.style.filter = wOut > 0 ? `blur(${(wOut * 6).toFixed(2)}px)` : 'none';
+
+    // 2. Layout-affecting content.
+    reply.innerHTML = replyHTML(Math.round(REPLY_LEN * seg(t, ...T.stream)));
+    row.style.height = `${(32 * out3(seg(t, ...T.rowIn))).toFixed(2)}px`;
+    row.style.opacity = seg(t, ...T.rowIn).toFixed(3);
+    if (t < T.rowDone) {
+      rowSum.textContent = '· 正在生成';
+      rowSum.className = 'row-sum shimmer';
+      rowSum.style.backgroundPosition = `${(100 - ((t * 120) % 100) * 1.5).toFixed(1)}% 0`;
+    } else {
+      rowSum.textContent = '· 已生成 · 3';
+      rowSum.className = 'row-sum';
+      rowSum.style.backgroundPosition = '';
+    }
+    const pr = seg(t, ...T.reveal);
+    reveal.style.height = `${(reveal.firstElementChild.offsetHeight * out3(pr)).toFixed(2)}px`;
+    reveal.style.opacity = clamp(pr * 1.6).toFixed(3);
+    chips.forEach((chip, i) => {
+      const at = T.chipsIn[0] + i * T.chipsIn[1];
+      const p = out3(seg(t, at, at + 0.35));
+      chip.style.opacity = p.toFixed(3);
+      chip.style.translate = `0 ${((1 - p) * 5).toFixed(2)}px`;
+    });
+    sentWrap.style.height = `${(sentWrap.firstElementChild.offsetHeight * out3(seg(t, ...T.sentIn))).toFixed(2)}px`;
+    sentWrap.style.opacity = seg(t, T.sentIn[0], T.sentIn[0] + 0.25).toFixed(3);
+
+    // Composer: placeholder → filled prompt → edited → sent (empty, still focused).
+    const focused = t >= T.fill - 0.08;
+    const typedN = T.typedAt.filter((at) => t >= at).length;
+    const hasText = t >= T.fill && t < T.send;
+    const typing = t >= T.typing[0] && t < T.typing[1] + 0.2;
+    const caretOn = focused && (typing || ((t - T.fill) % 1.0) < 0.55);
+    const caret = `<span id="caret" style="opacity:${caretOn ? 1 : 0}"></span>`;
+    if (hasText) {
+      const hl = 0.16 * (1 - seg(t, T.fill + 0.25, T.fill + 1.0));
+      draft.innerHTML = `<span class="fill" style="background:rgba(51,112,255,${hl.toFixed(3)})">${PROMPT}</span>${TYPED.slice(0, typedN)}${caret}`;
+    } else {
+      draft.innerHTML = `${focused ? caret : ''}<span class="ph">输入消息…</span>`;
+    }
+    const fp = seg(t, T.fill - 0.08, T.fill + 0.15);
+    composer.style.borderColor = `rgba(51,112,255,${(0.55 * fp).toFixed(3)})`;
+    composer.style.boxShadow = `0 0 0 ${(3 * fp).toFixed(2)}px rgba(51,112,255,.10), 0 1px 2px rgba(0,0,0,.03)`;
+    if (fp === 0) composer.style.borderColor = '';
+
+    // Spotlight for 「看一眼」: everything but the card recedes, then returns after the click.
+    const dim = 0.6 * (inOut3(seg(t, 3.25, 3.75)) - inOut3(seg(t, 5.3, 5.8)));
+    for (const el of dimmed) el.style.opacity = (1 - dim).toFixed(3);
+
+    // 3. Measure.
+    const c0 = box(chips[0]), card = box(reveal), comp = box(composer), sendB = box(send);
+
+    // 4. Pointer path: enter → chip 0 → (hidden while typing) → send.
+    const P0 = { x: 660, y: 400 };
+    const P1 = { x: c0.cx + 8, y: c0.cy + 5 };
+    const P2 = { x: sendB.cx + 3, y: sendB.cy + 4 };
+    let cx, cy, cOp;
+    if (t < 9.05) {
+      const p = inOut3(seg(t, 4.0, 4.85));
+      cx = lerp(P0.x, P1.x, p) + bell(p) * 6;
+      cy = lerp(P0.y, P1.y, p) - bell(p) * 26;
+      cOp = seg(t, 3.9, 4.05) * (1 - seg(t, 7.38, 7.52));
+    } else {
+      const p = inOut3(seg(t, 9.1, 9.7));
+      cx = lerp(P1.x, P2.x, p);
+      cy = lerp(P1.y, P2.y, p) - bell(p) * 14;
+      cOp = seg(t, 9.0, 9.12) * (1 - seg(t, 10.3, 10.45));
+    }
+    const press = Math.max(bell(seg(t, T.click, T.click + 0.14)), bell(seg(t, T.sendClick, T.sendClick + 0.14)));
+    cursor.style.opacity = cOp.toFixed(3);
+    cursor.style.transform = `translate(${(cx - 2).toFixed(2)}px, ${(cy - 1.5).toFixed(2)}px) scale(${(1 - 0.12 * press).toFixed(3)})`;
+
+    const rp = t < T.sendClick ? seg(t, T.click, T.click + 0.5) : seg(t, T.sendClick, T.sendClick + 0.5);
+    const rippleAt = t < T.sendClick ? P1 : P2;
+    ripple.style.opacity = rp > 0 && rp < 1 ? (0.9 * (1 - rp)).toFixed(3) : '0';
+    ripple.style.transform = `translate(${(rippleAt.x).toFixed(2)}px, ${(rippleAt.y).toFixed(2)}px) scale(${(0.2 + 0.8 * out3(rp)).toFixed(3)})`;
+
+    // Chip 0 states: hover (pointer inside), press, then "改后发送" (pencil).
+    const over = (b) => cOp > 0.5 && cx >= b.x && cx <= b.r && cy >= b.y && cy <= b.b;
+    chips[0].style.background = over(c0) ? '#f2f4f7' : '#fff';
+    chips[0].style.transform = `scale(${(1 - 0.035 * bell(seg(t, T.click, T.click + 0.16))).toFixed(4)})`;
+    const used = out3(seg(t, T.used, T.used + 0.3));
+    spark.style.opacity = (1 - used).toFixed(3);
+    spark.style.transform = `scale(${(1 - 0.5 * used).toFixed(3)})`;
+    pencil.style.opacity = used.toFixed(3);
+    pencil.style.transform = `scale(${(0.5 + 0.5 * used + 0.25 * bell(seg(t, T.used, T.used + 0.45))).toFixed(3)})`;
+    chip0Label.style.color = used > 0 ? `rgb(${Math.round(lerp(31, 95, used))},${Math.round(lerp(35, 102, used))},${Math.round(lerp(41, 115, used))})` : '';
+    const ring = seg(t, T.used, T.used + 0.8);
+    chips[0].style.boxShadow = ring > 0 && ring < 1 ? `0 0 0 ${(10 * out3(ring)).toFixed(2)}px rgba(51,112,255,${(0.22 * (1 - ring)).toFixed(3)})` : 'none';
+
+    const filled = hasText;
+    send.style.background = filled ? (over(sendB) ? '#2b62e6' : '#3370ff') : '#dfe2e7';
+    send.style.transform = `scale(${(1 - 0.1 * bell(seg(t, T.sendClick, T.sendClick + 0.14))).toFixed(3)})`;
+
+    // Flying draft: chip 0 → composer text start.
+    const gp = seg(t, ...T.fly);
+    if (gp > 0 && gp < 1) {
+      const gw = ghost.offsetWidth, gh = ghost.offsetHeight;
+      const from = { x: c0.cx, y: c0.cy }, to = { x: comp.x + 16 + gw / 2 - 12, y: comp.cy };
+      const p = inOut3(gp);
+      const gx = lerp(from.x, to.x, p), gy = lerp(from.y, to.y, p) - bell(p) * 18;
+      ghost.style.opacity = (seg(gp, 0, 0.15) * (1 - seg(gp, 0.72, 1))).toFixed(3);
+      ghost.style.transform = `translate(${(gx - gw / 2).toFixed(2)}px, ${(gy - gh / 2).toFixed(2)}px) scale(${lerp(1, 0.96, p).toFixed(3)})`;
+    } else {
+      ghost.style.opacity = '0';
+    }
+
+    // 5. Camera: zoom the content layer only; title bar stays put.
+    const shots = {
+      wide: { s: lerp(1.16, 1.24, inOut3(seg(t, 0, 2.6))), x: 360, y: 392 },
+      card: { s: 1.34, x: 360, y: card.cy },
+      work: { s: 1.3, x: 360, y: (card.y + comp.b) / 2 },
+    };
+    const mix = (a, b, p) => ({ s: lerp(a.s, b.s, p), x: lerp(a.x, b.x, p), y: lerp(a.y, b.y, p) });
+    let shot;
+    if (t < 2.6) shot = shots.wide;
+    else if (t < 3.5) shot = mix(shots.wide, shots.card, inOut3(seg(t, 2.6, 3.5)));
+    else if (t < 5.15) shot = shots.card;
+    else shot = mix(shots.card, shots.work, inOut3(seg(t, 5.15, 6.0)));
+    const tx = clamp(360 - shot.x * shot.s, 720 - 720 * shot.s, 0);
+    const ty = clamp(196 - shot.y * shot.s, 392 - 392 * shot.s, 0);
+    cam.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${shot.s.toFixed(4)})`;
+
+    // 6. End card.
+    const pieces = end.children;
+    const ein = (el, a, dy = 12) => {
+      const p = out3(seg(t, a, a + 0.55));
+      el.style.opacity = p.toFixed(3);
+      el.style.transform = `translateY(${((1 - p) * dy).toFixed(2)}px)`;
+    };
+    // The icon lands on the music's downbeat; the star twinkles on the two sparkle chimes.
+    const iconP = out3(seg(t, T.endHit - 0.03, T.endHit + 0.57));
+    pieces[0].style.opacity = iconP.toFixed(3);
+    pieces[0].style.transform = `scale(${lerp(0.86, 1, iconP).toFixed(3)})`;
+    const [s1, s2] = T.sparkles;
+    const tw = bell(seg(t, s1 - 0.3, s1 + 0.3)) + 0.6 * bell(seg(t, s2 - 0.25, s2 + 0.25));
+    $('star').style.transform = `scale(${(1 + 0.45 * tw).toFixed(3)}) rotate(${(tw * 45).toFixed(1)}deg)`;
+    ein(pieces[1], 12.0);
+    ein(pieces[2], 12.2, 10);
+    ein(pieces[3], 12.6);
+    ein(pieces[4], 12.8, 6);
+  }
+
+  /**
+   * Intro (absolute time): 「继续」 is typed into a large input, held, erased, and the input docks into
+   * the window's composer. The dock target is measured from the composer as renderScene left it.
+   */
+  const intro = $('intro'), introDraft = $('introDraft'), introSend = $('introSend');
+  function renderIntro(tg) {
+    const out = seg(tg, I.length + 0.1, I.length + 0.4);
+    if (out >= 1) { intro.style.opacity = '0'; return; }
+    const target = composer.getBoundingClientRect(), root = $('scene').getBoundingClientRect();
+    const s1 = target.width / 520, s0 = s1 * 1.18;
+    const p = inOut3(seg(tg, ...I.dock));
+    const s = lerp(s0, s1, p);
+    const cx = lerp(480, target.left - root.left + target.width / 2, p);
+    const cy = lerp(270, target.top - root.top + target.height / 2, p) + (1 - out3(seg(tg, 0.05, 0.45))) * 12;
+    intro.style.opacity = (out3(seg(tg, 0.05, 0.4)) * (1 - out)).toFixed(3);
+    intro.style.transform = `translate(${(cx - 260 * s).toFixed(2)}px, ${(cy - 27 * s).toFixed(2)}px) scale(${s.toFixed(4)})`;
+
+    const n = I.typed.filter((x) => tg >= x).length - I.erased.filter((x) => tg >= x).length;
+    const focused = tg < I.dock[0];
+    const busy = [...I.typed, ...I.erased].some((x) => tg >= x - 0.05 && tg < x + 0.3);
+    const caretOn = focused && tg > 0.25 && (busy || (tg % 1.0) < 0.55);
+    const caret = `<span id="introCaret" style="display:inline-block;width:1.5px;height:18px;margin:0 1px;background:#1f2329;opacity:${caretOn ? 1 : 0}"></span>`;
+    // Unfocused, the input must match #composer pixel for pixel (no caret box) so the crossfade is seamless.
+    introDraft.innerHTML = n > 0 ? `${'继续'.slice(0, n)}${caret}` : `${focused ? caret : ''}<span class="ph">输入消息…</span>`;
+    introSend.style.background = n > 0 ? '#3370ff' : '#dfe2e7';
+    const ring = focused ? 1 : 1 - seg(tg, I.dock[0], I.dock[0] + 0.3);
+    intro.style.borderColor = `rgba(51,112,255,${(0.55 * ring).toFixed(3)})`;
+    intro.style.boxShadow = `0 0 0 ${(3 * ring).toFixed(2)}px rgba(51,112,255,.10), 0 18px 40px -20px rgba(30,41,80,${(0.35 * (1 - p)).toFixed(3)})`;
+  }
+
+  function render(tg) {
+    renderScene(tg - I.length);
+    renderIntro(tg);
+  }
+
+  window.renderAt = render;
+
+  // ---------------------------------------------------------------- drive
+  const qs = new URLSearchParams(location.search).get('t');
+  if (typeof window.__T === 'number') {
+    render(window.__T);
+  } else if (qs !== null) {
+    render(Number(qs));
+  } else {
+    let origin = performance.now(), paused = false, at = 0;
+    const loop = (now) => {
+      if (!paused) at = ((now - origin) / 1000) % DURATION;
+      render(at);
+      requestAnimationFrame(loop);
+    };
+    addEventListener('keydown', (e) => {
+      if (e.key === ' ') { paused = !paused; origin = performance.now() - at * 1000; }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        at = clamp(at + (e.key === 'ArrowRight' ? 0.5 : -0.5), 0, DURATION - 0.001);
+        origin = performance.now() - at * 1000;
+      }
+    });
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+</body>
+</html>

@@ -38,6 +38,7 @@ lib/normalize.js    参数规范化，结果写入 tool/result.meta
 client.js           Client（手写单文件）：Definition、卡片、过程行与 CSS
 cordis.patch.yml    插件行 patch
 test/               node --test
+assets/promo/       宣传短片：源文件、封面与渲染脚本（成片不入库，不随 npm 发布）
 ```
 
 ## 开发
