@@ -80,11 +80,11 @@ window.__ModuleLoader__.load({
   outline-offset: 2px;
 }
 .dshna-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* Recommended: tinted border + spark. Used (next message): check, pencil when edited; quieter label. */
+    /* Recommended: tinted border + spark. Used (next message): check or pencil in success color; quieter label. */
 .dshna-chip[data-recommended] { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, transparent); }
 .dshna-spark { flex: none; color: var(--dsw-alias-state-business-primary); }
 .dshna-chip[data-used] { color: var(--dsw-alias-label-secondary); }
-.dshna-check { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, var(--dsw-alias-label-primary)); }
+.dshna-used { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 65%, var(--dsw-alias-label-primary)); }
 .dshna-warn { flex: none; color: color-mix(in srgb, var(--dsw-alias-state-warn-label) 65%, var(--dsw-alias-label-primary)); }
 .dshna-row {
   display: flex;
@@ -313,13 +313,13 @@ window.__ModuleLoader__.load({
 
     /** "Sent as-is". */
     function CheckIcon() {
-      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-check', 'aria-hidden': 'true' },
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-used', 'aria-hidden': 'true' },
         h('path', { d: 'M3.5 8.5 6.5 11.5 12.5 4.5', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }))
     }
 
     /** "Sent with edits". */
     function EditedIcon() {
-      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-check', 'aria-hidden': 'true' },
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-used', 'aria-hidden': 'true' },
         h('path', { d: 'M10.5 3 13 5.5 6 12.5 3 13l.5-3L10.5 3Z', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }))
     }
 
