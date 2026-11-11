@@ -87,6 +87,24 @@ test('buildMeta clips a label one character past the stated cap', () => {
   assert.ok(over.suggestions[0].label.endsWith('…'))
 })
 
+test('buildMeta ignores negated and descriptive risk words', () => {
+  const meta = buildMeta(args([
+    { label: '先自动验证', prompt: '完成后汇报结果，不要发布。' },
+    { label: '改掉过时注释', prompt: '压缩不删除原 tool/result；替换副本一律忽略' },
+    { label: '先原子化提交', prompt: '当前暂存区只有 scripts/ 和 src/ 的删除，其余修改未暂存' },
+  ]))
+  assert.deepEqual(meta.suggestions.map((item) => item.danger), [undefined, undefined, undefined])
+})
+
+test('buildMeta still marks risk actions after a modal word', () => {
+  const meta = buildMeta(args([
+    { label: '清理', prompt: '删除旧分支' },
+    { label: '准备发布', prompt: '评估发布准备并给出检查清单' },
+    { label: '发布', prompt: '请帮我部署到生产环境' },
+  ]))
+  assert.deepEqual(meta.suggestions.map((item) => item.danger), [true, true, true])
+})
+
 test('tool execute and render report whether a card is shown', () => {
   assert.deepEqual(tool.execute(args()), { shown: true, count: 2 })
   assert.deepEqual(tool.execute({}), { shown: false, count: 0 })
