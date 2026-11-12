@@ -11,7 +11,9 @@
  * - A `conversation.chat.turnTail` entry renders the card under every turn
  *   that produced one; clicking a suggestion fills the composer and never
  *   sends. A chip whose prompt the next user message sent as-is gets a check;
- *   one sent with edits gets a pencil. Both come from the session log.
+ *   one sent with edits gets a pencil. Both come from the session log. Once
+ *   that message arrives the card folds to one summary row; expanding or
+ *   collapsing by hand lasts only for the mount.
  * - A `tool.call.toolview` entry renders the one-line process row.
  *
  * External plugins must not require Harness Client packages, so the markup and
@@ -54,6 +56,52 @@ window.__ModuleLoader__.load({
   overflow-wrap: anywhere;
 }
 .dshna-mark { display: inline-block; vertical-align: -3px; margin-right: 6px; }
+.dshna-head { display: flex; align-items: flex-start; gap: 8px; }
+.dshna-head > .dshna-context { flex: 1; min-width: 0; }
+.dshna-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: -2px -8px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+.dshna-toggle:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
+    /* Collapsed card: one quiet row, like the process row. */
+.dshna-summary {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  height: 28px;
+  margin: 12px 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+.dshna-summary:hover { color: var(--dsw-alias-label-secondary); }
+.dshna-summary > svg, .dshna-summary-title { flex: none; }
+.dshna-summary > .dshna-mark { margin-right: 0; }
+.dshna-summary-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dshna-summary-item + .dshna-summary-item { margin-left: 10px; }
+.dshna-summary-item > svg { display: inline-block; vertical-align: -1px; margin-right: 4px; }
 .dshna-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .dshna-chip {
   box-sizing: border-box;
@@ -75,7 +123,7 @@ window.__ModuleLoader__.load({
 .dshna-chip:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .dshna-chip:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active); }
 .dshna-chip:disabled { cursor: not-allowed; opacity: .4; }
-.dshna-chip:focus-visible {
+.dshna-chip:focus-visible, .dshna-toggle:focus-visible, .dshna-summary:focus-visible {
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
@@ -111,13 +159,18 @@ window.__ModuleLoader__.load({
 
     const EN = Object.freeze({
       'card.title': 'Suggested next actions',
+      'card.collapse': 'Collapse suggested next actions',
       'chip.recommended': 'Recommended',
       'chip.danger': 'Needs confirmation',
       'chip.sent': 'Sent',
       'chip.edited': 'Sent with edits',
       'chip.aria': '{label}: {prompt}',
       'chip.ariaMarked': '{label} ({marks}): {prompt}',
-      'chip.markSeparator': ', ',
+      'list.separator': ', ',
+      'summary.aria': '{title}: {summary}',
+      'summary.used': '{label} ({mark})',
+      'summary.count': '{count}',
+      'summary.unused': '{count} not used',
       'row.title': 'Next actions',
       'row.running': 'Writing',
       'row.ok': 'Shown',
@@ -125,13 +178,18 @@ window.__ModuleLoader__.load({
     })
     const ZH = Object.freeze({
       'card.title': '下一步建议',
+      'card.collapse': '收起下一步建议',
       'chip.recommended': '推荐',
       'chip.danger': '需确认',
       'chip.sent': '已发送',
       'chip.edited': '改后发送',
       'chip.aria': '{label}：{prompt}',
       'chip.ariaMarked': '{label}（{marks}）：{prompt}',
-      'chip.markSeparator': '，',
+      'list.separator': '，',
+      'summary.aria': '{title}：{summary}',
+      'summary.used': '{label}（{mark}）',
+      'summary.count': '{count} 条',
+      'summary.unused': '{count} 条未使用',
       'row.title': '下一步建议',
       'row.running': '正在生成',
       'row.ok': '已生成',
@@ -299,8 +357,8 @@ window.__ModuleLoader__.load({
       return next === prompt ? prompt : null
     }
 
-    function Mark() {
-      return h('svg', { width: 16, height: 16, viewBox: '0 0 36 36', fill: 'none', className: 'dshna-mark', 'aria-hidden': 'true' },
+    function Mark({ size = 16 }) {
+      return h('svg', { width: size, height: size, viewBox: '0 0 36 36', fill: 'none', className: 'dshna-mark', 'aria-hidden': 'true' },
         h('g', { transform: 'translate(-1.5 0.5)' },
           h('rect', { x: 5, y: 7.6, width: 21, height: 5.4, rx: 2.7, fill: '#5E9DF5' }),
           h('rect', { x: 5, y: 15.3, width: 16, height: 5.4, rx: 2.7, fill: '#7AAEFF' }),
@@ -330,6 +388,12 @@ window.__ModuleLoader__.load({
     function EditedIcon() {
       return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', className: 'dshna-used', 'aria-hidden': 'true' },
         h('path', { d: 'M10.5 3 13 5.5 6 12.5 3 13l.5-3L10.5 3Z', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }))
+    }
+
+    /** Right when collapsed (expands), up when expanded (collapses). */
+    function ChevronIcon({ expanded }) {
+      return h('svg', { width: 12, height: 12, viewBox: '0 0 16 16', fill: 'none', 'aria-hidden': 'true' },
+        h('path', { d: expanded ? 'M3.5 10 8 5.5 12.5 10' : 'M6 3.5 10.5 8 6 12.5', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round' }))
     }
 
     // -----------------------------------------------------------------------
@@ -397,18 +461,19 @@ window.__ModuleLoader__.load({
      * context, wake-ups) are skipped, and a later turn showing its own card
      * claims the next message instead. A human turn whose message has no text
      * (an image-only reply) ends the search, so no later message is borrowed.
+     * `null` while the card still awaits that reply: it is the current card.
      */
     function nextSent(snapshot, turn) {
       const order = snapshot?.timeline?.turnOrder
       const index = Array.isArray(order) ? order.indexOf(turn) : -1
-      if (index < 0) return ''
+      if (index < 0) return null
       for (const later of order.slice(index + 1)) {
         const data = snapshot.timeline.turns?.get(later)?.data
         const sent = data?.get(SENT_KEY)
         if (sent !== undefined) return typeof sent.text === 'string' ? sent.text : ''
         if (data?.get(KEY)?.model) return ''
       }
-      return ''
+      return null
     }
 
     /** Only a card mounted right after its turn ends animates in; history mounts instantly. */
@@ -418,20 +483,72 @@ window.__ModuleLoader__.load({
       return Number.isFinite(value) && Date.now() - value < 5000
     }
 
+    /** What a folded card says: the suggestions the reply used, or how many went unused. */
+    function summaryOf(suggestions, usages, t) {
+      const used = suggestions.flatMap((suggestion, index) => (usages[index] === null ? [] : [{ label: suggestion.label, usage: usages[index] }]))
+      const count = String(suggestions.length)
+      const markOf = (usage) => t(usage === 'full' ? 'chip.sent' : 'chip.edited')
+      const label = used.length > 0
+        ? used.map(({ label, usage }) => t('summary.used', { label, mark: markOf(usage) })).join(t('list.separator'))
+        : t('summary.unused', { count })
+      return {
+        label: t('summary.aria', { title: t('card.title'), summary: label }),
+        content: used.length > 0
+          ? used.map(({ label, usage }, index) => h('span', { key: index, className: 'dshna-summary-item' },
+            h(usage === 'full' ? CheckIcon : EditedIcon), label))
+          : t('summary.count', { count }),
+      }
+    }
+
     function NextActionsCard({ turn, inputActions, useInput, useChat, useSession, sessionId, t }) {
       const ownedRef = React.useRef(null)
+      // The row and the card swap on toggle; the control that replaces the clicked one takes focus.
+      const toggleRef = React.useRef(null)
+      const toggledRef = React.useRef(false)
+      // This mount's explicit choice; `null` follows the session log.
+      const [expandedChoice, setExpandedChoice] = React.useState(null)
       const draft = useInput?.((state) => state?.draft ?? '') ?? ''
-      const sent = useChat?.((snapshot) => nextSent(snapshot, turn?.turn)) ?? ''
+      const sent = useChat?.((snapshot) => nextSent(snapshot, turn?.turn)) ?? null
       const subagent = useSession?.((state) => state?.subagent ?? null)
 
       const model = turn?.end === undefined ? undefined : turn.data?.get(KEY)?.model
       const closing = turn?.data?.get('turn-tail')?.closing
       const suggestions = closing && !subagent ? model?.suggestions : undefined
       const usages = React.useMemo(
-        () => suggestions?.map(({ prompt }) => usageOf(prompt, sent)),
+        () => suggestions?.map(({ prompt }) => (sent === null ? null : usageOf(prompt, sent))),
         [suggestions, sent],
       )
+      // A card folds once answered, at the boundary "used" is judged by.
+      const awaitingReply = sent === null
+      const expanded = expandedChoice ?? awaitingReply
+      React.useEffect(() => {
+        if (!toggledRef.current) return
+        toggledRef.current = false
+        toggleRef.current?.focus()
+      }, [expanded])
       if (!suggestions) return null
+
+      const toggle = () => {
+        toggledRef.current = true
+        setExpandedChoice(!expanded)
+      }
+      if (!expanded) {
+        const summary = summaryOf(suggestions, usages, t)
+        return h('button', {
+          ref: toggleRef,
+          type: 'button',
+          className: 'dshna-summary',
+          'aria-expanded': false,
+          'aria-label': summary.label,
+          title: model.context,
+          onClick: toggle,
+        },
+        h(ChevronIcon, { expanded: false }),
+        h(Mark, { size: 14 }),
+        h('span', { className: 'dshna-summary-title' }, t('card.title')),
+        h('span', null, '·'),
+        h('span', { className: 'dshna-summary-text' }, summary.content))
+      }
 
       const canWrite = typeof inputActions?.setDraft === 'function'
       const chip = (suggestion, index) => {
@@ -455,7 +572,7 @@ window.__ModuleLoader__.load({
           disabled: !canWrite,
           title: suggestion.prompt,
           'aria-label': marks.length > 0
-            ? t('chip.ariaMarked', { label: suggestion.label, marks: marks.join(t('chip.markSeparator')), prompt: suggestion.prompt })
+            ? t('chip.ariaMarked', { label: suggestion.label, marks: marks.join(t('list.separator')), prompt: suggestion.prompt })
             : t('chip.aria', { label: suggestion.label, prompt: suggestion.prompt }),
           onClick: () => {
             ownedRef.current = fill(inputActions, draft, ownedRef.current, suggestion.prompt, sessionId)
@@ -465,9 +582,20 @@ window.__ModuleLoader__.load({
         h('span', { className: 'dshna-chip-label' }, suggestion.label))
       }
 
-      return h('div', { className: 'dshna-reveal', 'data-fresh': isFresh(turn) ? '' : undefined },
+      return h('div', { className: 'dshna-reveal', 'data-fresh': isFresh(turn) || expandedChoice === true ? '' : undefined },
         h('section', { className: 'dshna-card', 'aria-label': t('card.title') },
-          h('p', { className: 'dshna-context' }, h(Mark), model.context),
+          h('div', { className: 'dshna-head' },
+            h('p', { className: 'dshna-context' }, h(Mark), model.context),
+            // The current card has no collapse control: continuing the conversation folds it.
+            awaitingReply ? null : h('button', {
+              ref: toggleRef,
+              type: 'button',
+              className: 'dshna-toggle',
+              'aria-expanded': true,
+              'aria-label': t('card.collapse'),
+              title: t('card.collapse'),
+              onClick: toggle,
+            }, h(ChevronIcon, { expanded: true }))),
           h('div', { className: 'dshna-chips' }, suggestions.map(chip))))
     }
 

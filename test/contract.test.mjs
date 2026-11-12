@@ -12,6 +12,8 @@ function loadCard() {
     createElement: (type, props, ...children) => ({ type, props, children: children.flat() }),
     useRef: (current) => ({ current }),
     useMemo: (compute) => compute(),
+    useState: (initial) => [initial, () => {}],
+    useEffect: () => {},
   }))
   let Card
   plugin.apply({

@@ -4,6 +4,13 @@ import { readFileSync } from 'node:fs'
 
 const TOOL = 'suggest_next_actions'
 let cardMemo
+let cardHooks
+
+function slotOf(create) {
+  const index = cardHooks.cursor++
+  if (!(index in cardHooks.slots)) cardHooks.slots[index] = create()
+  return cardHooks.slots[index]
+}
 
 /** Load client.js with a stub module loader and a tree-building React stub. */
 function loadBundle() {
@@ -13,7 +20,19 @@ function loadBundle() {
   })
   const react = {
     createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat() }),
-    useRef: (current) => ({ current }),
+    // Refs, state and effects live in per-mount slots, called in render order.
+    useRef: (current) => slotOf(() => ({ current })),
+    useState: (initial) => {
+      const cell = slotOf(() => ({ value: initial }))
+      return [cell.value, (value) => { cell.value = value }]
+    },
+    useEffect: (effect, deps) => {
+      const cell = slotOf(() => ({}))
+      if (cell.deps === undefined || deps.some((dep, index) => !Object.is(dep, cell.deps[index]))) {
+        cell.deps = deps
+        cardHooks.effects.push(effect)
+      }
+    },
     useMemo: (compute, deps) => {
       if (cardMemo.deps?.length !== deps.length || deps.some((dep, index) => !Object.is(dep, cardMemo.deps[index]))) {
         Object.assign(cardMemo, { deps, value: compute() })
@@ -300,23 +319,46 @@ test('fill appends with setDraft when the editor refuses or lacks insertText, an
   assert.equal(warnings[2][1].message, 'editor gone')
 })
 
-function renderCard({ sent = '', end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', lang = 'zh', memo = {} } = {}) {
+/** One mounted card: hook slots, pending effects and the last focused control. */
+const mount = () => ({ slots: [], cursor: 0, effects: [], focused: undefined })
+
+/**
+ * Render turn 1's card. `sent: null` leaves the card awaiting a reply (no
+ * later human turn); a string is turn 2's first human message. Rendering with
+ * the same `hooks` again is a re-render of the same mount.
+ */
+function renderCard({ sent = null, end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', lang = 'zh', memo = {}, hooks = mount() } = {}) {
   const Card = cardComponent()
   const messages = locales[lang]
   const data = new Map([['next-actions', { model }], ['turn-tail', { closing: closing ? {} : undefined }]])
+  const later = sent === null ? [] : [[2, { data: new Map([['next-actions-sent', { text: sent }]]) }]]
   cardMemo = memo
-  return Card({
+  cardHooks = Object.assign(hooks, { cursor: 0 })
+  const tree = Card({
     turn: { turn: 1, end: end ? {} : undefined, data },
     inputActions,
     useInput: (select) => select({ draft }),
     useChat: (select) => select({
-      timeline: { turnOrder: [1, 2], turns: new Map([[2, { data: new Map([['next-actions-sent', { text: sent }]]) }]]) },
+      timeline: { turnOrder: [1, ...later.map(([turn]) => turn)], turns: new Map(later) },
     }),
     useSession: (select) => select({ subagent }),
     sessionId: 's',
     // Same `{name}` interpolation as DSH's locale `t`.
     t: (key, params = {}) => (messages[key] ?? key).replace(/\{(\w+)\}/g, (whole, name) => params[name] ?? whole),
   })
+  // Commit: attach refs to focusable stand-ins, then run the effects.
+  for (const node of find(tree, (candidate) => candidate.props?.ref !== undefined)) {
+    node.props.ref.current = { focus: () => { hooks.focused = node.props.className } }
+  }
+  hooks.effects.splice(0).forEach((effect) => effect())
+  return tree
+}
+
+/** Render an answered card and expand it with its summary row, as a click would. */
+function openCard(options) {
+  const hooks = options.hooks ?? mount()
+  summaryOf(renderCard({ ...options, hooks })).props.onClick()
+  return renderCard({ ...options, hooks })
 }
 
 function buildModel() {
@@ -387,6 +429,9 @@ test('chips are disabled without input actions and a click fills the draft', () 
 })
 
 const chipsOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-chip')
+const summaryOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-summary')[0]
+const toggleOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-toggle')[0]
+const textOf = (node) => (typeof node === 'string' ? node : node === null || typeof node !== 'object' ? '' : node.children.map(textOf).join(''))
 
 test('a recommended chip is marked (the Host already put it first)', () => {
   const model = modelOf({ shown: true, context: 'c', suggestions: [{ label: 'B', prompt: 'b', recommended: true }, { label: 'A', prompt: 'a' }] })
@@ -406,9 +451,10 @@ const timeline = (entries) => ({
 test('nextSent reads the next turn opened by a human message', () => {
   const snapshot = timeline([[3, {}], [5, { 'next-actions-sent': { text: 'hi' } }]])
   assert.equal(nextSent(snapshot, 3), 'hi')
-  assert.equal(nextSent(snapshot, 5), '')
-  assert.equal(nextSent(snapshot, 4), '')
-  assert.equal(nextSent(undefined, 3), '')
+  assert.equal(nextSent(snapshot, 5), null, 'the last card awaits its reply')
+  assert.equal(nextSent(snapshot, 4), null)
+  assert.equal(nextSent(undefined, 3), null)
+  assert.equal(nextSent(timeline([[3, {}], [4, {}]]), 3), null, 'turns without a human message do not answer the card')
 })
 
 test('regression: turns without a human message are skipped, unless they show their own card', () => {
@@ -455,15 +501,15 @@ test('regression: "sent with edits" keeps the prompt in order and is not diluted
 })
 
 test('each chip is judged on its own: one message can fully use one and partly use another', () => {
-  const chips = chipsOf(renderCard({ sent: '跑一下测试。\ngit push origin' }))
+  const chips = chipsOf(openCard({ sent: '跑一下测试。\ngit push origin' }))
   assert.deepEqual(chips.map((chip) => chip.props['data-used']), ['full', 'partial'])
 })
 
 test('card reuses usage on draft edits and recomputes for new sent text or suggestions', () => {
   const memo = {}
   const model = buildModel()
-  const initial = { model, memo, sent: '跑一下测试。' }
-  assert.equal(chipsOf(renderCard(initial))[0].props['data-used'], 'full')
+  const initial = { model, memo, hooks: mount(), sent: '跑一下测试。' }
+  assert.equal(chipsOf(openCard(initial))[0].props['data-used'], 'full')
   const usages = memo.value
   assert.deepEqual(usages, ['full', null])
   assert.equal(chipsOf(renderCard({ ...initial, draft: '我的草稿' }))[0].props['data-used'], 'full')
@@ -476,13 +522,13 @@ test('card reuses usage on draft edits and recomputes for new sent text or sugge
 })
 
 test('chips show a check for sent and a pencil for edited', () => {
-  const full = chipsOf(renderCard({ sent: '跑一下测试。' }))
+  const full = chipsOf(openCard({ sent: '跑一下测试。' }))
   assert.equal(full[0].props['data-used'], 'full')
   assert.equal(full[0].props['aria-label'], '跑测试（已发送）：跑一下测试。')
   assert.equal(full[0].children[0].type.name, 'CheckIcon')
   assert.equal(full[1].props['data-used'], undefined)
 
-  const edited = chipsOf(renderCard({ sent: 'git push origin' }))
+  const edited = chipsOf(openCard({ sent: 'git push origin' }))
   assert.equal(edited[1].props['data-used'], 'partial')
   assert.equal(edited[1].props['aria-label'], '推送（需确认，改后发送）：git push --force')
   assert.equal(edited[1].children[0].type.name, 'EditedIcon')
@@ -494,8 +540,63 @@ test('chip accessible names follow the locale, punctuation included', () => {
   assert.equal(plain[0].props['aria-label'], '跑测试: 跑一下测试。')
   assert.equal(plain[1].props['aria-label'], '推送 (Needs confirmation): git push --force')
 
-  const edited = chipsOf(renderCard({ lang: 'en', sent: 'git push origin' }))
+  const edited = chipsOf(openCard({ lang: 'en', sent: 'git push origin' }))
   assert.equal(edited[1].props['aria-label'], '推送 (Needs confirmation, Sent with edits): git push --force')
+})
+
+test('the current card stays expanded without a collapse control', () => {
+  const tree = renderCard()
+  assert.equal(summaryOf(tree), undefined)
+  assert.equal(toggleOf(tree), undefined)
+  assert.equal(chipsOf(tree).length, 2)
+})
+
+test('an answered card folds to one summary row of the suggestions it used', () => {
+  const row = summaryOf(renderCard({ sent: '跑一下测试。\ngit push origin' }))
+  assert.equal(row.type, 'button')
+  assert.equal(row.props['aria-expanded'], false)
+  assert.equal(row.props.title, '修复已完成。', 'hovering shows the context')
+  assert.equal(row.props['aria-label'], '下一步建议：跑测试（已发送），推送（改后发送）')
+  assert.equal(textOf(row), '下一步建议·跑测试推送')
+  const items = find(row, (node) => node.props?.className === 'dshna-summary-item')
+  assert.deepEqual(items.map((item) => item.children[0].type.name), ['CheckIcon', 'EditedIcon'])
+  assert.equal(chipsOf(renderCard({ sent: '跑一下测试。' })).length, 0, 'the folded card shows no chips')
+})
+
+test('a card answered without using any suggestion shows the count', () => {
+  const zh = summaryOf(renderCard({ sent: '帮我写一份发布说明' }))
+  assert.equal(textOf(zh), '下一步建议·2 条')
+  assert.equal(zh.props['aria-label'], '下一步建议：2 条未使用')
+  const en = summaryOf(renderCard({ sent: '', lang: 'en' }))
+  assert.equal(textOf(en), 'Suggested next actions·2', 'a textless reply answers the card too')
+  assert.equal(en.props['aria-label'], 'Suggested next actions: 2 not used')
+})
+
+test('the summary row and the collapse control toggle the card and keep focus on the toggle', () => {
+  const hooks = mount()
+  const options = { sent: '跑一下测试。', hooks }
+  summaryOf(renderCard(options)).props.onClick()
+  const expanded = renderCard(options)
+  assert.equal(summaryOf(expanded), undefined)
+  assert.equal(expanded.props['data-fresh'], '', 'a card expanded by hand animates in')
+  assert.equal(chipsOf(expanded)[0].props['data-used'], 'full')
+  const toggle = toggleOf(expanded)
+  assert.equal(toggle.props['aria-expanded'], true)
+  assert.equal(toggle.props['aria-label'], '收起下一步建议')
+  assert.equal(hooks.focused, 'dshna-toggle')
+
+  toggle.props.onClick()
+  const folded = renderCard(options)
+  assert.notEqual(summaryOf(folded), undefined)
+  assert.equal(hooks.focused, 'dshna-summary')
+  assert.equal(renderCard({ ...options, draft: '草稿' }).props.className, 'dshna-summary', 'other updates keep the choice')
+})
+
+test('regression: the current card folds once its reply arrives, without moving focus', () => {
+  const hooks = mount()
+  assert.equal(summaryOf(renderCard({ hooks })), undefined)
+  assert.notEqual(summaryOf(renderCard({ hooks, sent: '跑一下测试。' })), undefined)
+  assert.equal(hooks.focused, undefined)
 })
 
 test('English and Chinese locales define the same keys', () => {
