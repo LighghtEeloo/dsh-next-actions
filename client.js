@@ -12,8 +12,9 @@
  *   that produced one; clicking a suggestion fills the composer and never
  *   sends. A chip whose prompt the next user message sent as-is gets a check;
  *   one sent with edits gets a pencil. Both come from the session log. Once
- *   that message arrives the card folds to one summary row; expanding or
- *   collapsing by hand lasts only for the mount.
+ *   that message arrives the card folds to one summary row; the two states
+ *   stay mounted, so a CSS grid-row transition animates folding and unfolding
+ *   in both directions. Expanding or collapsing by hand lasts only for the mount.
  * - A `tool.call.toolview` entry renders the one-line process row.
  *
  * External plugins must not require Harness Client packages, so the markup and
@@ -33,14 +34,35 @@ window.__ModuleLoader__.load({
 .dshna-reveal {
   display: grid;
   grid-template-rows: 1fr;
-  margin: 16px 0;
+  --dshna-fold-duration: .22s;
+  --dshna-fold-ease: cubic-bezier(.4, 0, .2, 1);
 }
 .dshna-reveal > * { min-height: 0; }
-.dshna-reveal[data-fresh] { animation: dshna-reveal .22s cubic-bezier(.4, 0, .2, 1) both; }
+.dshna-reveal[data-fresh] { animation: dshna-reveal var(--dshna-fold-duration) var(--dshna-fold-ease) both; }
 @keyframes dshna-reveal { from { grid-template-rows: 0fr; opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .dshna-reveal[data-fresh] { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .dshna-reveal { --dshna-fold-duration: 0s; }
+  .dshna-reveal[data-fresh] { animation: none; }
+}
+    /* Both states stay mounted; each row grows from 0fr to 1fr as the other shrinks.
+       The item clips, not the grid: overflow on the grid itself stops 0fr collapsing. */
+.dshna-reveal-clip, .dshna-summary-clip, .dshna-card-clip { min-height: 0; overflow: hidden; }
+.dshna-summary-row, .dshna-card-row {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows var(--dshna-fold-duration) var(--dshna-fold-ease),
+    opacity var(--dshna-fold-duration) var(--dshna-fold-ease),
+    visibility 0s linear var(--dshna-fold-duration);
+}
+.dshna-summary-row { grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition-delay: 0s, 0s, var(--dshna-fold-duration); pointer-events: none; }
+.dshna-card-row { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s, 0s, 0s; pointer-events: auto; }
+.dshna-reveal[data-folded] .dshna-summary-row { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s, 0s, 0s; pointer-events: auto; }
+    /* The leaving card stays visible until its row finishes collapsing, then leaves the tab order. */
+.dshna-reveal[data-folded] .dshna-card-row { grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition-delay: 0s, 0s, var(--dshna-fold-duration); pointer-events: none; }
 .dshna-card {
   overflow: hidden;
+  margin: 16px 0;
   padding: 14px 20px 16px;
   border: .5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
@@ -502,7 +524,8 @@ window.__ModuleLoader__.load({
 
     function NextActionsCard({ turn, inputActions, useInput, useChat, useSession, sessionId, t }) {
       const ownedRef = React.useRef(null)
-      // The row and the card swap on toggle; the control that replaces the clicked one takes focus.
+      // Both states are mounted, so the toggle that was not clicked takes focus.
+      const summaryRef = React.useRef(null)
       const toggleRef = React.useRef(null)
       const toggledRef = React.useRef(false)
       // This mount's explicit choice; `null` follows the session log.
@@ -524,7 +547,8 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         if (!toggledRef.current) return
         toggledRef.current = false
-        toggleRef.current?.focus()
+        const target = expanded ? toggleRef : summaryRef
+        target.current?.focus()
       }, [expanded])
       if (!suggestions) return null
 
@@ -532,24 +556,7 @@ window.__ModuleLoader__.load({
         toggledRef.current = true
         setExpandedChoice(!expanded)
       }
-      if (!expanded) {
-        const summary = summaryOf(suggestions, usages, t)
-        return h('button', {
-          ref: toggleRef,
-          type: 'button',
-          className: 'dshna-summary',
-          'aria-expanded': false,
-          'aria-label': summary.label,
-          title: model.context,
-          onClick: toggle,
-        },
-        h(ChevronIcon, { expanded: false }),
-        h(Mark, { size: 14 }),
-        h('span', { className: 'dshna-summary-title' }, t('card.title')),
-        h('span', null, '·'),
-        h('span', { className: 'dshna-summary-text' }, summary.content))
-      }
-
+      const summary = summaryOf(suggestions, usages, t)
       const canWrite = typeof inputActions?.setDraft === 'function'
       const chip = (suggestion, index) => {
         const usage = usages[index]
@@ -582,21 +589,44 @@ window.__ModuleLoader__.load({
         h('span', { className: 'dshna-chip-label' }, suggestion.label))
       }
 
-      return h('div', { className: 'dshna-reveal', 'data-fresh': isFresh(turn) || expandedChoice === true ? '' : undefined },
-        h('section', { className: 'dshna-card', 'aria-label': t('card.title') },
-          h('div', { className: 'dshna-head' },
-            h('p', { className: 'dshna-context' }, h(Mark), model.context),
-            // The current card has no collapse control: continuing the conversation folds it.
-            awaitingReply ? null : h('button', {
-              ref: toggleRef,
+      return h('div', {
+        className: 'dshna-reveal',
+        'data-folded': expanded ? undefined : '',
+        'data-fresh': isFresh(turn) ? '' : undefined,
+      },
+      h('div', { className: 'dshna-reveal-clip' },
+        h('div', { className: 'dshna-summary-row' },
+          h('div', { className: 'dshna-summary-clip' },
+            h('button', {
+              ref: summaryRef,
               type: 'button',
-              className: 'dshna-toggle',
-              'aria-expanded': true,
-              'aria-label': t('card.collapse'),
-              title: t('card.collapse'),
+              className: 'dshna-summary',
+              'aria-expanded': expanded,
+              'aria-label': summary.label,
+              title: model.context,
               onClick: toggle,
-            }, h(ChevronIcon, { expanded: true }))),
-          h('div', { className: 'dshna-chips' }, suggestions.map(chip))))
+            },
+            h(ChevronIcon, { expanded: false }),
+            h(Mark, { size: 14 }),
+            h('span', { className: 'dshna-summary-title' }, t('card.title')),
+            h('span', null, '·'),
+            h('span', { className: 'dshna-summary-text' }, summary.content)))),
+        h('div', { className: 'dshna-card-row' },
+          h('div', { className: 'dshna-card-clip' },
+            h('section', { className: 'dshna-card', 'aria-label': t('card.title') },
+              h('div', { className: 'dshna-head' },
+                h('p', { className: 'dshna-context' }, h(Mark), model.context),
+                // The current card has no collapse control: continuing the conversation folds it.
+                awaitingReply ? null : h('button', {
+                  ref: toggleRef,
+                  type: 'button',
+                  className: 'dshna-toggle',
+                  'aria-expanded': expanded,
+                  'aria-label': t('card.collapse'),
+                  title: t('card.collapse'),
+                  onClick: toggle,
+                }, h(ChevronIcon, { expanded: true }))),
+              h('div', { className: 'dshna-chips' }, suggestions.map(chip)))))))
     }
 
     // -----------------------------------------------------------------------

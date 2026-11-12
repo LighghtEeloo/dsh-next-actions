@@ -42,7 +42,11 @@ test('Host meta renders all three chips with their recommendation and danger mar
   const data = new Map([['next-actions', { model: modelOf(meta) }], ['turn-tail', { closing: {} }]])
   const tree = Card({ turn: { end: {}, data }, t: (key) => key })
   assert.ok(tree, 'Host meta produces a card')
-  const chips = tree.children[0].children.find((node) => node.props.className === 'dshna-chips')?.children ?? []
+  const find = (node, predicate) => {
+    if (node === null || typeof node !== 'object') return []
+    return [...(predicate(node) ? [node] : []), ...(node.children ?? []).flatMap((child) => find(child, predicate))]
+  }
+  const chips = find(tree, (node) => node.props?.className === 'dshna-chips')[0]?.children ?? []
   assert.equal(chips.length, meta.suggestions.length, 'the client renders every suggestion from the Host')
   assert.deepEqual(chips.map((chip) => [chip.props.title, chip.children[0]?.type.name]), [
     ['运行单元测试', 'SparkIcon'],

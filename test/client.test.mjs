@@ -334,8 +334,9 @@ function renderCard({ sent = null, end = true, closing = true, subagent = false,
   const later = sent === null ? [] : [[2, { data: new Map([['next-actions-sent', { text: sent }]]) }]]
   cardMemo = memo
   cardHooks = Object.assign(hooks, { cursor: 0 })
+  const endInfo = typeof end === 'number' ? { time: end } : end ? {} : undefined
   const tree = Card({
-    turn: { turn: 1, end: end ? {} : undefined, data },
+    turn: { turn: 1, end: endInfo, data },
     inputActions,
     useInput: (select) => select({ draft }),
     useChat: (select) => select({
@@ -403,7 +404,8 @@ test('tail card registers after shipped and common content cards', () => {
 
 test('card renders context and one chip per suggestion on an ended turn', () => {
   const tree = renderCard()
-  assert.equal(tree.children[0].props['aria-label'], '下一步建议')
+  assert.equal(foldedOf(tree), false)
+  assert.equal(cardOf(tree).props['aria-label'], '下一步建议')
   const chips = find(tree, (node) => node.props?.className === 'dshna-chip')
   assert.equal(chips.length, 2)
   assert.equal(chips[0].props.title, '跑一下测试。')
@@ -429,8 +431,10 @@ test('chips are disabled without input actions and a click fills the draft', () 
 })
 
 const chipsOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-chip')
+const cardOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-card')[0]
 const summaryOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-summary')[0]
 const toggleOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-toggle')[0]
+const foldedOf = (tree) => tree?.props?.['data-folded'] === ''
 const textOf = (node) => (typeof node === 'string' ? node : node === null || typeof node !== 'object' ? '' : node.children.map(textOf).join(''))
 
 test('a recommended chip is marked (the Host already put it first)', () => {
@@ -546,13 +550,16 @@ test('chip accessible names follow the locale, punctuation included', () => {
 
 test('the current card stays expanded without a collapse control', () => {
   const tree = renderCard()
-  assert.equal(summaryOf(tree), undefined)
+  assert.equal(foldedOf(tree), false)
   assert.equal(toggleOf(tree), undefined)
   assert.equal(chipsOf(tree).length, 2)
+  assert.equal(summaryOf(tree).props['aria-expanded'], true, 'the hidden summary row tracks the state too')
 })
 
 test('an answered card folds to one summary row of the suggestions it used', () => {
-  const row = summaryOf(renderCard({ sent: '跑一下测试。\ngit push origin' }))
+  const tree = renderCard({ sent: '跑一下测试。\ngit push origin' })
+  const row = summaryOf(tree)
+  assert.equal(foldedOf(tree), true)
   assert.equal(row.type, 'button')
   assert.equal(row.props['aria-expanded'], false)
   assert.equal(row.props.title, '修复已完成。', 'hovering shows the context')
@@ -560,7 +567,8 @@ test('an answered card folds to one summary row of the suggestions it used', () 
   assert.equal(textOf(row), '下一步建议·跑测试推送')
   const items = find(row, (node) => node.props?.className === 'dshna-summary-item')
   assert.deepEqual(items.map((item) => item.children[0].type.name), ['CheckIcon', 'EditedIcon'])
-  assert.equal(chipsOf(renderCard({ sent: '跑一下测试。' })).length, 0, 'the folded card shows no chips')
+  assert.equal(chipsOf(tree).length, 2, 'the card stays mounted so unfolding can animate')
+  assert.equal(cardOf(tree).props['aria-label'], '下一步建议')
 })
 
 test('a card answered without using any suggestion shows the count', () => {
@@ -577,8 +585,9 @@ test('the summary row and the collapse control toggle the card and keep focus on
   const options = { sent: '跑一下测试。', hooks }
   summaryOf(renderCard(options)).props.onClick()
   const expanded = renderCard(options)
-  assert.equal(summaryOf(expanded), undefined)
-  assert.equal(expanded.props['data-fresh'], '', 'a card expanded by hand animates in')
+  assert.equal(foldedOf(expanded), false)
+  assert.equal(expanded.props['data-fresh'], undefined, 'the mounted rows animate; manual expanding does not replay the entrance')
+  assert.equal(summaryOf(expanded).props['aria-expanded'], true)
   assert.equal(chipsOf(expanded)[0].props['data-used'], 'full')
   const toggle = toggleOf(expanded)
   assert.equal(toggle.props['aria-expanded'], true)
@@ -587,16 +596,29 @@ test('the summary row and the collapse control toggle the card and keep focus on
 
   toggle.props.onClick()
   const folded = renderCard(options)
-  assert.notEqual(summaryOf(folded), undefined)
+  assert.equal(foldedOf(folded), true)
   assert.equal(hooks.focused, 'dshna-summary')
-  assert.equal(renderCard({ ...options, draft: '草稿' }).props.className, 'dshna-summary', 'other updates keep the choice')
+  assert.equal(foldedOf(renderCard({ ...options, draft: '草稿' })), true, 'other updates keep the choice')
 })
 
 test('regression: the current card folds once its reply arrives, without moving focus', () => {
   const hooks = mount()
-  assert.equal(summaryOf(renderCard({ hooks })), undefined)
-  assert.notEqual(summaryOf(renderCard({ hooks, sent: '跑一下测试。' })), undefined)
+  const current = renderCard({ hooks })
+  assert.equal(foldedOf(current), false)
+  assert.equal(summaryOf(current).props['aria-expanded'], true)
+  const answered = renderCard({ hooks, sent: '跑一下测试。' })
+  assert.equal(foldedOf(answered), true)
+  assert.equal(summaryOf(answered).props['aria-expanded'], false)
   assert.equal(hooks.focused, undefined)
+})
+
+test('only a card mounted right after its turn ended carries the entrance animation flag', () => {
+  const now = Date.now()
+  assert.equal(renderCard({ end: now }).props['data-fresh'], '')
+  assert.equal(renderCard({ end: now - 6000 }).props['data-fresh'], undefined)
+  const fresh = renderCard({ end: now, sent: '跑一下测试。' })
+  assert.equal(fresh.props['data-fresh'], '', 'a folded card can still animate in when it mounts')
+  assert.equal(foldedOf(fresh), true)
 })
 
 test('English and Chinese locales define the same keys', () => {
