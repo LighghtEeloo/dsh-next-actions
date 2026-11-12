@@ -106,10 +106,11 @@ test('normalizeConfig only disables on a literal false', () => {
   assert.equal(normalizeConfig({ enabled: false }).enabled, false)
 })
 
-function agent() {
+function agent({ origin } = {}) {
   const sections = []
   return {
     sections,
+    session: { header: origin === undefined ? {} : { origin } },
     ctx: {
       effect: (fn) => {
         const dispose = fn()
@@ -126,10 +127,11 @@ function agent() {
   }
 }
 
-function mount({ config, roots = [], rootsThrows = false } = {}) {
+function mount({ config, agents = [] } = {}) {
   const cleanups = []
   const handlers = new Map()
   const registrations = []
+  const warnings = []
   const ctx = {
     effect: (fn) => {
       const cleanup = fn()
@@ -145,36 +147,34 @@ function mount({ config, roots = [], rootsThrows = false } = {}) {
         return () => {}
       },
     },
-    agents: {
-      roots: () => {
-        if (rootsThrows) throw new Error('registry unavailable')
-        return roots
-      },
-    },
+    // Current AgentRegistry surface: list(), no roots(). The plugin must not
+    // depend on the removed tree query.
+    agents: { list: () => agents },
+    logger: { warn: (message) => warnings.push(message) },
   }
   apply(ctx, config)
-  return { ctx, handlers, registrations, roots, dispose: () => cleanups.forEach((cleanup) => cleanup()) }
+  return { ctx, handlers, registrations, agents, warnings, dispose: () => cleanups.forEach((cleanup) => cleanup()) }
 }
 
-test('apply registers the tool gated to root agents', () => {
+test('apply registers the tool gated to ordinary session agents', () => {
   const root = agent()
-  const sub = agent()
-  const { registrations } = mount({ roots: [root] })
+  const sub = agent({ origin: 'subagent' })
+  const { registrations } = mount({ agents: [root] })
   assert.equal(registrations.length, 1)
   assert.equal(registrations[0].definition.name, 'suggest_next_actions')
   const { when } = registrations[0].options
   assert.equal(when({ agent: root }), true)
   assert.equal(when({ agent: sub }), false)
   assert.equal(when({ agent: undefined }), true)
-  assert.equal(mount({ rootsThrows: true }).registrations[0].options.when({ agent: sub }), true)
+  assert.equal(when({ agent: {} }), true, 'an unreadable header fails open')
 })
 
-test('apply installs the guidance once per root agent and disposes it', () => {
+test('apply installs the guidance once per ordinary live agent and disposes it', () => {
   const early = agent()
   const late = agent()
-  const sub = agent()
-  const { handlers, roots, dispose } = mount({ roots: [early] })
-  roots.push(late)
+  const sub = agent({ origin: 'subagent' })
+  const { handlers, agents, dispose } = mount({ agents: [early, sub] })
+  agents.push(late)
   handlers.get('agent/created')({ agent: late })
   handlers.get('agent/created')({ agent: late })
   handlers.get('agent/created')({ agent: sub })
@@ -189,10 +189,20 @@ test('apply installs the guidance once per root agent and disposes it', () => {
   assert.equal(late.sections[0].disposed, true)
 })
 
+test('a failed guidance install is reported and leaves the tool registered', () => {
+  const broken = agent()
+  broken.ctx.systemPrompt.section = () => { throw new Error('no sections') }
+  const { registrations, warnings } = mount({ agents: [broken] })
+  assert.equal(registrations.length, 1)
+  assert.deepEqual(warnings.length, 1)
+  assert.match(warnings[0], /guidance not installed: Error: no sections/)
+})
+
 test('disabled config registers neither tool nor guidance', () => {
   const root = agent()
-  const { registrations, handlers } = mount({ config: { enabled: false }, roots: [root] })
+  const { registrations, handlers, warnings } = mount({ config: { enabled: false }, agents: [root] })
   assert.equal(registrations.length, 0)
   assert.equal(handlers.size, 0)
   assert.equal(root.sections.length, 0)
+  assert.equal(warnings.length, 0)
 })

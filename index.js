@@ -18,6 +18,7 @@ const GUIDANCE = [
   'Before your final answer, call suggest_next_actions once when this turn leaves real follow-up work:',
   'a task finished or advanced, tools ran, files changed, review or approval is due,',
   'or you were about to end with a list of next actions.',
+  'Use it for code and engineering work too; the card sits under the reply and the reply keeps its normal plain-text format.',
   'Put those actions only in the card; the reply gets at most one lead-in sentence and never numbers or bullets them.',
   'Skip greetings, acknowledgements, pure knowledge answers, repeated cards, and turns that already asked a structured question.',
 ].join(' ')
@@ -28,7 +29,8 @@ const TOOL = {
   name: TOOL_NAME,
   description: [
     'Show 1–3 clickable next actions as a card under your reply; clicking one fills the message input, never sends.',
-    "Write them in the user's language and never repeat them in your prose.",
+    'Call it once before the final answer when this turn leaves real follow-up work.',
+    "Write the actions in the user's language and never repeat them in your prose.",
   ].join(' '),
   parameters: {
     type: 'object',
@@ -83,11 +85,16 @@ export function normalizeConfig(raw) {
   return { enabled: !(raw !== null && typeof raw === 'object' && raw.enabled === false) }
 }
 
-/** Root agents only; fail open so a Harness change never silently hides the tool. */
-function isRoot(ctx, agent) {
+/**
+ * Ordinary session agents only. Delegated agents carry the durable
+ * `origin: 'subagent'` header; `AgentRegistry.roots()` no longer exists since
+ * DSH 0.2.1-rc.3, so the header is the supported discriminator. Fail open so a
+ * Harness change never silently hides the tool.
+ */
+function isRoot(agent) {
   if (agent === undefined || agent === null) return true
   try {
-    return ctx.agents.roots().includes(agent)
+    return agent.session.header.origin !== 'subagent'
   } catch {
     return true
   }
@@ -97,16 +104,15 @@ export function apply(ctx, config) {
   if (!normalizeConfig(config).enabled) return
 
   ctx.effect(
-    () => ctx.tools.register(TOOL, { when: ({ agent }) => isRoot(ctx, agent) }),
+    () => ctx.tools.register(TOOL, { when: ({ agent }) => isRoot(agent) }),
     'dsh-next-actions: tool',
   )
 
   /** agent → disposer of its prompt section. */
   const installed = new Map()
   const install = (agent) => {
-    if (installed.has(agent)) return
+    if (installed.has(agent) || !isRoot(agent)) return
     try {
-      if (!ctx.agents.roots().includes(agent)) return
       const prompt = agent.ctx.systemPrompt
       const base = prompt.getSectionOrder?.('TOOL_REPORT')
       installed.set(agent, agent.ctx.effect(() => prompt.section({
@@ -114,8 +120,10 @@ export function apply(ctx, config) {
         order: typeof base === 'number' ? base + 50 : 2950,
         text: GUIDANCE,
       }), 'dsh-next-actions: guidance'))
-    } catch {
-      // The guidance is an enhancement; the tool stays registered.
+    } catch (error) {
+      // The tool still works without the guidance; surface the degradation
+      // instead of silently losing the standing instruction.
+      ctx.logger?.warn?.(`dsh-next-actions: guidance not installed: ${String(error)}`)
     }
   }
 
@@ -123,7 +131,7 @@ export function apply(ctx, config) {
     const offCreated = ctx.on('agent/created', ({ agent }) => install(agent))
     const offDisposed = ctx.on('agent/disposed', ({ agent }) => installed.delete(agent))
     try {
-      for (const agent of ctx.agents.roots()) install(agent)
+      for (const agent of ctx.agents.list()) install(agent)
     } catch {
       // Agents created later still arrive through agent/created.
     }
