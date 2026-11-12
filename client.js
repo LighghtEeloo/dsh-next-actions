@@ -104,6 +104,10 @@ window.__ModuleLoader__.load({
     const TOOL_NAME = 'suggest_next_actions'
     const KEY = 'next-actions'
     const SENT_KEY = 'next-actions-sent'
+    // The card ends the turn's content. Shipped file-change, plan and action
+    // cards use order 0 and schedule uses 20; common third-party tail cards use
+    // up to 100 (visualize). Sort after all of them; the message action row follows.
+    const TAIL_ORDER = 1000
 
     const EN = Object.freeze({
       'card.title': 'Suggested next actions',
@@ -507,7 +511,7 @@ window.__ModuleLoader__.load({
       ctx.effect(() => ctx.uiConversation.events.register(cardDefinition), 'dsh-next-actions: card definition')
       ctx.effect(() => ctx.uiConversation.events.register(sentDefinition), 'dsh-next-actions: sent definition')
       ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
-        name: 'conversation.chat.turnTail', id: PKG, order: -10, locale: NS,
+        name: 'conversation.chat.turnTail', id: PKG, order: TAIL_ORDER, locale: NS,
       }, NextActionsCard))
       ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
         name: 'tool.call.toolview', key: TOOL_NAME, locale: NS,
@@ -518,7 +522,7 @@ window.__ModuleLoader__.load({
       // `uiConversation` is injected so the definition registers on a cold boot.
       inject: ['slots', 'locale', 'uiConversation'],
       apply,
-      __test: { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent },
+      __test: { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent, tailOrder: TAIL_ORDER },
     }
   },
 })

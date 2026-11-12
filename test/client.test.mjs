@@ -28,7 +28,7 @@ function loadBundle() {
 }
 
 const plugin = loadBundle()
-const { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent } = plugin.__test
+const { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent, tailOrder } = plugin.__test
 
 const args = {
   context: '修复已完成。',
@@ -325,6 +325,7 @@ function buildModel() {
 
 let Card
 let locales
+let tailOptions
 function cardComponent() {
   if (Card !== undefined) return Card
   const slots = []
@@ -337,7 +338,9 @@ function cardComponent() {
   globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild() {} } }
   plugin.apply(ctx)
   delete globalThis.document
-  Card = slots.find((slot) => slot.options.name === 'conversation.chat.turnTail').component
+  const tail = slots.find((slot) => slot.options.name === 'conversation.chat.turnTail')
+  Card = tail.component
+  tailOptions = tail.options
   return Card
 }
 
@@ -347,6 +350,14 @@ const find = (node, predicate, found = []) => {
   for (const child of node.children ?? []) find(child, predicate, found)
   return found
 }
+
+test('tail card registers after shipped and common content cards', () => {
+  cardComponent()
+  assert.equal(tailOptions.order, tailOrder)
+  // File-change and plan cards use 0, schedule uses 20, visualize uses 100;
+  // the message action row sits outside this slot and always follows it.
+  assert.ok(tailOrder > 100, `tail order ${tailOrder} must exceed every content card`)
+})
 
 test('card renders context and one chip per suggestion on an ended turn', () => {
   const tree = renderCard()
