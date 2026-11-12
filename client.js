@@ -277,8 +277,12 @@ window.__ModuleLoader__.load({
         next = null
         try {
           // One editor edit at the caret: keeps @ references, undoable with ⌘Z.
-          if (actions.insertText(`\n\n${prompt}`, actions.captureInsertion()) !== true) next = `${draft.trimEnd()}\n\n${prompt}`
-        } catch {
+          if (actions.insertText(`\n\n${prompt}`, actions.captureInsertion()) !== true) {
+            console.warn('[dsh-next-actions] insertText declined; appending the action instead')
+            next = `${draft.trimEnd()}\n\n${prompt}`
+          }
+        } catch (error) {
+          console.warn('[dsh-next-actions] insert at caret failed; appending the action instead', error)
           next = `${draft.trimEnd()}\n\n${prompt}`
         }
       }

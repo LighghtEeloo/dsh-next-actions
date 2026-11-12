@@ -89,13 +89,14 @@ export function normalizeConfig(raw) {
  * Ordinary session agents only. Delegated agents carry the durable
  * `origin: 'subagent'` header; `AgentRegistry.roots()` no longer exists since
  * DSH 0.2.1-rc.3, so the header is the supported discriminator. Fail open so a
- * Harness change never silently hides the tool.
+ * Harness change never silently hides the tool, and report the drift once.
  */
-function isRoot(agent) {
+function isRoot(agent, onUnreadable) {
   if (agent === undefined || agent === null) return true
   try {
     return agent.session.header.origin !== 'subagent'
-  } catch {
+  } catch (error) {
+    onUnreadable?.(error)
     return true
   }
 }
@@ -103,15 +104,37 @@ function isRoot(agent) {
 export function apply(ctx, config) {
   if (!normalizeConfig(config).enabled) return
 
+  /** Host log, with a console fallback so a missing logger cannot hide the report. */
+  const warn = (message) => {
+    const line = `dsh-next-actions: ${message}`
+    try {
+      if (typeof ctx.logger?.warn === 'function') {
+        ctx.logger.warn(line)
+        return
+      }
+    } catch {
+      // Fall through: the warning must not depend on a working logger.
+    }
+    console.warn(line)
+  }
+
+  /** Report a header-shape change once; `when` runs on every tool resolution. */
+  let headerFailureReported = false
+  const isRootAgent = (agent) => isRoot(agent, (error) => {
+    if (headerFailureReported) return
+    headerFailureReported = true
+    warn(`agent session header unreadable; treating the agent as a root: ${String(error)}`)
+  })
+
   ctx.effect(
-    () => ctx.tools.register(TOOL, { when: ({ agent }) => isRoot(agent) }),
+    () => ctx.tools.register(TOOL, { when: ({ agent }) => isRootAgent(agent) }),
     'dsh-next-actions: tool',
   )
 
   /** agent → disposer of its prompt section. */
   const installed = new Map()
   const install = (agent) => {
-    if (installed.has(agent) || !isRoot(agent)) return
+    if (installed.has(agent) || !isRootAgent(agent)) return
     try {
       const prompt = agent.ctx.systemPrompt
       const base = prompt.getSectionOrder?.('TOOL_REPORT')
@@ -123,7 +146,7 @@ export function apply(ctx, config) {
     } catch (error) {
       // The tool still works without the guidance; surface the degradation
       // instead of silently losing the standing instruction.
-      ctx.logger?.warn?.(`dsh-next-actions: guidance not installed: ${String(error)}`)
+      warn(`guidance not installed: ${String(error)}`)
     }
   }
 
@@ -132,8 +155,10 @@ export function apply(ctx, config) {
     const offDisposed = ctx.on('agent/disposed', ({ agent }) => installed.delete(agent))
     try {
       for (const agent of ctx.agents.list()) install(agent)
-    } catch {
-      // Agents created later still arrive through agent/created.
+    } catch (error) {
+      // Agents created later still arrive through agent/created, but agents
+      // that were already live at apply time keep missing the guidance.
+      warn(`could not install guidance on existing agents: ${String(error)}`)
     }
     return () => {
       offCreated()

@@ -127,7 +127,7 @@ function agent({ origin } = {}) {
   }
 }
 
-function mount({ config, agents = [] } = {}) {
+function mount({ config, agents = [], listThrows = false, logger = true } = {}) {
   const cleanups = []
   const handlers = new Map()
   const registrations = []
@@ -149,8 +149,11 @@ function mount({ config, agents = [] } = {}) {
     },
     // Current AgentRegistry surface: list(), no roots(). The plugin must not
     // depend on the removed tree query.
-    agents: { list: () => agents },
-    logger: { warn: (message) => warnings.push(message) },
+    agents: { list: () => {
+      if (listThrows) throw new Error('registry unavailable')
+      return agents
+    } },
+    ...logger ? { logger: { warn: (message) => warnings.push(message) } } : {},
   }
   apply(ctx, config)
   return { ctx, handlers, registrations, agents, warnings, dispose: () => cleanups.forEach((cleanup) => cleanup()) }
@@ -159,7 +162,7 @@ function mount({ config, agents = [] } = {}) {
 test('apply registers the tool gated to ordinary session agents', () => {
   const root = agent()
   const sub = agent({ origin: 'subagent' })
-  const { registrations } = mount({ agents: [root] })
+  const { registrations, warnings } = mount({ agents: [root] })
   assert.equal(registrations.length, 1)
   assert.equal(registrations[0].definition.name, 'suggest_next_actions')
   const { when } = registrations[0].options
@@ -167,6 +170,10 @@ test('apply registers the tool gated to ordinary session agents', () => {
   assert.equal(when({ agent: sub }), false)
   assert.equal(when({ agent: undefined }), true)
   assert.equal(when({ agent: {} }), true, 'an unreadable header fails open')
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /header unreadable/)
+  when({ agent: {} })
+  assert.equal(warnings.length, 1, 'the drift is reported once')
 })
 
 test('apply installs the guidance once per ordinary live agent and disposes it', () => {
@@ -195,7 +202,32 @@ test('a failed guidance install is reported and leaves the tool registered', () 
   const { registrations, warnings } = mount({ agents: [broken] })
   assert.equal(registrations.length, 1)
   assert.deepEqual(warnings.length, 1)
-  assert.match(warnings[0], /guidance not installed: Error: no sections/)
+  assert.match(warnings[0], /dsh-next-actions: guidance not installed: Error: no sections/)
+})
+
+test('agents already live at apply time are reported when the registry is unreadable', () => {
+  const later = agent()
+  const { handlers, warnings } = mount({ listThrows: true })
+  assert.deepEqual(warnings.length, 1)
+  assert.match(warnings[0], /could not install guidance on existing agents: Error: registry unavailable/)
+  handlers.get('agent/created')({ agent: later })
+  assert.equal(later.sections.length, 1, 'later agents still get the guidance')
+})
+
+test('a missing logger still reports through the console', () => {
+  const broken = agent()
+  broken.ctx.systemPrompt.section = () => { throw new Error('no sections') }
+  const original = console.warn
+  const lines = []
+  console.warn = (...args) => { lines.push(args.join(' ')) }
+  try {
+    const { warnings } = mount({ agents: [broken], logger: false })
+    assert.equal(warnings.length, 0)
+    assert.equal(lines.length, 1)
+    assert.match(lines[0], /^dsh-next-actions: guidance not installed/)
+  } finally {
+    console.warn = original
+  }
 })
 
 test('disabled config registers neither tool nor guidance', () => {

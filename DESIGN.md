@@ -60,7 +60,7 @@
 
 | 部分 | 文件 | 职责 |
 | --- | --- | --- |
-| Host | `index.js` | 为根 agent 注册 `suggest_next_actions` 与一段常驻提示；子代理不注册（按会话 header 的 `origin` 区分）；引导安装失败写日志告警；`enabled:false` 时什么都不注册 |
+| Host | `index.js` | 为根 agent 注册 `suggest_next_actions` 与一段常驻提示；子代理不注册（按会话 header 的 `origin` 区分）；安装与判定失败写日志；`enabled:false` 时什么都不注册 |
 | 规范化 | `lib/normalize.js` | 参数 → `{ shown, context, suggestions[≤3] }`：折叠空白、截断、按指令去重、推荐至多一条且置顶；危险标记来自模型字段或命令形状模式。结果作为 `tool/result.meta` 写入会话日志 |
 | Client | `client.js`（手写单文件，含 CSS） | 两个 Conversation Definition：`next-actions` 把本工具结果上的 meta（native 与 PTC `run_code` 两条通路）发布为该轮卡片；`next-actions-sent` 把用户在该轮发出的第一条 `user/message` 发布为 `sent` 文本。`conversation.chat.turnTail` 渲染卡片；`tool.call.toolview` 渲染过程行 |
 

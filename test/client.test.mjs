@@ -265,13 +265,39 @@ test('fill inserts at the caret as one editor edit, keeping the user draft', () 
   assert.deepEqual(input.calls, [['insertText', '\n\n跑一下测试。', { start: 3, end: 3, draftRev: 7 }]])
 })
 
-test('fill appends with setDraft when the editor refuses or lacks insertText', () => {
-  const refused = actions({ insert: false })
-  fill(refused, '我的草稿  ', null, '跑一下测试。', 's')
-  assert.deepEqual(refused.calls.at(-1), ['setDraft', '我的草稿\n\n跑一下测试。'])
-  const legacy = { calls: [], setDraft(text) { this.calls.push(text) } }
-  fill(legacy, '我的草稿', null, '跑一下测试。', 's')
-  assert.deepEqual(legacy.calls, ['我的草稿\n\n跑一下测试。'])
+function warningsFrom(run) {
+  const warnings = []
+  const original = console.warn
+  console.warn = (...args) => { warnings.push(args) }
+  try {
+    run()
+  } finally {
+    console.warn = original
+  }
+  return warnings
+}
+
+test('fill appends with setDraft when the editor refuses or lacks insertText, and reports it', () => {
+  const warnings = warningsFrom(() => {
+    const refused = actions({ insert: false })
+    fill(refused, '我的草稿  ', null, '跑一下测试。', 's')
+    assert.deepEqual(refused.calls.at(-1), ['setDraft', '我的草稿\n\n跑一下测试。'])
+    const legacy = { calls: [], setDraft(text) { this.calls.push(text) } }
+    fill(legacy, '我的草稿', null, '跑一下测试。', 's')
+    assert.deepEqual(legacy.calls, ['我的草稿\n\n跑一下测试。'])
+    const broken = {
+      calls: [],
+      setDraft(text) { this.calls.push(text) },
+      captureInsertion: () => ({ start: 3, end: 3, draftRev: 7 }),
+      insertText() { throw new Error('editor gone') },
+    }
+    fill(broken, '我的草稿', null, '跑一下测试。', 's')
+    assert.deepEqual(broken.calls, ['我的草稿\n\n跑一下测试。'])
+  })
+  assert.equal(warnings.length, 3)
+  assert.match(String(warnings[0][0]), /^\[dsh-next-actions\] insertText declined/)
+  assert.match(String(warnings[1][0]), /^\[dsh-next-actions\] insert at caret failed/)
+  assert.equal(warnings[2][1].message, 'editor gone')
 })
 
 function renderCard({ sent = '', end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', lang = 'zh', memo = {} } = {}) {
