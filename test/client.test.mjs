@@ -568,8 +568,8 @@ test('a card answered without using any suggestion shows the count', () => {
   assert.equal(textOf(zh), '下一步建议·2 条')
   assert.equal(zh.props['aria-label'], '下一步建议：2 条未使用')
   const en = summaryOf(renderCard({ sent: '', lang: 'en' }))
-  assert.equal(textOf(en), 'Suggested next actions·2', 'a textless reply answers the card too')
-  assert.equal(en.props['aria-label'], 'Suggested next actions: 2 not used')
+  assert.equal(textOf(en), 'Suggested next actions·2 unused', 'a textless reply answers the card too')
+  assert.equal(en.props['aria-label'], 'Suggested next actions: 2 unused')
 })
 
 test('the summary row and the collapse control toggle the card and keep focus on the toggle', () => {
