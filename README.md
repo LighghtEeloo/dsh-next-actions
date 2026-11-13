@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 > Suggested next actions under DeepSeek Harness replies — clicking one fills the input, never sends.
 
-**Status: v0.1.5 (npm package: [dsh-next-actions](https://www.npmjs.com/package/dsh-next-actions)).**
+**Status: v0.1.6 (npm package: [dsh-next-actions](https://www.npmjs.com/package/dsh-next-actions)).**
 See [`DESIGN.md`](DESIGN.md) for the design and rationale, and [`CHANGELOG.md`](CHANGELOG.md) for release notes.
 
 ## Install
