@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { buildMeta } from '../lib/normalize.js'
+import { buildMeta, LIMITS } from '../lib/normalize.js'
 
 function loadCard() {
   let bundle
@@ -53,4 +53,19 @@ test('Host meta renders all three chips with their recommendation and danger mar
     ['git push --force origin main', 'WarnIcon'],
     ['查看错误日志', undefined],
   ])
+})
+
+test('Host keeps a label at the limit whole for the client to show', () => {
+  const { Card, modelOf } = loadCard()
+  const label = '长'.repeat(LIMITS.labelWidth / 2)
+  const meta = buildMeta({ context: '修复已完成。', suggestions: [{ label, prompt: '继续处理。' }] })
+  assert.equal(meta.suggestions[0].label, label)
+  const data = new Map([['next-actions', { model: modelOf(meta) }], ['turn-tail', { closing: {} }]])
+  const tree = Card({ turn: { end: {}, data }, t: (key) => key })
+  const find = (node, predicate) => {
+    if (node === null || typeof node !== 'object') return []
+    return [...(predicate(node) ? [node] : []), ...(node.children ?? []).flatMap((child) => find(child, predicate))]
+  }
+  const chip = find(tree, (node) => node.props?.className === 'dshna-chip')[0]
+  assert.equal(chip.children[1].children[0], label)
 })

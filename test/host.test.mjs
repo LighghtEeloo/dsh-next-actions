@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { apply, normalizeConfig, __definition as tool, __guidance } from '../index.js'
-import { buildMeta, LIMITS } from '../lib/normalize.js'
+import { buildMeta, LIMITS, overwideLabels, textWidth } from '../lib/normalize.js'
 
 const args = (suggestions) => ({
   context: '  修复已完成，\n改动集中在 src/api。 ',
@@ -60,26 +60,88 @@ test('buildMeta keeps one recommendation and moves it first', () => {
   assert.equal(meta.suggestions.filter((item) => item.recommended).length, 1)
 })
 
-test('buildMeta clamps long text and marks danger', () => {
+test('buildMeta keeps a model-written label whole and clamps the prompt', () => {
   const meta = buildMeta(args([
     { label: 'x'.repeat(50), prompt: 'y'.repeat(600) },
     { label: '推送', prompt: 'git push --force origin main' },
     { label: '清理', prompt: 'reset the local cache', danger: true },
   ]))
-  assert.equal(Array.from(meta.suggestions[0].label).length, LIMITS.label)
-  assert.ok(meta.suggestions[0].label.endsWith('…'))
+  assert.equal(meta.suggestions[0].label, 'x'.repeat(50), 'the card never truncates a label')
   assert.equal(Array.from(meta.suggestions[0].prompt).length, LIMITS.prompt)
   assert.equal(meta.suggestions[0].danger, undefined)
   assert.equal(meta.suggestions[1].danger, true, 'command-shaped text marks danger')
   assert.equal(meta.suggestions[2].danger, true)
 })
 
-test('buildMeta clips a label one character past the stated cap', () => {
-  const atCap = buildMeta(args([{ label: '标'.repeat(LIMITS.label), prompt: 'x' }]))
-  assert.equal(Array.from(atCap.suggestions[0].label).length, LIMITS.label)
-  const over = buildMeta(args([{ label: '标'.repeat(LIMITS.label + 1), prompt: 'x' }]))
-  assert.equal(Array.from(over.suggestions[0].label).length, LIMITS.label)
-  assert.ok(over.suggestions[0].label.endsWith('…'))
+test('textWidth counts display columns across scripts', () => {
+  assert.equal(textWidth(''), 0)
+  assert.equal(textWidth('abc'), 3)
+  assert.equal(textWidth('中文'), 4)
+  assert.equal(textWidth('ＡＢ'), 4, 'fullwidth forms take two columns')
+  assert.equal(textWidth('e\u0301'), 1, 'a combining accent adds no column')
+  assert.equal(textWidth('a\u200bb'), 2, 'zero-width characters add no column')
+  assert.equal(textWidth('😀'), 2)
+  assert.equal(textWidth('中a'), 3)
+})
+
+test('buildMeta keeps explicit labels at and past the width limit and clips only a derived one', () => {
+  const atCap = 'a'.repeat(LIMITS.labelWidth)
+  const atCapMeta = buildMeta(args([{ label: atCap, prompt: 'x' }]))
+  assert.equal(atCapMeta.suggestions[0].label, atCap)
+  const over = 'a'.repeat(LIMITS.labelWidth + 1)
+  const overMeta = buildMeta(args([{ label: over, prompt: 'x' }]))
+  assert.equal(overMeta.suggestions[0].label, over)
+  const widePrompt = '长'.repeat(Math.floor(LIMITS.labelWidth / 2) + 1)
+  const derived = buildMeta(args([{ prompt: widePrompt }]))
+  assert.ok(textWidth(derived.suggestions[0].label) <= LIMITS.labelWidth)
+  assert.ok(derived.suggestions[0].label.endsWith('…'))
+})
+
+test('overwideLabels reports the labels the card would show, in card order', () => {
+  const wide = '长'.repeat(Math.floor(LIMITS.labelWidth / 2) + 1)
+  const atCap = '长'.repeat(LIMITS.labelWidth / 2)
+  const meta = buildMeta(args([
+    { label: 'ok', prompt: 'p1' },
+    { label: wide, prompt: 'p2' },
+    { label: atCap, prompt: 'p3' },
+  ]))
+  assert.deepEqual(overwideLabels(meta), [{ position: 2, label: wide, width: LIMITS.labelWidth + 2 }])
+  assert.deepEqual(overwideLabels({ shown: false, note: 'x' }), [])
+})
+
+test('execute returns an overwide label to the model instead of showing a cut card', () => {
+  const atCap = 'a'.repeat(LIMITS.labelWidth)
+  assert.deepEqual(tool.execute(args([{ label: atCap, prompt: 'p' }])), { shown: true, count: 1 })
+
+  const over = '长'.repeat(Math.floor(LIMITS.labelWidth / 2) + 1)
+  assert.throws(
+    () => tool.execute(args([{ label: over, prompt: 'p' }])),
+    (error) => {
+      assert.match(error.message, new RegExp(`label too wide \\(limit ${LIMITS.labelWidth} columns\\): #1 "长{35}…" is ${LIMITS.labelWidth + 2} columns`))
+      assert.match(error.message, /card was not shown/)
+      assert.match(error.message, /call suggest_next_actions again/)
+      return true
+    },
+  )
+})
+
+test('an overwide label on a de-duplicated suggestion never blocks the card', () => {
+  const over = '长'.repeat(Math.floor(LIMITS.labelWidth / 2) + 1)
+  const meta = tool.execute(args([
+    { label: 'ok', prompt: 'Same prompt' },
+    { label: over, prompt: 'same PROMPT' },
+  ]))
+  assert.deepEqual(meta, { shown: true, count: 1 })
+})
+
+test('execute names every overwide label so each can be shortened', () => {
+  assert.throws(
+    () => tool.execute(args([
+      { label: 'a'.repeat(LIMITS.labelWidth + 1), prompt: 'p1' },
+      { label: 'b'.repeat(LIMITS.labelWidth + 2), prompt: 'p2' },
+    ])),
+    /labels too wide .*#1 .*; #2 /,
+  )
 })
 
 test('buildMeta marks command-shaped risk and the model flag', () => {

@@ -47,7 +47,7 @@ function loadBundle() {
 }
 
 const plugin = loadBundle()
-const { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent, tailOrder } = plugin.__test
+const { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent, tailOrder, styles } = plugin.__test
 
 const args = {
   context: '修复已完成。',
@@ -203,6 +203,15 @@ test('one card per turn: the first call that produced a card owns it', () => {
 
   const failedFirst = assemble([turnStart(1), call(1, 'a'), result(1, 'a'), call(1, 'b'), result(1, 'b', { meta: second })])
   assert.equal(dataOf(failedFirst, 1, 'next-actions').model.context, '第二次。')
+
+  const errorFirst = assemble([
+    turnStart(1),
+    call(1, 'a'),
+    at({ type: 'tool/result', surfaceOp: 'append', data: { turn: 1, message: { isError: true, source: { callId: 'a' } } } }),
+    call(1, 'b'),
+    result(1, 'b', { meta: second }),
+  ])
+  assert.equal(dataOf(errorFirst, 1, 'next-actions').model.context, '第二次。', 'a rejected label leaves the card to the retry')
 
   const parallel = assemble([turnStart(1), call(1, 'a'), call(1, 'b'), result(1, 'b', { meta: second }), result(1, 'a', { meta })])
   assert.deepEqual(dataOf(parallel, 1, 'next-actions'), { model })
@@ -443,6 +452,22 @@ test('a recommended chip is marked (the Host already put it first)', () => {
   assert.equal(chips[0].props['data-recommended'], '')
   assert.equal(chips[0].props['aria-label'], 'B（推荐）：b')
   assert.equal(chips[1].props['data-recommended'], undefined)
+})
+
+test('a long label is rendered whole rather than truncated', () => {
+  const label = '长'.repeat(40)
+  const model = modelOf({ shown: true, context: 'c', suggestions: [{ label, prompt: 'p' }] })
+  assert.equal(textOf(chipsOf(renderCard({ model }))[0]), label)
+})
+
+test('chip CSS lets a whole label wrap instead of cutting it off', () => {
+  const rule = (selector) => new RegExp(`${selector.replace('.', '\\.')} \\{([^}]*)\\}`).exec(styles)?.[1] ?? ''
+  const chip = rule('.dshna-chip')
+  const label = rule('.dshna-chip-label')
+  assert.match(chip, /min-height: 32px/)
+  assert.doesNotMatch(chip, /(^|\s)height:/, 'a fixed height would clip the second line')
+  assert.match(label, /overflow-wrap: anywhere/)
+  assert.doesNotMatch(label, /nowrap|text-overflow/)
 })
 
 const timeline = (entries) => ({

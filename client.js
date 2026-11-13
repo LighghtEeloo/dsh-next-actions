@@ -124,15 +124,15 @@ window.__ModuleLoader__.load({
 .dshna-summary-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .dshna-summary-item + .dshna-summary-item { margin-left: 10px; }
 .dshna-summary-item > svg { display: inline-block; vertical-align: -1px; margin-right: 4px; }
-.dshna-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.dshna-chips { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 12px; }
 .dshna-chip {
   box-sizing: border-box;
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 4px;
   max-width: 100%;
-  height: 32px;
-  padding: 0 12px;
+  min-height: 32px;
+  padding: 5.5px 12px;
   border: .5px solid var(--dsw-alias-border-l3);
   border-radius: var(--dsw-radius-sm);
   background: transparent;
@@ -140,8 +140,10 @@ window.__ModuleLoader__.load({
   font: inherit;
   font-size: 13px;
   line-height: 20px;
+  text-align: start;
   cursor: pointer;
 }
+.dshna-chip > svg { flex: none; margin-top: 4px; }
 .dshna-chip:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
 .dshna-chip:active:not(:disabled) { background: var(--dsw-alias-interactive-bg-active); }
 .dshna-chip:disabled { cursor: not-allowed; opacity: .4; }
@@ -149,7 +151,8 @@ window.__ModuleLoader__.load({
   outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
-.dshna-chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* The whole label shows; long actions wrap instead of being cut off. */
+.dshna-chip-label { min-width: 0; overflow-wrap: anywhere; }
     /* Recommended: tinted border + spark. Used (next message): check or pencil in success color; quieter label. */
 .dshna-chip[data-recommended] { border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 60%, transparent); }
 .dshna-spark { flex: none; color: var(--dsw-alias-state-business-primary); }
@@ -680,7 +683,10 @@ window.__ModuleLoader__.load({
       // `uiConversation` is injected so the definition registers on a cold boot.
       inject: ['slots', 'locale', 'uiConversation'],
       apply,
-      __test: { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent, tailOrder: TAIL_ORDER },
+      __test: {
+        cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent,
+        tailOrder: TAIL_ORDER, styles: STYLES,
+      },
     }
   },
 })

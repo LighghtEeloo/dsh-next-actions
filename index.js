@@ -7,7 +7,7 @@
  * Row config `enabled: false` registers nothing, so the feature costs no tokens.
  */
 
-import { buildMeta, LIMITS } from './lib/normalize.js'
+import { buildMeta, LIMITS, overwideLabels } from './lib/normalize.js'
 
 export const name = 'dsh-next-actions'
 export const inject = ['tools', 'systemPrompt', 'agents']
@@ -29,7 +29,7 @@ const TOOL = {
   name: TOOL_NAME,
   description: [
     'Show 1–3 clickable next actions as a card under your reply; clicking one fills the message input, never sends.',
-    'Call it once before the final answer when this turn leaves real follow-up work.',
+    'Call it once before the final answer when this turn leaves real follow-up work; if a label is returned as too wide, shorten it and call again.',
     "Write the actions in the user's language and never repeat them in your prose.",
   ].join(' '),
   parameters: {
@@ -49,7 +49,7 @@ const TOOL = {
           additionalProperties: false,
           required: ['label', 'prompt'],
           properties: {
-            label: { type: 'string', description: `Short imperative button text, ≤${LIMITS.label} chars, no ending punctuation.` },
+            label: { type: 'string', description: `Short imperative button text, ≤${LIMITS.labelWidth} display columns (CJK/fullwidth count as 2), no ending punctuation; the details belong in prompt.` },
             prompt: { type: 'string', description: "Message the user could send as-is (≤500 chars), citing this turn's files, commands or decisions." },
             recommended: { type: 'boolean', description: 'At most one: your pick when one action is clearly best.' },
             danger: { type: 'boolean', description: 'True only for destructive, irreversible, paid or permission-changing actions, e.g. 删除/清空/重置/发布/部署/回滚/付费/授权/卸载.' },
@@ -76,7 +76,24 @@ const TOOL = {
   },
   execute(args) {
     const meta = buildMeta(args)
-    return { shown: meta.shown, count: meta.shown ? meta.suggestions.length : 0 }
+    if (!meta.shown) return { shown: false, count: 0 }
+    // Review the width before the card is published. Cutting a label hides
+    // what the click will do, so an overwide one goes back to the model to
+    // shorten; the limit is generous enough that this stays rare.
+    const overwide = overwideLabels(meta)
+    if (overwide.length > 0) {
+      const preview = (value) => {
+        const characters = Array.from(value)
+        return characters.length > 36 ? `${characters.slice(0, 35).join('')}…` : value
+      }
+      const labels = overwide
+        .map(({ position, label, width }) => `#${position} "${preview(label)}" is ${width} columns`)
+        .join('; ')
+      throw new Error(
+        `${overwide.length === 1 ? 'label' : 'labels'} too wide (limit ${LIMITS.labelWidth} columns): ${labels}. The card was not shown; shorten the label(s) to a few words, move the details into prompt, and call ${TOOL_NAME} again.`,
+      )
+    }
+    return { shown: true, count: meta.suggestions.length }
   },
 }
 
