@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Suggested next actions",
-    "description": "Shows 1–3 clickable next actions under replies, with one or two sentences of context. Clicking one fills the input; nothing is sent automatically."
+    "description": "Shows 1–3 clickable next actions under replies, with one or two sentences of context. Clicking one fills the input; nothing is sent automatically.",
+    "detail": "README.md"
   }
 }

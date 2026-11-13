@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Próximos pasos sugeridos",
+    "description": "Muestra de 1 a 3 próximos pasos en los que se puede hacer clic bajo las respuestas, con una o dos frases de contexto. Al hacer clic solo se rellena el campo de entrada; nunca se envía."
+  }
+}

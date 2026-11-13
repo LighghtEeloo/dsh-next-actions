@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prochaines actions suggérées",
+    "description": "Affiche 1 à 3 prochaines actions cliquables sous les réponses, avec une ou deux phrases de contexte. Un clic remplit uniquement le champ de saisie ; rien n'est envoyé automatiquement."
+  }
+}

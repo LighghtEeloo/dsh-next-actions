@@ -213,12 +213,129 @@ window.__ModuleLoader__.load({
       'list.separator': '，',
       'summary.aria': '{title}：{summary}',
       'summary.used': '{label}（{mark}）',
-      'summary.count': '{count} 条',
+      'summary.count': '{count} 条未使用',
       'summary.unused': '{count} 条未使用',
       'row.title': '下一步建议',
       'row.running': '正在生成',
       'row.ok': '已生成',
       'row.error': '未显示',
+    })
+    // Counts avoid a noun that agrees with the number ("2 unused", "2 sans
+    // suite", "2 не использовано"), so 1–3 suggestions stay grammatical in
+    // every locale without a plural-rules engine or a locale selector.
+    const JA = Object.freeze({
+      'card.title': '次のアクション候補',
+      'card.collapse': '次のアクション候補を折りたたむ',
+      'chip.recommended': 'おすすめ',
+      'chip.danger': '確認が必要',
+      'chip.sent': '送信済み',
+      'chip.edited': '編集して送信',
+      'chip.aria': '{label}：{prompt}',
+      'chip.ariaMarked': '{label}（{marks}）：{prompt}',
+      'list.separator': '、',
+      'summary.aria': '{title}：{summary}',
+      'summary.used': '{label}（{mark}）',
+      'summary.count': '{count} 件未使用',
+      'summary.unused': '{count} 件未使用',
+      'row.title': '次のアクション',
+      'row.running': '生成中',
+      'row.ok': '表示済み',
+      'row.error': '非表示',
+    })
+    const ES = Object.freeze({
+      'card.title': 'Próximos pasos sugeridos',
+      'card.collapse': 'Contraer los próximos pasos sugeridos',
+      'chip.recommended': 'Recomendado',
+      'chip.danger': 'Requiere confirmación',
+      'chip.sent': 'Enviado',
+      'chip.edited': 'Enviado con cambios',
+      'chip.aria': '{label}: {prompt}',
+      'chip.ariaMarked': '{label} ({marks}): {prompt}',
+      'list.separator': ', ',
+      'summary.aria': '{title}: {summary}',
+      'summary.used': '{label} ({mark})',
+      'summary.count': '{count} sin usar',
+      'summary.unused': '{count} sin usar',
+      'row.title': 'Próximos pasos',
+      'row.running': 'Generando',
+      'row.ok': 'Mostrado',
+      'row.error': 'No mostrado',
+    })
+    const FR = Object.freeze({
+      'card.title': 'Prochaines actions suggérées',
+      'card.collapse': 'Replier les prochaines actions suggérées',
+      'chip.recommended': 'Recommandée',
+      'chip.danger': 'Confirmation requise',
+      'chip.sent': 'Envoyée',
+      'chip.edited': 'Envoyée avec modifications',
+      'chip.aria': '{label} : {prompt}',
+      'chip.ariaMarked': '{label} ({marks}) : {prompt}',
+      'list.separator': ', ',
+      'summary.aria': '{title} : {summary}',
+      'summary.used': '{label} ({mark})',
+      'summary.count': '{count} sans suite',
+      'summary.unused': '{count} sans suite',
+      'row.title': 'Prochaines actions',
+      'row.running': 'Génération',
+      'row.ok': 'Affiché',
+      'row.error': 'Non affiché',
+    })
+    const DE = Object.freeze({
+      'card.title': 'Vorgeschlagene nächste Schritte',
+      'card.collapse': 'Vorgeschlagene nächste Schritte einklappen',
+      'chip.recommended': 'Empfohlen',
+      'chip.danger': 'Bestätigung erforderlich',
+      'chip.sent': 'Gesendet',
+      'chip.edited': 'Mit Änderungen gesendet',
+      'chip.aria': '{label}: {prompt}',
+      'chip.ariaMarked': '{label} ({marks}): {prompt}',
+      'list.separator': ', ',
+      'summary.aria': '{title}: {summary}',
+      'summary.used': '{label} ({mark})',
+      'summary.count': '{count} ungenutzt',
+      'summary.unused': '{count} ungenutzt',
+      'row.title': 'Nächste Schritte',
+      'row.running': 'Wird erstellt',
+      'row.ok': 'Angezeigt',
+      'row.error': 'Nicht angezeigt',
+    })
+    const RU = Object.freeze({
+      'card.title': 'Предлагаемые следующие действия',
+      'card.collapse': 'Свернуть предлагаемые следующие действия',
+      'chip.recommended': 'Рекомендуется',
+      'chip.danger': 'Требует подтверждения',
+      'chip.sent': 'Отправлено',
+      'chip.edited': 'Отправлено с изменениями',
+      'chip.aria': '{label}: {prompt}',
+      'chip.ariaMarked': '{label} ({marks}): {prompt}',
+      'list.separator': ', ',
+      'summary.aria': '{title}: {summary}',
+      'summary.used': '{label} ({mark})',
+      'summary.count': '{count} не использовано',
+      'summary.unused': '{count} не использовано',
+      'row.title': 'Следующие действия',
+      'row.running': 'Генерация',
+      'row.ok': 'Показано',
+      'row.error': 'Не показано',
+    })
+    const PT = Object.freeze({
+      'card.title': 'Próximas ações sugeridas',
+      'card.collapse': 'Recolher as próximas ações sugeridas',
+      'chip.recommended': 'Recomendada',
+      'chip.danger': 'Requer confirmação',
+      'chip.sent': 'Enviada',
+      'chip.edited': 'Enviada com alterações',
+      'chip.aria': '{label}: {prompt}',
+      'chip.ariaMarked': '{label} ({marks}): {prompt}',
+      'list.separator': ', ',
+      'summary.aria': '{title}: {summary}',
+      'summary.used': '{label} ({mark})',
+      'summary.count': '{count} sem uso',
+      'summary.unused': '{count} sem uso',
+      'row.title': 'Próximas ações',
+      'row.running': 'Gerando',
+      'row.ok': 'Mostrado',
+      'row.error': 'Não mostrado',
     })
 
     // -----------------------------------------------------------------------
@@ -661,7 +778,9 @@ window.__ModuleLoader__.load({
 
     function apply(ctx) {
       sharedCtx = ctx
-      ctx.effect(() => ctx.locale.register(NS, { en: EN, zh: ZH }), 'dsh-next-actions: locale')
+      ctx.effect(() => ctx.locale.register(NS, {
+        en: EN, zh: ZH, ja: JA, es: ES, fr: FR, de: DE, ru: RU, pt: PT,
+      }), 'dsh-next-actions: locale')
       ctx.effect(() => {
         const element = document.createElement('style')
         element.dataset.plugin = PKG

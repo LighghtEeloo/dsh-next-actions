@@ -573,6 +573,12 @@ test('chip accessible names follow the locale, punctuation included', () => {
   assert.equal(edited[1].props['aria-label'], '推送 (Needs confirmation, Sent with edits): git push --force')
 })
 
+test('non-English locales keep their own punctuation', () => {
+  const ja = chipsOf(renderCard({ lang: 'ja' }))
+  assert.equal(ja[0].props['aria-label'], '跑测试：跑一下测试。')
+  assert.equal(ja[1].props['aria-label'], '推送（確認が必要）：git push --force')
+})
+
 test('the current card stays expanded without a collapse control', () => {
   const tree = renderCard()
   assert.equal(foldedOf(tree), false)
@@ -598,11 +604,30 @@ test('an answered card folds to one summary row of the suggestions it used', () 
 
 test('a card answered without using any suggestion shows the count', () => {
   const zh = summaryOf(renderCard({ sent: '帮我写一份发布说明' }))
-  assert.equal(textOf(zh), '下一步建议·2 条')
+  assert.equal(textOf(zh), '下一步建议·2 条未使用')
   assert.equal(zh.props['aria-label'], '下一步建议：2 条未使用')
   const en = summaryOf(renderCard({ sent: '', lang: 'en' }))
   assert.equal(textOf(en), 'Suggested next actions·2 unused', 'a textless reply answers the card too')
   assert.equal(en.props['aria-label'], 'Suggested next actions: 2 unused')
+})
+
+test('the unused count stays grammatical for every locale and count', () => {
+  const fill = (template, params) => template.replace(/\{(\w+)\}/g, (whole, name) => params[name] ?? whole)
+  for (const [lang, dict] of Object.entries(locales)) {
+    for (const count of [1, 2, 3]) {
+      const suggestions = Array.from({ length: count }, (_, index) => ({ label: `S${index}`, prompt: `prompt ${index}` }))
+      const model = modelOf({ shown: true, context: 'c', suggestions })
+      const row = summaryOf(renderCard({ lang, model, sent: '帮我写一份发布说明' }))
+      const visible = fill(dict['summary.count'], { count })
+      assert.equal(textOf(row), `${dict['card.title']}·${visible}`, `${lang} visible count ${count}`)
+      const summary = fill(dict['summary.unused'], { count })
+      assert.equal(
+        row.props['aria-label'],
+        fill(dict['summary.aria'], { title: dict['card.title'], summary }),
+        `${lang} accessible count ${count}`,
+      )
+    }
+  }
 })
 
 test('the summary row and the collapse control toggle the card and keep focus on the toggle', () => {
@@ -646,9 +671,13 @@ test('only a card mounted right after its turn ended carries the entrance animat
   assert.equal(foldedOf(fresh), true)
 })
 
-test('English and Chinese locales define the same keys', () => {
+test('every registered locale defines the same keys', () => {
   cardComponent()
-  assert.deepEqual(Object.keys(locales.en).sort(), Object.keys(locales.zh).sort())
+  assert.deepEqual(Object.keys(locales).sort(), ['de', 'en', 'es', 'fr', 'ja', 'pt', 'ru', 'zh'])
+  const expected = Object.keys(locales.en).sort()
+  for (const [lang, dict] of Object.entries(locales)) {
+    assert.deepEqual(Object.keys(dict).sort(), expected, `${lang} has the English key set`)
+  }
 })
 
 test('process row maps call phases to running, ok and error', () => {
