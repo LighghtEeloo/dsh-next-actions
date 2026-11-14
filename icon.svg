@@ -1,14 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">
+  <rect x="7" y="17.5" width="19" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/>
+  <rect x="7" y="24" width="13" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/>
+  <rect x="7" y="7" width="22" height="8.5" rx="2.5" fill="url(#next-actions-chip)"/>
+  <path d="M11.75 8.85C12.08 10.37 12.63 10.92 14.15 11.25C12.63 11.58 12.08 12.13 11.75 13.65C11.42 12.13 10.87 11.58 9.35 11.25C10.87 10.92 11.42 10.37 11.75 8.85Z" fill="#FFFFFF"/>
+  <path d="M16 11.25H25" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
   <defs>
-    <linearGradient id="next-actions-fill" x1="5" y1="8" x2="26" y2="20" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#67C7FE"/>
-      <stop offset="1" stop-color="#3F77D8"/>
+    <linearGradient id="next-actions-chip" x1="9" y1="7" x2="24" y2="17" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6FB2EE"/>
+      <stop offset="1" stop-color="#3E58D6"/>
     </linearGradient>
   </defs>
-  <g transform="translate(-1.5 0.5)">
-    <rect x="5" y="7.6" width="21" height="5.4" rx="2.7" fill="url(#next-actions-fill)"/>
-    <rect x="5" y="15.3" width="16" height="5.4" rx="2.7" fill="#7AAEFF"/>
-    <rect x="5" y="23" width="11" height="5.4" rx="2.7" fill="#9CC3FF"/>
-    <path d="M29.6 6.6C29.88 8.65 31.25 10.02 33.3 10.3C31.25 10.58 29.88 11.95 29.6 14C29.32 11.95 27.95 10.58 25.9 10.3C27.95 10.02 29.32 8.65 29.6 6.6Z" fill="#41E1AC"/>
-  </g>
 </svg>
