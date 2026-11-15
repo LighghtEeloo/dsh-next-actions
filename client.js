@@ -28,8 +28,9 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
 
-    // Card and process-row CSS: values follow the official action card and
-    // propose_action row; only theme tokens are referenced.
+    // Card and process-row CSS follow the official action card and propose_action
+    // row; the card's vertical offset follows built-in tail cards instead, so the
+    // turn tail's own gap is not doubled. Only theme tokens are referenced.
     const STYLES = `
 .dshna-reveal {
   display: grid;
@@ -60,9 +61,11 @@ window.__ModuleLoader__.load({
 .dshna-reveal[data-folded] .dshna-summary-row { grid-template-rows: 1fr; opacity: 1; visibility: visible; transition-delay: 0s, 0s, 0s; pointer-events: auto; }
     /* The leaving card stays visible until its row finishes collapsing, then leaves the tab order. */
 .dshna-reveal[data-folded] .dshna-card-row { grid-template-rows: 0fr; opacity: 0; visibility: hidden; transition-delay: 0s, 0s, var(--dshna-fold-duration); pointer-events: none; }
+    /* The turn tail already supplies the gap above and below; the action card's
+       16px margin would double both. Built-in tail cards add 4px instead. */
 .dshna-card {
   overflow: hidden;
-  margin: 16px 0;
+  margin: 4px 0;
   padding: 14px 20px 16px;
   border: .5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-lg);
@@ -96,7 +99,7 @@ window.__ModuleLoader__.load({
   cursor: pointer;
 }
 .dshna-toggle:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
-    /* Collapsed card: one quiet row, like the process row. */
+    /* Collapsed card: one quiet row, like the process row, on the card's 4px offset. */
 .dshna-summary {
   box-sizing: border-box;
   display: flex;
@@ -105,7 +108,7 @@ window.__ModuleLoader__.load({
   width: fit-content;
   max-width: 100%;
   height: 28px;
-  margin: 12px 0;
+  margin: 4px 0;
   padding: 0;
   border: 0;
   border-radius: var(--dsw-radius-sm);

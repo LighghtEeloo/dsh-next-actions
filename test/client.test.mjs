@@ -48,6 +48,7 @@ function loadBundle() {
 
 const plugin = loadBundle()
 const { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent, tailOrder, styles } = plugin.__test
+const rule = (selector) => new RegExp(`${selector.replace('.', '\\.')} \\{([^}]*)\\}`).exec(styles)?.[1] ?? ''
 
 const args = {
   context: '修复已完成。',
@@ -461,13 +462,19 @@ test('a long label is rendered whole rather than truncated', () => {
 })
 
 test('chip CSS lets a whole label wrap instead of cutting it off', () => {
-  const rule = (selector) => new RegExp(`${selector.replace('.', '\\.')} \\{([^}]*)\\}`).exec(styles)?.[1] ?? ''
   const chip = rule('.dshna-chip')
   const label = rule('.dshna-chip-label')
   assert.match(chip, /min-height: 32px/)
   assert.doesNotMatch(chip, /(^|\s)height:/, 'a fixed height would clip the second line')
   assert.match(label, /overflow-wrap: anywhere/)
   assert.doesNotMatch(label, /nowrap|text-overflow/)
+})
+
+test('card spacing stays on the turn-tail scale, not the action-card frame', () => {
+  // The turn tail's 16px gap and the response's 12px flow gap already separate
+  // the card; the action card's 16px margin would stack to 28px/36px of air.
+  assert.match(rule('.dshna-card'), /\bmargin: 4px 0;/)
+  assert.match(rule('.dshna-summary'), /\bmargin: 4px 0;/)
 })
 
 const timeline = (entries) => ({
