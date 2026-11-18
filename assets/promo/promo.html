@@ -2,218 +2,331 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>dsh-next-actions 宣传短片</title>
+<title>dsh-next-actions 宣传片</title>
 <meta name="viewport" content="width=960">
 <!--
   Promo for dsh-next-actions. Everything on screen is a pure function of time `t` (seconds):
   - window.__T set (render-video.sh injects it per frame) → render that instant once;
-  - ?t=7 in the URL → render that instant;
+  - ?t=12 in the URL → render that instant;
   - otherwise → play in a loop (Space pauses, ←/→ seeks 0.5 s).
   Design size is 960×540 CSS px; render-html.sh renders at DSF 2 → 1920×1080.
 
   The cue sheet below is shared: soundtrack.mjs reads the same JSON to place music and UI sounds.
-  `intro` times are absolute; `scene` times are relative to the end of the intro (one bar at `bpm`).
+  All times are absolute seconds on the film's clock; one bar is 2.5 s at 96 BPM.
+  Pairs are [start, end]; `*Chips` is [first, stagger]; `langs` is [first switch, step].
 -->
 <script>window.__T = null; /*FRAME_T*/</script>
 <script id="timeline" type="application/json">
 {
-  "duration": 17.5,
+  "duration": 45.0,
   "bpm": 96,
-  "intro": {
-    "length": 2.5,
-    "typed": [0.5, 0.68],
-    "erased": [1.4, 1.56],
-    "dock": [1.8, 2.5]
-  },
-  "scene": {
-    "winIn": [-0.1, 0.5],
-    "stream": [0.45, 2.15],
-    "rowIn": [2.2, 2.4],
-    "rowDone": 2.7,
-    "reveal": [2.7, 3.2],
-    "chipsIn": [2.85, 0.08],
-    "click": 4.95,
-    "fly": [5.05, 5.5],
-    "fill": 5.42,
-    "typing": [7.55, 8.75],
-    "typedAt": [7.62, 7.77, 7.9, 8.07, 8.2, 8.36, 8.48, 8.63],
-    "sendClick": 9.8,
-    "send": 9.86,
-    "sentIn": [9.9, 10.32],
-    "used": 10.5,
-    "winOut": [11.5, 12.1],
-    "endHit": 11.875,
-    "sparkles": [12.5, 13.75]
-  }
+  "title": [0.15, 1.9, 2.35],
+  "winIn": [2.1, 2.8],
+  "captions": [[2.6, 7.4], [7.6, 12.35], [12.5, 14.9], [15.0, 17.4], [17.5, 19.95], [20.1, 25.9], [26.0, 29.9], [30.1, 34.9], [35.1, 39.5]],
+
+  "r1Rows": [2.9, 3.3, 3.7, 4.1],
+  "r1Shown": 4.7,
+  "r1Fold": [5.0, 5.35],
+  "r1Reply": [5.1, 6.1],
+  "r1Files": [6.1, 6.4],
+  "r1Card": [6.45, 6.9],
+  "r1Chips": [6.55, 0.08],
+  "r1Actions": [6.9, 7.2],
+
+  "focus": [7.5, 8.4],
+  "dim": [[7.6, 8.1], [12.2, 12.7]],
+  "callouts": [8.4, 9.0, 9.6],
+  "calloutsOut": [10.9, 11.2],
+  "cursor1": [10.5, 11.35],
+  "tooltip": 11.9,
+  "click1": 12.45,
+  "fly1": [12.55, 13.0],
+  "fill1": 12.95,
+  "work1": [12.7, 13.5],
+
+  "keycaps": [14.75, 15.85],
+  "shift": 14.95,
+  "enter": 15.2,
+  "cursor2": [15.35, 16.1],
+  "click2": 16.25,
+  "fly2": [16.35, 16.8],
+  "fill2": 16.75,
+
+  "editKeys": [17.6, 17.69, 17.77, 17.88, 17.95, 18.03, 18.1, 18.19, 18.26, 18.35, 18.42, 18.5, 18.6, 18.68],
+  "cursor3": [19.0, 19.75],
+  "sendClick": 19.95,
+  "send": 20.0,
+  "sent1": [20.05, 20.5],
+  "fold1": [20.3, 20.75],
+  "fold1Cam": [20.2, 21.0],
+  "ring": [20.9, 21.9],
+
+  "r2Cam": [22.4, 23.2],
+  "r2Rows": [22.6, 23.05, 23.5],
+  "r2Shown": 24.0,
+  "r2Fold": [24.3, 24.65],
+  "r2Reply": [24.4, 25.15],
+  "r2Card": [25.25, 25.7],
+  "r2Chips": [25.35, 0.08],
+  "r2Actions": [25.7, 26.0],
+  "work2": [25.5, 26.3],
+
+  "draftKeys": [26.4, 26.5, 26.58, 26.68, 26.76, 26.86],
+  "ref": 27.1,
+  "draftKeys2": [27.35, 27.44, 27.52, 27.62, 27.69, 27.77, 27.85],
+  "cursor4": [28.0, 28.6],
+  "click3": 28.75,
+  "fly3": [28.85, 29.3],
+  "fill3": 29.25,
+
+  "scroll": [30.0, 30.9],
+  "hist": [30.0, 31.0],
+  "cursor5": [30.95, 31.65],
+  "click4": 31.75,
+  "expand": [31.8, 32.25],
+  "cursor6": [33.5, 34.15],
+  "click5": 34.3,
+  "collapse": [34.35, 34.8],
+
+  "pullBack": [35.0, 35.9],
+  "theme": [35.6, 36.4],
+  "langs": [36.8, 0.36],
+  "winOut": [39.55, 40.15],
+  "end": 40.0
 }
 </script>
 <style>
 :root {
-  --ink: #1f2329;
-  --ink-2: #5f6673;
-  --ink-3: #8f959e;
-  --brand: #3370ff;
-  --used: #2e9a24;
-  --warn: #e8820c;
-  --line: #e0e2e6;
-  --line-chip: #d9dbe0;
-  --bg-chat: #f7f8fa;
   /* system-ui → SF for Latin even in a zh-CN page (-apple-system resolves to PingFang here). */
   --sans: system-ui, "PingFang SC", "Helvetica Neue", sans-serif;
   /* "SF Mono" / ui-monospace are not reachable headless and fall back to PingFang (long dashes). */
   --mono: Menlo, Monaco, monospace;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 960px; height: 540px; overflow: hidden; background: #f3f4f7; }
-body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; }
+html, body { width: 960px; height: 540px; overflow: hidden; background: #f2f4f7; }
+body { font-family: var(--sans); color: #15181d; -webkit-font-smoothing: antialiased; }
+svg { display: block; }
 
 #scene {
   position: relative; width: 960px; height: 540px; overflow: hidden;
   background:
-    radial-gradient(560px 380px at 8% 0%, rgba(51, 112, 255, .11), transparent 70%),
-    radial-gradient(560px 400px at 96% 100%, rgba(65, 225, 172, .13), transparent 70%),
-    #f3f4f7;
+    radial-gradient(560px 380px at 6% 0%, rgba(65, 118, 230, .10), transparent 70%),
+    radial-gradient(560px 400px at 96% 100%, rgba(65, 210, 172, .11), transparent 70%),
+    #f2f4f7;
 }
 
-/* App window: centered, drawn at 1.1× by render() */
+/* Captions: one functional line per chapter, above the window */
+.cap { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; white-space: nowrap; opacity: 0; }
+.cap-num { flex: none; padding: 4px 6px; border-radius: 6px; background: rgb(65, 118, 230); color: #fff; font: 600 11px/1 var(--mono); letter-spacing: .5px; }
+.cap-main { font-size: 17px; font-weight: 600; line-height: 24px; letter-spacing: .2px; color: #15181d; }
+.cap-sub { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 12.5px; line-height: 18px; color: #5d636b; }
+.cap-sub svg { display: inline-block; flex: none; }
+.cap-sub .lang { transition: none; }
+.cap-sub .lang.on { color: rgb(65, 118, 230); font-weight: 600; }
+
+/* App window: theme tokens are set on #win per frame (light ↔ dark), values from DSH design-platform.css */
 #win {
-  position: absolute; left: 120px; top: 57px; width: 720px; height: 426px;
-  border-radius: 14px; background: var(--bg-chat); overflow: hidden;
-  box-shadow: 0 0 0 .5px rgba(17, 24, 39, .10), 0 26px 60px -18px rgba(30, 41, 80, .28), 0 6px 16px -8px rgba(30, 41, 80, .12);
+  position: absolute; left: 90px; top: 72px; width: 780px; height: 456px;
+  border-radius: 12px; overflow: hidden; background: var(--bg); color: var(--l1);
+  box-shadow: 0 0 0 .5px rgba(17, 24, 39, .12), 0 26px 60px -18px rgba(30, 41, 80, .30), 0 6px 16px -8px rgba(30, 41, 80, .14);
 }
-.tb { position: relative; height: 34px; display: flex; align-items: center; padding-left: 14px; gap: 8px; background: #fbfbfc; border-bottom: .5px solid #e6e8eb; }
-.tb i { width: 10px; height: 10px; border-radius: 50%; }
-.tb span { position: absolute; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--ink-3); }
-#vp { position: absolute; left: 0; top: 34px; width: 720px; height: 392px; overflow: hidden; }
-#cam { position: absolute; left: 0; top: 0; width: 720px; height: 392px; transform-origin: 0 0; }
-#vp::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26px; background: linear-gradient(var(--bg-chat), rgba(247, 248, 250, 0)); }
-#chat { position: absolute; left: 0; top: 0; width: 720px; height: 314px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
-.col { width: 520px; margin: 0 auto; padding-bottom: 8px; }
+.tb { position: relative; height: 32px; display: flex; align-items: center; gap: 8px; padding-left: 13px; background: var(--tb); border-bottom: .5px solid var(--tb-line); }
+.tb i { width: 11px; height: 11px; border-radius: 50%; }
+.tb span { position: absolute; left: 0; right: 0; text-align: center; font-size: 12px; color: var(--l3); }
+#vp { position: absolute; left: 0; top: 32px; width: 780px; height: 424px; overflow: hidden; }
+#cam { position: absolute; left: 0; top: 0; width: 780px; height: 424px; transform-origin: 0 0; }
+#chat { position: absolute; left: 0; top: 0; width: 780px; overflow: hidden; }
+#col { position: absolute; left: 110px; width: 560px; }
 
-.msg { display: flex; justify-content: flex-end; }
-.msg > div { max-width: 78%; padding: 8px 13px; border-radius: 14px; background: #e8ebf0; font-size: 14px; line-height: 1.55; }
-.tools { margin-top: 10px; }
-.tools .row { margin-top: 0; }
-.reply { margin-top: 4px; font-size: 14px; line-height: 1.75; }
-.reply code { font-family: var(--mono); font-size: 12.5px; padding: 1px 5px; border-radius: 4px; background: #eceef2; color: #2b2f36; }
+/* Flow items: .w animates presence, .in carries the gap above and the spotlight dimming */
+.w { overflow: hidden; }
+.u { display: flex; justify-content: flex-end; }
+.u > div { max-width: 70%; padding: 9px 14px; border-radius: 16px; background: var(--bubble); color: var(--l1); font-size: 14px; line-height: 22px; white-space: pre-wrap; }
+.reply { font-size: 14px; line-height: 24px; color: var(--l1); }
+.reply code { font-family: var(--mono); font-size: 12.5px; padding: 1px 5px; border-radius: 5px; background: var(--code-bg); }
+.mono { font-family: var(--mono); font-size: .92em; }
 
-/* Process row: 下一步建议 · 已生成 · 3 */
-#row { height: 0; overflow: hidden; }
-.row { display: flex; align-items: center; gap: 5px; height: 24px; margin-top: 8px; color: var(--ink-3); }
-.row-title { font-size: 13px; }
-.row-sum { font-size: 12px; }
-.shimmer { background: linear-gradient(90deg, #9aa0a8 0%, #9aa0a8 35%, #d3d7dc 50%, #9aa0a8 65%, #9aa0a8 100%); background-size: 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; }
+/* Turn process: live rows, folded into the header when the turn ends */
+.hwrap, .rwrap, .rw { overflow: hidden; }
+.phead { display: flex; align-items: center; height: 33px; padding-bottom: 8px; border-bottom: .5px solid var(--b2); color: var(--l3); font-size: 14px; line-height: 24px; }
+.phead svg { margin-left: 4px; }
+.phead .mono { margin-left: .3em; }
+.rw { padding-top: 4px; }
+.prow { display: flex; align-items: center; gap: 6px; height: 24px; color: var(--l3); white-space: nowrap; }
+.prow svg { flex: none; }
+.pt { font-size: 13px; }
+.ps { margin-left: 2px; font-size: 12px; }
+.ps.code { font-family: var(--mono); font-size: 11.5px; }
+.shimmer { -webkit-background-clip: text; background-clip: text; color: transparent; background-size: 300% 100%; }
 
-/* Card (mirrors client.js .dshna-card) */
-#reveal { height: 0; overflow: hidden; }
-#reveal > div { padding-top: 6px; }
-.card { padding: 13px 16px 15px; border: .5px solid var(--line); border-radius: 12px; background: #fff; }
-.ctx { display: flex; align-items: center; gap: 7px; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
-.chips { display: flex; gap: 8px; margin-top: 12px; }
-.chip { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border: .5px solid var(--line-chip); border-radius: 7px; background: #fff; font-size: 13.5px; color: var(--ink); }
-.chip.rec { border-color: rgba(51, 112, 255, .6); }
-.ico { position: relative; flex: none; width: 12px; height: 12px; }
+/* Built-in changed-files card (single file) */
+.files { overflow: hidden; border: .5px solid var(--b1); border-radius: 16px; background: var(--layer1); }
+.fhead { display: flex; align-items: center; gap: 10px; height: 60px; padding: 8px 10px; background: var(--card-fill); }
+.tile { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border: .5px solid var(--b1); border-radius: 10px; background: var(--tile); }
+.ftitle { font-size: 13px; font-weight: 500; line-height: 20px; color: var(--l1); }
+.fstat { display: flex; gap: 6px; font: 10px/16px var(--mono); }
+.add { color: var(--add); } .del { color: var(--del); }
+
+/* Next-actions card (mirrors client.js .dshna-*) */
+.na-pad { padding: 4px 0; }
+.na-sw, .na-cw { overflow: hidden; }
+.na-card { padding: 14px 20px 16px; border: .5px solid var(--b2); border-radius: 16px; background: var(--layer1); color: var(--l1); }
+.na-head { display: flex; align-items: flex-start; gap: 8px; }
+.na-ctx { flex: 1; min-width: 0; color: var(--l2); font-size: 13px; line-height: 1.6; }
+.na-mark { display: inline-block; vertical-align: -3px; margin-right: 6px; }
+.na-toggle { flex: none; display: grid; place-items: center; width: 24px; height: 24px; margin: -2px -8px 0 0; border-radius: 8px; color: var(--l3); }
+.na-chips { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 12px; }
+.na-chip { position: relative; display: inline-flex; align-items: flex-start; gap: 4px; min-height: 32px; padding: 5.5px 12px; border: .5px solid var(--b3); border-radius: 8px; font-size: 13px; line-height: 20px; color: var(--l1); white-space: nowrap; }
+.na-chip.rec { border-color: var(--brand-60); }
+.na-chip[data-used] { color: var(--l2); }
+.ico { position: relative; flex: none; width: 12px; height: 12px; margin-top: 4px; }
 .ico svg { position: absolute; inset: 0; }
+.c-spark { color: var(--brand); } .c-used { color: var(--used); } .c-warn { color: var(--warn); }
+.na-sum { display: flex; align-items: center; gap: 6px; width: fit-content; height: 28px; border-radius: 8px; color: var(--l3); font-size: 13px; line-height: 20px; white-space: nowrap; }
+.na-sum > .na-mark, .tile-lg > .na-mark { margin-right: 0; }
+.na-sum .it { display: inline-flex; align-items: center; gap: 4px; }
+.na-sum .it + .it { margin-left: 10px; }
 
-#sentWrap { height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
-#sentWrap > div { padding-top: 14px; }
+/* Message action row */
+.acts { display: flex; align-items: center; gap: 8px; height: 28px; margin-left: -6px; color: var(--l3); }
+.acts i { display: grid; place-items: center; width: 28px; height: 28px; }
+.acts span { margin-left: 4px; font-size: 12px; }
 
-/* Composer */
-#composer { position: absolute; left: 100px; top: 322px; width: 520px; height: 54px; border: .5px solid var(--line); border-radius: 14px; background: #fff; }
-#draft { position: absolute; left: 16px; right: 56px; top: 0; height: 54px; display: flex; align-items: center; font-size: 14px; white-space: nowrap; }
-.ph { color: #a8adb5; }
+/* Composer (DSH InputBar card) */
+#composer { position: absolute; left: 110px; bottom: 14px; width: 560px; border-radius: 28px; background: var(--input); box-shadow: 0 0 0 .5px var(--ring), 0 8px 24px -10px var(--shadow-a); }
+#draft { position: relative; min-height: 36px; padding: 12px 18px 2px; font-size: 14px; line-height: 22px; color: var(--l1); white-space: pre-wrap; }
+.ph { color: var(--cap); }
 .fill { border-radius: 3px; }
-#caret { display: inline-block; width: 1.5px; height: 18px; margin: 0 1px; background: var(--ink); }
-#send { position: absolute; right: 11px; top: 11px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dfe2e7; }
+.ref { color: var(--brand); } .ref b { font-weight: 500; }
+.caret { display: inline-block; width: 1.5px; height: 17px; margin: 0 1px; vertical-align: -3px; background: var(--l1); }
+.cmp-row { display: flex; align-items: center; justify-content: space-between; height: 44px; padding: 0 8px 4px 10px; }
+.add-btn { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--selector); color: var(--l2); }
+#send { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; }
 
-/* Pointer, click ripple, flying draft */
-#ghost {
-  position: absolute; left: 0; top: 0; height: 30px; padding: 0 12px; display: flex; align-items: center;
-  border: .5px solid rgba(51, 112, 255, .55); border-radius: 8px; background: #fff; font-size: 13.5px; white-space: nowrap;
-  box-shadow: 0 8px 22px -6px rgba(51, 112, 255, .35); opacity: 0; pointer-events: none;
-}
-.ripple { position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(51, 112, 255, .28); opacity: 0; }
+/* Overlays inside the camera layer */
+.callout { position: absolute; left: 0; top: 0; padding: 4px 9px; border-radius: 6px; background: rgba(20, 23, 28, .92); color: #fff; font-size: 11px; line-height: 16px; white-space: nowrap; opacity: 0; }
+.callout::before { content: ""; position: absolute; width: 8px; height: 8px; background: inherit; transform: rotate(45deg); }
+.callout.up::before { left: calc(50% - 4px); top: -3px; }
+.callout.down::before { left: 14px; bottom: -3px; }
+#tip { position: absolute; left: 0; top: 0; padding: 3px 7px; border: .5px solid rgba(0, 0, 0, .18); border-radius: 5px; background: #f6f6f6; color: #222; font-size: 11px; line-height: 15px; white-space: nowrap; box-shadow: 0 3px 10px rgba(0, 0, 0, .14); opacity: 0; }
+#keys { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; opacity: 0; }
+.kbd { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: .5px solid rgba(0, 0, 0, .16); border-radius: 7px; background: #fff; color: #2b2f36; font-size: 12px; font-weight: 500; box-shadow: 0 2px 0 rgba(0, 0, 0, .14), 0 8px 16px -8px rgba(0, 0, 0, .25); }
+.kplus { color: #8a9099; font-size: 12px; }
+#ghost { position: absolute; left: 0; top: 0; display: flex; align-items: center; height: 30px; padding: 0 12px; border: .5px solid var(--brand-60); border-radius: 8px; background: var(--layer1); color: var(--l1); font-size: 13px; white-space: nowrap; box-shadow: 0 8px 22px -6px rgba(65, 118, 230, .35); opacity: 0; }
+.ripple { position: absolute; left: 0; top: 0; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(65, 118, 230, .28); opacity: 0; }
 #cursor { position: absolute; left: 0; top: 0; width: 20px; height: 24px; opacity: 0; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .25)); transform-origin: 2px 1.5px; }
 
-/* Intro: a standalone input (sized like #composer) that docks into the window's composer */
-#intro { position: absolute; left: 0; top: 0; width: 520px; height: 54px; transform-origin: 0 0; border: .5px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 18px 40px -20px rgba(30, 41, 80, .35); opacity: 0; }
-#introDraft { position: absolute; left: 16px; right: 56px; top: 0; height: 54px; display: flex; align-items: center; font-size: 14px; white-space: nowrap; }
-#introSend { position: absolute; right: 11px; top: 11px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #dfe2e7; }
-
-/* End card */
-#end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-#end > * { opacity: 0; }
-.e-icon { width: 84px; height: 84px; display: grid; place-items: center; border-radius: 22px; background: #fff; box-shadow: 0 0 0 .5px rgba(17, 24, 39, .08), 0 14px 30px -12px rgba(30, 41, 80, .30); }
-.e-name { margin-top: 22px; font-size: 40px; font-weight: 600; letter-spacing: -.5px; }
-.e-slogan { margin-top: 12px; font-size: 26px; font-weight: 500; letter-spacing: 1px; color: var(--ink-2); }
-.e-slogan b {
-  font-weight: 600; color: transparent;
-  background: linear-gradient(90deg, #3a9bf0, #3466e0); -webkit-background-clip: text; background-clip: text;
-}
-.e-cmd { margin-top: 32px; padding: 11px 18px; border: .5px solid #dcdfe4; border-radius: 10px; background: rgba(255, 255, 255, .9); font: 14px/1.4 var(--mono); color: var(--ink); }
+/* Title and end card */
+#title, #end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#title > *, #end > * { opacity: 0; }
+.tile-lg { display: grid; place-items: center; width: 84px; height: 84px; border-radius: 22px; background: #fff; box-shadow: 0 0 0 .5px rgba(17, 24, 39, .08), 0 14px 30px -12px rgba(30, 41, 80, .30); }
+.t-name { margin-top: 22px; font-size: 34px; font-weight: 600; letter-spacing: 1px; }
+.t-pkg { margin-top: 8px; font: 14px/1.4 var(--mono); color: #7a8089; }
+.e-name { margin-top: 22px; font-size: 38px; font-weight: 600; letter-spacing: -.5px; }
+.e-cn { margin-top: 6px; font-size: 16px; color: #5d636b; letter-spacing: 1px; }
+.e-slogan { margin-top: 22px; font-size: 24px; font-weight: 500; letter-spacing: 1px; color: #3d434c; }
+.e-slogan b { font-weight: 600; color: transparent; background: linear-gradient(90deg, #3a9bf0, #3466e0); -webkit-background-clip: text; background-clip: text; }
+.e-cmd { margin-top: 26px; padding: 11px 18px; border: .5px solid #dcdfe4; border-radius: 10px; background: rgba(255, 255, 255, .92); font: 14px/1.4 var(--mono); color: #15181d; }
 .e-cmd em { font-style: normal; color: #a0a6ae; margin-right: 8px; }
-.e-cmd b { font-weight: 500; color: var(--brand); }
-.e-foot { margin-top: 22px; font-size: 12.5px; color: var(--ink-3); letter-spacing: .3px; }
+.e-cmd b { font-weight: 500; color: rgb(65, 118, 230); }
+.e-foot { margin-top: 18px; font-size: 12.5px; color: #8a9099; letter-spacing: .3px; }
 </style>
 </head>
 <body>
 <div id="scene">
+  <div id="captions"></div>
 
   <div id="win">
     <div class="tb"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span>修复分页越界</span></div>
     <div id="vp">
       <div id="cam">
-        <div id="chat">
-          <div class="col">
-            <div class="msg dim"><div>列表接口翻到第二页就越界，帮我看看</div></div>
-            <div class="reply dim">问题在 <code>src/api/list.ts</code>：<code>offset</code> 直接用了页码，第二页起会越界。要我直接修吗？</div>
-            <div class="msg dim" style="margin-top:14px"><div>修吧，顺手补上边界判断</div></div>
-            <div class="tools dim">
-              <div class="row">
-                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.8 7 5 3 8.2Z" fill="currentColor"/></svg>
-                <span class="row-title">过程</span>
-                <span class="row-sum">· 读取 2 个文件 · 编辑 1 个文件 · 类型检查</span>
-              </div>
-            </div>
-            <div class="reply dim" id="reply"></div>
-            <div id="row">
-              <div class="row">
-                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.8 7 5 3 8.2Z" fill="currentColor"/></svg>
-                <span class="row-title">下一步建议</span>
-                <span class="row-sum" id="rowSum"></span>
-              </div>
-            </div>
-            <div id="reveal"><div>
-              <section class="card">
-                <p class="ctx">
-                  <svg width="16" height="16" viewBox="0 0 36 36" fill="none" aria-hidden="true"><rect x="7" y="17.5" width="19" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/><rect x="7" y="24" width="13" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/><rect x="7" y="7" width="22" height="8.5" rx="2.5" fill="#5685E2"/><path d="M11.75 8.85C12.08 10.37 12.63 10.92 14.15 11.25C12.63 11.58 12.08 12.13 11.75 13.65C11.42 12.13 10.87 11.58 9.35 11.25C10.87 10.92 11.42 10.37 11.75 8.85Z" fill="#FFFFFF"/><path d="M16 11.25H25" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/></svg>
-                  修复已完成，改动集中在 src/api；目前只跑了类型检查。
-                </p>
-                <div class="chips">
-                  <span class="chip rec" id="chip0">
-                    <span class="ico">
-                      <svg id="spark" viewBox="0 0 16 16"><path d="M8 2.5C8.4 5.6 10.4 7.6 13.5 8 10.4 8.4 8.4 10.4 8 13.5 7.6 10.4 5.6 8.4 2.5 8 5.6 7.6 7.6 5.6 8 2.5Z" fill="#3370ff"/></svg>
-                      <svg id="pencil" viewBox="0 0 16 16" fill="none" style="opacity:0"><path d="M10.5 3 13 5.5 6 12.5 3 13l.5-3L10.5 3Z" stroke="#2e9a24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </span>
-                    <span id="chip0Label">跑一下测试</span>
-                  </span>
-                  <span class="chip" id="chip1">补回归用例</span>
-                  <span class="chip" id="chip2">
-                    <span class="ico"><svg viewBox="0 0 16 16" fill="none"><path d="M8 1.8 14.6 13.2H1.4L8 1.8Z" stroke="#e8820c" stroke-width="1.2" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="#e8820c" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="11.4" r="0.7" fill="#e8820c"/></svg></span>
-                    推送到远端
-                  </span>
-                </div>
-              </section>
+        <div id="chat"><div id="col">
+
+          <div class="w" id="u1"><div class="in"><div class="u"><div>列表接口翻到第二页就越界，帮我修一下</div></div></div></div>
+
+          <div class="w" id="p1"><div class="in" style="padding-top:16px">
+            <div class="hwrap"><div class="phead"><span class="took"></span><span class="mono">38s</span><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+            <div class="rwrap"><div class="rin">
+              <div class="rw"><div class="prow" data-icon="read"><span class="pt">读取</span><span class="ps code">src/api/list.ts</span></div></div>
+              <div class="rw"><div class="prow" data-icon="edit"><span class="pt">编辑</span><span class="ps code">src/api/list.ts</span></div></div>
+              <div class="rw"><div class="prow" data-icon="run"><span class="pt">运行</span><span class="ps code">tsc --noEmit</span></div></div>
+              <div class="rw"><div class="prow" data-icon="next"><span class="pt">下一步建议</span><span class="ps na-state"></span></div></div>
             </div></div>
-            <div id="sentWrap"><div><div class="msg"><div id="sentText"></div></div></div></div>
-          </div>
-        </div>
+          </div></div>
+
+          <div class="w" id="a1"><div class="in" style="padding-top:12px"><div class="reply"></div></div></div>
+
+          <div class="w" id="f1"><div class="in" style="padding-top:16px">
+            <div class="files"><div class="fhead">
+              <span class="tile"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="1.5" y="1.5" width="19" height="19" rx="4" fill="#3178c6"/><path d="M6 10.2h5M8.5 10.2V16.5M16.6 11.2c-.4-.6-1-.9-1.7-.9-.9 0-1.6.5-1.6 1.2 0 1.7 3.5 1 3.5 3.1 0 .9-.8 1.5-1.9 1.5-.9 0-1.6-.4-2-1" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg></span>
+              <span><div class="ftitle">list.ts</div><div class="fstat"><span class="add">+12</span><span class="del">−3</span></div></span>
+            </div></div>
+          </div></div>
+
+          <div class="w" id="n1"><div class="in" style="padding-top:16px">
+            <div class="na-sw"><div class="na-pad"><div class="na-sum" id="sum1">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span data-mark="14"></span>
+              <span class="t" id="sum1Title">下一步建议</span><span>·</span>
+              <span class="it"><span data-icon="check" class="c-used"></span>跑一下测试</span>
+              <span class="it"><span data-icon="pencil" class="c-used"></span>补回归用例</span>
+            </div></div></div>
+            <div class="na-cw"><div class="na-pad"><section class="na-card" id="card1">
+              <div class="na-head">
+                <p class="na-ctx" id="ctx1"><span data-mark="16"></span>修复已完成，但只跑了类型检查；建议先跑测试，再决定是否推送。</p>
+                <span class="na-toggle" id="toggle1"><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 10 8 5.5 12.5 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+              </div>
+              <div class="na-chips">
+                <span class="na-chip rec" id="c1a"><span class="ico"><span data-icon="spark" class="c-spark"></span><span data-icon="check" class="c-used"></span></span><span>跑一下测试</span></span>
+                <span class="na-chip" id="c1b"><span class="ico"><span data-icon="pencil" class="c-used"></span></span><span>补回归用例</span></span>
+                <span class="na-chip" id="c1c"><span class="ico"><span data-icon="warn" class="c-warn"></span></span><span>推送到远端</span></span>
+              </div>
+            </section></div></div>
+          </div></div>
+
+          <div class="w" id="x1"><div class="in" style="padding-top:20px"><div class="acts"><i data-icon="copy"></i><i data-icon="retry"></i><span>14:32</span></div></div></div>
+
+          <div class="w" id="u2"><div class="in" style="padding-top:28px"><div class="u"><div id="u2text"></div></div></div></div>
+
+          <div class="w" id="p2"><div class="in" style="padding-top:16px">
+            <div class="hwrap"><div class="phead"><span class="took"></span><span class="mono">1m 12s</span><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+            <div class="rwrap"><div class="rin">
+              <div class="rw"><div class="prow" data-icon="run"><span class="pt">运行</span><span class="ps code">npm test</span></div></div>
+              <div class="rw"><div class="prow" data-icon="create"><span class="pt">新建</span><span class="ps code">test/api/list.test.ts</span></div></div>
+              <div class="rw"><div class="prow" data-icon="next"><span class="pt">下一步建议</span><span class="ps na-state"></span></div></div>
+            </div></div>
+          </div></div>
+
+          <div class="w" id="a2"><div class="in" style="padding-top:12px"><div class="reply"></div></div></div>
+
+          <div class="w" id="n2"><div class="in" style="padding-top:16px">
+            <div class="na-cw"><div class="na-pad"><section class="na-card" id="card2">
+              <div class="na-head"><p class="na-ctx"><span data-mark="16"></span>42 项测试全部通过，新增 1 条回归用例；改动还没有提交。</p></div>
+              <div class="na-chips">
+                <span class="na-chip rec" id="c2a"><span class="ico"><span data-icon="spark" class="c-spark"></span></span><span>提交改动</span></span>
+                <span class="na-chip" id="c2b"><span>更新 CHANGELOG</span></span>
+                <span class="na-chip" id="c2c"><span class="ico"><span data-icon="warn" class="c-warn"></span></span><span>推送到远端</span></span>
+              </div>
+            </section></div></div>
+          </div></div>
+
+          <div class="w" id="x2"><div class="in" style="padding-top:20px"><div class="acts"><i data-icon="copy"></i><i data-icon="retry"></i><span>14:36</span></div></div></div>
+
+        </div></div>
 
         <div id="composer">
           <div id="draft"></div>
-          <div id="send"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 11.5V2.8M3 6.6 7 2.6l4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="cmp-row">
+            <span class="add-btn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>
+            <span id="send"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 11.5V2.8M3 6.6 7 2.6l4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          </div>
         </div>
 
+        <div class="callout down" id="callA">上下文：刚做了什么、为什么是这几步</div>
+        <div class="callout up" id="callB">推荐：固定排第一</div>
+        <div class="callout up" id="callC">有风险：同样只填入，不执行</div>
+        <div id="tip"></div>
+        <div id="keys"><span class="kbd" id="kShift">⇧ Shift</span><span class="kplus">+</span><span class="kbd" id="kEnter">Enter ↵</span></div>
         <div id="ghost"></div>
         <div class="ripple" id="ripple"></div>
         <svg id="cursor" viewBox="0 0 20 24"><path d="M2 1.5v18.3l4.6-4.5 3.1 6.9 3.2-1.4-3.1-6.8h6.5Z" fill="#111" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/></svg>
@@ -221,32 +334,28 @@ body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: anti
     </div>
   </div>
 
-  <div id="intro">
-    <div id="introDraft"></div>
-    <div id="introSend"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 11.5V2.8M3 6.6 7 2.6l4 4" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div id="title">
+    <div class="tile-lg"><span data-mark="62" data-gradient></span></div>
+    <div class="t-name">下一步建议</div>
+    <div class="t-pkg">dsh-next-actions · DeepSeek Harness 插件</div>
   </div>
 
   <div id="end">
-    <div class="e-icon">
-      <svg width="62" height="62" viewBox="0 0 36 36" fill="none" aria-hidden="true">
-        <defs><linearGradient id="naFill" x1="9" y1="7" x2="24" y2="17" gradientUnits="userSpaceOnUse"><stop stop-color="#6FB2EE"/><stop offset="1" stop-color="#3E58D6"/></linearGradient></defs>
-        <rect x="7" y="17.5" width="19" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/><rect x="7" y="24" width="13" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/><rect x="7" y="7" width="22" height="8.5" rx="2.5" fill="url(#naFill)"/><path id="star" d="M11.75 8.85C12.08 10.37 12.63 10.92 14.15 11.25C12.63 11.58 12.08 12.13 11.75 13.65C11.42 12.13 10.87 11.58 9.35 11.25C10.87 10.92 11.42 10.37 11.75 8.85Z" fill="#FFFFFF" style="transform-box: fill-box; transform-origin: center"/><path d="M16 11.25H25" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
-      </svg>
-    </div>
+    <div class="tile-lg"><span data-mark="62" data-gradient></span></div>
     <div class="e-name" lang="en">dsh-next-actions</div>
-    <div class="e-slogan">别让「继续」代替<b>你的思考</b>。</div>
+    <div class="e-cn">下一步建议</div>
+    <div class="e-slogan">省下的是打字，<b>不是思考</b>。</div>
     <div class="e-cmd"><em>$</em>dsh plugin --profile desktop add <b>dsh-next-actions</b></div>
-    <div class="e-foot">DSH Web / Desktop 插件 · MIT 开源</div>
+    <div class="e-foot">DSH Web / Desktop 插件 · 8 种界面语言 · MIT 开源</div>
   </div>
 </div>
 
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const TIMELINE = JSON.parse($('timeline').textContent);
-  const DURATION = TIMELINE.duration;
-  const I = TIMELINE.intro;
-  const T = TIMELINE.scene;
+  const C = JSON.parse($('timeline').textContent);
+  const DURATION = C.duration;
+  const VW = 780, VH = 424;
 
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
   const seg = (t, a, b) => clamp((t - a) / (b - a));
@@ -254,31 +363,162 @@ body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: anti
   const out3 = (p) => 1 - Math.pow(1 - p, 3);
   const inOut3 = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
   const bell = (p) => Math.sin(Math.PI * clamp(p));
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+  // ---------------------------------------------------------------- icons (client.js shapes)
+  const ICONS = {
+    spark: '<svg width="12" height="12" viewBox="0 0 16 16"><path d="M8 2.5C8.4 5.6 10.4 7.6 13.5 8 10.4 8.4 8.4 10.4 8 13.5 7.6 10.4 5.6 8.4 2.5 8 5.6 7.6 7.6 5.6 8 2.5Z" fill="currentColor"/></svg>',
+    warn: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 1.8 14.6 13.2H1.4L8 1.8Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="11.4" r="0.7" fill="currentColor"/></svg>',
+    check: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pencil: '<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10.5 3 13 5.5 6 12.5 3 13l.5-3L10.5 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    read: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M4 1.75h5l3 3v9.5H4z"/><path d="M9 1.75v3h3M6 8.5h4M6 11h4"/></svg>',
+    edit: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M10.5 2.5 13.5 5.5 6 13 2.5 13.5 3 10Z"/></svg>',
+    run: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2"/><path d="M4.75 6.5 6.75 8l-2 1.5M8.5 10h3"/></svg>',
+    create: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.75H4v12.5h8V4.75z"/><path d="M9 1.75v3h3M8 7.5v4M6 9.5h4"/></svg>',
+    next: '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1"><rect x="2.25" y="2.25" width="4" height="4" rx="1"/><rect x="2.25" y="9.75" width="4" height="4" rx="1"/><rect x="9.75" y="9.75" width="4" height="4" rx="1"/><path d="M11.75 1.75v5M9.25 4.25h5"/></svg>',
+    copy: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><rect x="5.25" y="5.25" width="8.5" height="8.5" rx="2"/><path d="M3 10.5V4A1.75 1.75 0 0 1 4.75 2.25h5.75" stroke-linecap="round"/></svg>',
+    retry: '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8.6A5.25 5.25 0 1 1 11.5 4"/><path d="M12 1.8v2.7H9.3"/></svg>',
+  };
+  let gradients = 0;
+  const markSVG = (size, gradient) => {
+    const id = `naFill${gradients += 1}`;
+    const top = gradient ? `url(#${id})` : '#5685E2';
+    const defs = gradient ? `<defs><linearGradient id="${id}" x1="9" y1="7" x2="24" y2="17" gradientUnits="userSpaceOnUse"><stop stop-color="#6FB2EE"/><stop offset="1" stop-color="#3E58D6"/></linearGradient></defs>` : '';
+    return `<svg class="na-mark" width="${size}" height="${size}" viewBox="0 0 36 36" fill="none" aria-hidden="true">${defs}<rect x="7" y="17.5" width="19" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/><rect x="7" y="24" width="13" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/><rect x="7" y="7" width="22" height="8.5" rx="2.5" fill="${top}"/><path class="star" d="M11.75 8.85C12.08 10.37 12.63 10.92 14.15 11.25C12.63 11.58 12.08 12.13 11.75 13.65C11.42 12.13 10.87 11.58 9.35 11.25C10.87 10.92 11.42 10.37 11.75 8.85Z" fill="#FFFFFF" style="transform-box: fill-box; transform-origin: center"/><path d="M16 11.25H25" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+  };
+  for (const el of document.querySelectorAll('[data-icon]')) {
+    const svg = ICONS[el.dataset.icon];
+    if (el.classList.contains('prow')) el.insertAdjacentHTML('afterbegin', svg);
+    else el.innerHTML = svg;
+  }
+  for (const el of document.querySelectorAll('[data-mark]')) {
+    el.outerHTML = markSVG(Number(el.dataset.mark), el.hasAttribute('data-gradient'));
+  }
+  for (const el of document.querySelectorAll('.ico > [data-icon]')) el.style.cssText = 'position:absolute;inset:0';
 
   // ---------------------------------------------------------------- script
-  const REPLY = [
-    ['已修复：', false], ['offset', true], [' 改为 ', false], ['(page - 1) * size', true],
-    ['，并在 ', false], ['list.ts', true], [' 补上了边界判断。类型检查已通过。', false],
+  const PROMPT = {
+    a: '运行全部测试，修复失败的用例',
+    b: '为分页越界补一条回归用例',
+    c: '提交当前改动，提交信息写 fix: clamp page offset',
+  };
+  const EDIT = '，放在 test/api 下';
+  const OWN1 = '先给我看看 ';
+  const OWN2 = ' 的 diff';
+  const REPLY1 = [
+    ['已修复：', false], ['offset', true], [' 原来直接用了页码，改为 ', false], ['(page - 1) * size', true],
+    ['，并补上越界判断。类型检查通过。', false],
   ];
-  const REPLY_LEN = REPLY.reduce((n, [s]) => n + s.length, 0);
-  const PROMPT = '运行测试，修复失败的用例';
-  const TYPED = '，顺便看看覆盖率';
+  const REPLY2 = [['42 项测试全部通过；回归用例在 ', false], ['test/api/list.test.ts', true], ['。', false]];
+  const LANGS = [
+    ['zh', '中文', '下一步建议', '已完成，用时 '],
+    ['en', 'English', 'Suggested next actions', 'Completed in '],
+    ['ja', '日本語', '次のアクション候補', '完了まで '],
+    ['es', 'Español', 'Próximos pasos sugeridos', 'Completado en '],
+    ['fr', 'Français', 'Prochaines actions suggérées', 'Terminé en '],
+    ['de', 'Deutsch', 'Vorgeschlagene nächste Schritte', 'Fertiggestellt in '],
+    ['ru', 'Русский', 'Предлагаемые следующие действия', 'Завершено в '],
+    ['pt', 'Português', 'Próximas ações sugeridas', 'Concluído em '],
+  ];
+  const svgInline = (name, color) => ICONS[name].replace('<svg ', `<svg style="color:${color}" `);
+  const CAPTIONS = [
+    ['回合结束，回答末尾附上下一步建议', '由本轮模型顺手给出，不额外请求模型'],
+    ['一两句上下文，至多三条建议', `${svgInline('spark', 'rgb(65,118,230)')}推荐置顶 · ${svgInline('warn', 'rgb(176,108,36)')}标出风险 · 悬停可看完整指令`],
+    ['点一下：填入输入框', '不会自动发送'],
+    ['末尾换行再点一条：另起一段接上', '末尾敲空格再点，则接在同一段'],
+    ['在输入框里改，由你发送', ''],
+    ['发出后，卡片折叠成一行', `${svgInline('check', 'rgb(27,134,66)')}原样发送 · ${svgInline('pencil', 'rgb(27,134,66)')}改后发送 —— 从你发出的文字推断`],
+    ['草稿里已有内容：在光标处插入', '保留 @ 引用，⌘Z 可撤销'],
+    ['历史卡片随时展开', '用过哪条一目了然，按钮仍可点击填入'],
+    ['跟随 DSH 的明暗主题与界面语言', LANGS.map(([code, name]) => `<span class="lang" data-lang="${code}">${name}</span>`).join(' · ')],
+  ];
+  const capRoot = $('captions');
+  const caps = CAPTIONS.map(([main, sub], i) => {
+    const el = document.createElement('div');
+    el.className = 'cap';
+    el.innerHTML = `<span class="cap-num">${String(i + 1).padStart(2, '0')}</span><div><div class="cap-main">${main}</div>${sub ? `<div class="cap-sub">${sub}</div>` : ''}</div>`;
+    capRoot.appendChild(el);
+    return el;
+  });
+  const capLangs = [...caps[8].querySelectorAll('.lang')];
+
+  // ---------------------------------------------------------------- theme (DSH light / dark tokens)
+  const THEME = {
+    '--bg': ['#ffffff', '#151517'],
+    '--tb': ['#f9fafb', '#1c1c1e'],
+    '--tb-line': ['rgba(0,0,0,.07)', 'rgba(255,255,255,.07)'],
+    '--layer1': ['#ffffff', '#232324'],
+    '--l1': ['rgb(15,17,21)', 'rgb(249,250,251)'],
+    '--l2': ['rgb(97,102,107)', 'rgb(207,211,214)'],
+    '--l3': ['rgb(129,133,140)', 'rgb(173,178,184)'],
+    '--cap': ['rgb(173,178,184)', 'rgb(129,133,140)'],
+    '--b1': ['rgba(0,0,0,.06)', 'rgba(255,255,255,.08)'],
+    '--b2': ['rgba(0,0,0,.10)', 'rgba(255,255,255,.12)'],
+    '--b3': ['rgba(0,0,0,.12)', 'rgba(255,255,255,.16)'],
+    '--brand': ['rgb(65,118,230)', 'rgb(122,170,255)'],
+    '--brand-60': ['rgba(65,118,230,.6)', 'rgba(122,170,255,.6)'],
+    '--used': ['rgb(27,134,66)', 'rgb(109,216,149)'],
+    '--warn': ['rgb(149,93,34)', 'rgb(231,175,115)'],
+    '--add': ['rgb(34,197,94)', 'rgb(34,197,94)'],
+    '--del': ['rgb(229,57,53)', 'rgb(242,90,90)'],
+    '--bubble': ['rgb(237,243,254)', 'rgb(44,44,46)'],
+    '--input': ['#ffffff', 'rgb(44,44,46)'],
+    '--hover': ['rgba(38,49,72,.06)', 'rgba(255,255,255,.08)'],
+    '--selector': ['rgb(245,246,247)', 'rgb(53,54,56)'],
+    '--card-fill': ['rgba(38,49,72,.035)', 'rgba(255,255,255,.04)'],
+    '--tile': ['#ffffff', 'rgb(44,44,46)'],
+    '--code-bg': ['rgba(38,49,72,.06)', 'rgba(255,255,255,.08)'],
+    '--send': ['rgb(65,118,230)', 'rgb(122,170,255)'],
+    '--send-off': ['rgb(222,225,230)', 'rgb(70,70,74)'],
+    '--ring': ['rgba(0,0,0,.07)', 'rgba(255,255,255,.08)'],
+    '--shadow-a': ['rgba(15,23,42,.14)', 'rgba(0,0,0,.45)'],
+  };
+  const parse = (c) => {
+    if (c[0] === '#') return [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).concat(1);
+    const v = c.match(/[\d.]+/g).map(Number);
+    return v.length === 3 ? v.concat(1) : v;
+  };
+  const THEME_RGBA = Object.entries(THEME).map(([k, [a, b]]) => [k, parse(a), parse(b)]);
+  const winEl = $('win');
+  function applyTheme(p) {
+    for (const [k, a, b] of THEME_RGBA) {
+      const v = a.map((x, i) => lerp(x, b[i], p));
+      winEl.style.setProperty(k, `rgba(${v[0].toFixed(1)},${v[1].toFixed(1)},${v[2].toFixed(1)},${v[3].toFixed(3)})`);
+    }
+  }
 
   // ---------------------------------------------------------------- nodes
-  const win = $('win'), cam = $('cam'), reply = $('reply'), row = $('row'), rowSum = $('rowSum');
-  const reveal = $('reveal'), sentWrap = $('sentWrap'), sentText = $('sentText');
-  const chips = [$('chip0'), $('chip1'), $('chip2')], spark = $('spark'), pencil = $('pencil'), chip0Label = $('chip0Label');
+  const cam = $('cam'), chat = $('chat'), col = $('col');
+  const W = Object.fromEntries(['u1', 'p1', 'a1', 'f1', 'n1', 'x1', 'u2', 'p2', 'a2', 'n2', 'x2'].map((id) => [id, $(id)]));
+  const IN = (id) => W[id].firstElementChild;
   const composer = $('composer'), draft = $('draft'), send = $('send');
+  const card1 = $('card1'), card2 = $('card2'), sum1 = $('sum1'), sum1Title = $('sum1Title'), toggle1 = $('toggle1');
+  const chips1 = [$('c1a'), $('c1b'), $('c1c')], chips2 = [$('c2a'), $('c2b'), $('c2c')];
+  const callA = $('callA'), callB = $('callB'), callC = $('callC'), tip = $('tip');
+  const keys = $('keys'), kShift = $('kShift'), kEnter = $('kEnter');
   const ghost = $('ghost'), ripple = $('ripple'), cursor = $('cursor');
-  const end = $('end');
-  const dimmed = [...document.querySelectorAll('.dim')];
-  ghost.textContent = PROMPT;
-  sentText.textContent = PROMPT + TYPED;
+  const titleEl = $('title'), endEl = $('end');
+  $('u2text').textContent = `${PROMPT.a}\n\n${PROMPT.b}${EDIT}`;
 
-  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  function replyHTML(n) {
+  /** Box of `el` in #cam's own (unscaled) coordinates; call while #cam has no transform. */
+  function box(el) {
+    const c = cam.getBoundingClientRect(), r = el.getBoundingClientRect(), k = c.width / VW;
+    const x = (r.left - c.left) / k, y = (r.top - c.top) / k, w = r.width / k, h = r.height / k;
+    return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, r: x + w, b: y + h };
+  }
+
+  /** Presence of a flow item: 0 → collapsed, 1 → natural height. Measures after content is set. */
+  function present(w, p, fade = true) {
+    if (p <= 0) { w.style.height = '0px'; w.style.opacity = '0'; w.style.overflow = 'hidden'; return; }
+    if (p >= 1) { w.style.height = ''; w.style.opacity = '1'; w.style.overflow = 'visible'; return; }
+    w.style.overflow = 'hidden';
+    w.style.height = `${(w.firstElementChild.offsetHeight * p).toFixed(2)}px`;
+    w.style.opacity = fade ? clamp(p * 1.6).toFixed(3) : '1';
+  }
+
+  function streamHTML(parts, n) {
     let html = '';
-    for (const [text, code] of REPLY) {
+    for (const [text, code] of parts) {
       if (n <= 0) break;
       const part = esc(text.slice(0, n));
       html += code ? `<code>${part}</code>` : part;
@@ -286,203 +526,366 @@ body { font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: anti
     }
     return html;
   }
+  const lengthOf = (parts) => parts.reduce((n, [s]) => n + s.length, 0);
 
-  // Box of `el` in #cam's own (unscaled) coordinates; call while #cam has no transform.
-  function box(el) {
-    const c = cam.getBoundingClientRect(), r = el.getBoundingClientRect(), k = c.width / 720;
-    const x = (r.left - c.left) / k, y = (r.top - c.top) / k, w = r.width / k, h = r.height / k;
-    return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, r: x + w, b: y + h };
+  /** Live process rows → folded header, with the plugin's own row going 正在生成 → 已生成 · 3. */
+  function renderProcess(id, t, rows, shownAt, fold, lang) {
+    const root = IN(id);
+    root.querySelectorAll('.rw').forEach((rw, i) => {
+      const p = out3(seg(t, rows[i], rows[i] + 0.25));
+      rw.style.height = `${(28 * p).toFixed(2)}px`;
+      rw.style.opacity = p.toFixed(3);
+    });
+    const state = root.querySelector('.na-state');
+    if (t < shownAt) {
+      state.textContent = '正在生成';
+      state.className = 'ps na-state shimmer';
+      state.style.backgroundImage = 'linear-gradient(90deg, var(--l3) 0%, var(--l3) 35%, var(--cap) 50%, var(--l3) 65%, var(--l3) 100%)';
+      state.style.backgroundPosition = `${(100 - ((t * 110) % 100) * 1.5).toFixed(1)}% 0`;
+    } else {
+      state.textContent = '已生成 · 3';
+      state.className = 'ps na-state';
+      state.style.backgroundImage = '';
+    }
+    root.querySelector('.took').textContent = LANGS[lang][3];
+    const fp = inOut3(seg(t, ...fold));
+    const rwrap = root.querySelector('.rwrap'), hwrap = root.querySelector('.hwrap');
+    rwrap.style.height = `${(rwrap.firstElementChild.offsetHeight * (1 - fp)).toFixed(2)}px`;
+    rwrap.style.opacity = (1 - fp).toFixed(3);
+    hwrap.style.height = `${(33 * fp).toFixed(2)}px`;
+    hwrap.style.opacity = fp.toFixed(3);
+    present(W[id], out3(seg(t, rows[0], rows[0] + 0.2)), false);
   }
 
-  // ---------------------------------------------------------------- frame
-  /** The chat scene and end card; `t` is scene time (negative during the intro). */
-  function renderScene(t) {
-    // 0. Reset transforms so measurement sees plain layout.
-    cam.style.transform = 'none';
-    chips[0].style.transform = 'none';
-
-    // 1. Window in / out. It fades in around the docked intro input, so it does not move on entry.
-    const wIn = out3(seg(t, ...T.winIn)), wOut = inOut3(seg(t, ...T.winOut));
-    win.style.opacity = (wIn * (1 - wOut)).toFixed(3);
-    win.style.transform = `scale(${(1.1 * (1 - 0.035 * wOut)).toFixed(4)})`;
-    win.style.filter = wOut > 0 ? `blur(${(wOut * 6).toFixed(2)}px)` : 'none';
-
-    // 2. Layout-affecting content.
-    reply.innerHTML = replyHTML(Math.round(REPLY_LEN * seg(t, ...T.stream)));
-    row.style.height = `${(32 * out3(seg(t, ...T.rowIn))).toFixed(2)}px`;
-    row.style.opacity = seg(t, ...T.rowIn).toFixed(3);
-    if (t < T.rowDone) {
-      rowSum.textContent = '· 正在生成';
-      rowSum.className = 'row-sum shimmer';
-      rowSum.style.backgroundPosition = `${(100 - ((t * 120) % 100) * 1.5).toFixed(1)}% 0`;
-    } else {
-      rowSum.textContent = '· 已生成 · 3';
-      rowSum.className = 'row-sum';
-      rowSum.style.backgroundPosition = '';
-    }
-    const pr = seg(t, ...T.reveal);
-    reveal.style.height = `${(reveal.firstElementChild.offsetHeight * out3(pr)).toFixed(2)}px`;
-    reveal.style.opacity = clamp(pr * 1.6).toFixed(3);
+  /** Chip entrance stagger while the card reveals. */
+  function chipsIn(chips, t, [first, step]) {
     chips.forEach((chip, i) => {
-      const at = T.chipsIn[0] + i * T.chipsIn[1];
-      const p = out3(seg(t, at, at + 0.35));
+      const at = first + i * step, p = out3(seg(t, at, at + 0.35));
       chip.style.opacity = p.toFixed(3);
       chip.style.translate = `0 ${((1 - p) * 5).toFixed(2)}px`;
     });
-    sentWrap.style.height = `${(sentWrap.firstElementChild.offsetHeight * out3(seg(t, ...T.sentIn))).toFixed(2)}px`;
-    sentWrap.style.opacity = seg(t, T.sentIn[0], T.sentIn[0] + 0.25).toFixed(3);
+  }
 
-    // Composer: placeholder → filled prompt → edited → sent (empty, still focused).
-    const focused = t >= T.fill - 0.08;
-    const typedN = T.typedAt.filter((at) => t >= at).length;
-    const hasText = t >= T.fill && t < T.send;
-    const typing = t >= T.typing[0] && t < T.typing[1] + 0.2;
-    const caretOn = focused && (typing || ((t - T.fill) % 1.0) < 0.55);
-    const caret = `<span id="caret" style="opacity:${caretOn ? 1 : 0}"></span>`;
-    if (hasText) {
-      const hl = 0.16 * (1 - seg(t, T.fill + 0.25, T.fill + 1.0));
-      draft.innerHTML = `<span class="fill" style="background:rgba(51,112,255,${hl.toFixed(3)})">${PROMPT}</span>${TYPED.slice(0, typedN)}${caret}`;
-    } else {
-      draft.innerHTML = `${focused ? caret : ''}<span class="ph">输入消息…</span>`;
+  // ---------------------------------------------------------------- composer draft
+  const hlAt = (t, at) => 0.16 * (1 - seg(t, at + 0.25, at + 1.0));
+  const typed = (t, times, text) => [...text].slice(0, times.filter((x) => t >= x).length).join('');
+  const allKeys = [...C.editKeys, ...C.draftKeys, C.ref, ...C.draftKeys2, C.shift, C.enter];
+
+  function draftModel(t) {
+    if (t < C.send) {
+      if (t < C.fill1) return { segs: [], focused: false };
+      const segs = [{ s: PROMPT.a, hl: hlAt(t, C.fill1) }];
+      if (t >= C.fill2) segs.push({ s: '\n\n' }, { s: PROMPT.b, hl: hlAt(t, C.fill2) });
+      else if (t >= C.enter) segs.push({ s: '\n' });
+      const edit = typed(t, C.editKeys, EDIT);
+      if (edit) segs.push({ s: edit });
+      return { segs, focused: true, caretAt: C.fill1 };
     }
-    const fp = seg(t, T.fill - 0.08, T.fill + 0.15);
-    composer.style.borderColor = `rgba(51,112,255,${(0.55 * fp).toFixed(3)})`;
-    composer.style.boxShadow = `0 0 0 ${(3 * fp).toFixed(2)}px rgba(51,112,255,.10), 0 1px 2px rgba(0,0,0,.03)`;
-    if (fp === 0) composer.style.borderColor = '';
+    const segs = [];
+    const own1 = typed(t, C.draftKeys, OWN1);
+    if (own1) segs.push({ s: own1 });
+    if (t >= C.ref) segs.push({ ref: 'list.ts' });
+    const own2 = typed(t, C.draftKeys2, OWN2);
+    if (own2) segs.push({ s: own2 });
+    if (t >= C.fill3) segs.push({ s: '\n\n' }, { s: PROMPT.c, hl: hlAt(t, C.fill3) });
+    return { segs, focused: t < C.click4, caretAt: C.send };
+  }
 
-    // Spotlight for 「看一眼」: everything but the card recedes, then returns after the click.
-    const dim = 0.6 * (inOut3(seg(t, 3.25, 3.75)) - inOut3(seg(t, 5.3, 5.8)));
-    for (const el of dimmed) el.style.opacity = (1 - dim).toFixed(3);
-
-    // 3. Measure.
-    const c0 = box(chips[0]), card = box(reveal), comp = box(composer), sendB = box(send);
-
-    // 4. Pointer path: enter → chip 0 → (hidden while typing) → send.
-    const P0 = { x: 660, y: 400 };
-    const P1 = { x: c0.cx + 8, y: c0.cy + 5 };
-    const P2 = { x: sendB.cx + 3, y: sendB.cy + 4 };
-    let cx, cy, cOp;
-    if (t < 9.05) {
-      const p = inOut3(seg(t, 4.0, 4.85));
-      cx = lerp(P0.x, P1.x, p) + bell(p) * 6;
-      cy = lerp(P0.y, P1.y, p) - bell(p) * 26;
-      cOp = seg(t, 3.9, 4.05) * (1 - seg(t, 7.38, 7.52));
+  function renderDraft(t) {
+    const { segs, focused, caretAt } = draftModel(t);
+    const typing = allKeys.some((x) => t >= x - 0.02 && t < x + 0.45);
+    const caretOn = focused && (typing || ((t - caretAt) % 1.0) < 0.55);
+    const caret = focused ? `<span class="caret" style="opacity:${caretOn ? 1 : 0}"></span>` : '';
+    if (segs.length === 0) {
+      draft.innerHTML = `${caret}<span class="ph">发消息或创建任务, / 调用指令, @ 文件或对话</span>`;
     } else {
-      const p = inOut3(seg(t, 9.1, 9.7));
-      cx = lerp(P1.x, P2.x, p);
-      cy = lerp(P1.y, P2.y, p) - bell(p) * 14;
-      cOp = seg(t, 9.0, 9.12) * (1 - seg(t, 10.3, 10.45));
+      draft.innerHTML = segs.map((seg) => {
+        if (seg.ref) return `<span class="ref"><b>@</b>${seg.ref}</span>`;
+        if (seg.hl) return `<span class="fill" style="background:rgba(65,118,230,${seg.hl.toFixed(3)})">${esc(seg.s)}</span>`;
+        return esc(seg.s);
+      }).join('') + caret;
     }
-    const press = Math.max(bell(seg(t, T.click, T.click + 0.14)), bell(seg(t, T.sendClick, T.sendClick + 0.14)));
-    cursor.style.opacity = cOp.toFixed(3);
-    cursor.style.transform = `translate(${(cx - 2).toFixed(2)}px, ${(cy - 1.5).toFixed(2)}px) scale(${(1 - 0.12 * press).toFixed(3)})`;
+    return segs.length > 0;
+  }
 
-    const rp = t < T.sendClick ? seg(t, T.click, T.click + 0.5) : seg(t, T.sendClick, T.sendClick + 0.5);
-    const rippleAt = t < T.sendClick ? P1 : P2;
+  // ---------------------------------------------------------------- camera and pointer
+  /** Fit [top, bottom] vertically; never zoom past the full 560 px column plus a margin. */
+  const MAX_ZOOM = VW / 604;
+  function frame(top, bottom, maxS) {
+    return { s: clamp(VH / Math.max(1, bottom - top), 1, Math.min(maxS, MAX_ZOOM)), x: VW / 2, y: (top + bottom) / 2 };
+  }
+  const SHOTS = {
+    wide: () => ({ s: 1, x: VW / 2, y: VH / 2 }),
+    card1: (B) => frame(B.card1.y - 30, B.card1.b + 34, 1.55),
+    work1: (B) => frame(B.card1.y - 14, B.comp.b + 8, 1.4),
+    fold1: (B) => frame(B.n1.y - 6, B.comp.b + 8, 1.3),
+    r2: (B) => frame(B.u2.y - 10, B.comp.b + 8, 1.12),
+    work2: (B) => frame(B.card2.y - 14, B.comp.b + 8, 1.4),
+    hist: (B) => frame(B.n1.y - 24, B.n1.b + 36, 1.5),
+    lang: () => ({ s: 1, x: VW / 2, y: VH / 2 }),
+  };
+  const CAMERA = [
+    [null, 'wide'], [C.focus, 'card1'], [C.work1, 'work1'], [C.fold1Cam, 'fold1'],
+    [C.r2Cam, 'r2'], [C.work2, 'work2'], [C.hist, 'hist'], [C.pullBack, 'lang'],
+  ];
+  const mixShot = (a, b, p) => ({ s: lerp(a.s, b.s, p), x: lerp(a.x, b.x, p), y: lerp(a.y, b.y, p) });
+
+  const near = (b, dx = 6, dy = 5) => ({ x: b.cx + dx, y: b.cy + dy });
+  const MOVES = [
+    { at: C.cursor1, from: (B) => ({ x: B.c1a.cx + 160, y: B.c1a.cy + 110 }), to: (B) => near(B.c1a), arc: 26 },
+    { at: C.cursor2, to: (B) => near(B.c1b), arc: 14 },
+    { at: C.cursor3, to: (B) => near(B.send, 3, 4), arc: 16 },
+    { at: C.cursor4, to: (B) => near(B.c2a), arc: 22 },
+    { at: C.cursor5, from: (B) => ({ x: B.sumTitle.cx + 150, y: B.sumTitle.cy + 90 }), to: (B) => near(B.sumTitle, 4, 5), arc: 18 },
+    { at: C.cursor6, to: (B) => near(B.toggle1, 2, 3), arc: 12 },
+  ];
+  const VISIBLE = [[C.cursor1[0] - 0.05, 17.4], [18.95, 20.4], [27.95, 29.5], [C.cursor5[0] - 0.05, 34.9]];
+  const CLICKS = [C.click1, C.click2, C.sendClick, C.click3, C.click4, C.click5];
+
+  function pointer(t, B) {
+    let pos = MOVES[0].from(B);
+    for (const m of MOVES) {
+      if (t < m.at[0]) break;
+      const from = m.from ? m.from(B) : pos, to = m.to(B), p = inOut3(seg(t, ...m.at));
+      pos = { x: lerp(from.x, to.x, p), y: lerp(from.y, to.y, p) - bell(p) * m.arc };
+    }
+    const op = Math.max(...VISIBLE.map(([a, b]) => seg(t, a, a + 0.12) * (1 - seg(t, b, b + 0.12))));
+    return { ...pos, op };
+  }
+
+  const FLIGHTS = [
+    { at: C.fly1, chip: chips1[0], text: PROMPT.a },
+    { at: C.fly2, chip: chips1[1], text: PROMPT.b },
+    { at: C.fly3, chip: chips2[0], text: PROMPT.c },
+  ];
+
+  // ---------------------------------------------------------------- frame
+  function renderScene(t) {
+    const lang = langIndex(t);
+    // The window is light or dark; in between, a dark copy wipes in (see the end of this function).
+    const themeP = inOut3(seg(t, ...C.theme));
+    applyTheme(themeP >= 1 ? 1 : 0);
+    document.querySelector('.win-dark')?.remove();
+    cam.style.transform = 'none';
+    for (const chip of [...chips1, ...chips2]) chip.style.transform = 'none';
+
+    // 1. Window in / out.
+    const wIn = out3(seg(t, ...C.winIn)), wOut = inOut3(seg(t, ...C.winOut));
+    winEl.style.opacity = (wIn * (1 - wOut)).toFixed(3);
+    winEl.style.transform = `scale(${(lerp(0.985, 1, wIn) * (1 - 0.03 * wOut)).toFixed(4)})`;
+    winEl.style.filter = wOut > 0 ? `blur(${(wOut * 6).toFixed(2)}px)` : 'none';
+
+    // 2. Round one: process, reply, changed file, card, action row.
+    renderProcess('p1', t, C.r1Rows, C.r1Shown, C.r1Fold, lang);
+    const r1 = seg(t, ...C.r1Reply);
+    IN('a1').firstElementChild.innerHTML = streamHTML(REPLY1, Math.round(lengthOf(REPLY1) * r1));
+    present(W.a1, t >= C.r1Reply[0] ? 1 : 0);
+    present(W.f1, out3(seg(t, ...C.r1Files)));
+
+    // Card one: current → answered (folds) → expanded by hand → collapsed by hand.
+    const used = t >= C.send;
+    chips1[0].toggleAttribute('data-used', used);
+    chips1[1].toggleAttribute('data-used', used);
+    const [spark1, check1] = chips1[0].querySelectorAll('.ico > span');
+    spark1.style.opacity = used ? '0' : '1';
+    check1.style.opacity = used ? '1' : '0';
+    chips1[1].querySelector('.ico').style.display = used ? '' : 'none';
+    toggle1.style.display = used ? '' : 'none';
+    sum1Title.textContent = LANGS[lang][2];
+    const fold = clamp(inOut3(seg(t, ...C.fold1)) - inOut3(seg(t, ...C.expand)) + inOut3(seg(t, ...C.collapse)));
+    const sw = IN('n1').querySelector('.na-sw'), cw = IN('n1').querySelector('.na-cw');
+    const folding = fold > 0 && fold < 1;
+    sw.style.overflow = cw.style.overflow = folding ? 'hidden' : 'visible';
+    sw.style.height = `${(sw.firstElementChild.offsetHeight * fold).toFixed(2)}px`;
+    sw.style.opacity = fold.toFixed(3);
+    sw.style.visibility = fold > 0 ? 'visible' : 'hidden';
+    cw.style.height = `${(cw.firstElementChild.offsetHeight * (1 - fold)).toFixed(2)}px`;
+    cw.style.opacity = (1 - fold).toFixed(3);
+    cw.style.visibility = fold < 1 ? 'visible' : 'hidden';
+    present(W.n1, out3(seg(t, ...C.r1Card)));
+    chipsIn(chips1, t, C.r1Chips);
+    present(W.x1, out3(seg(t, ...C.r1Actions)));
+
+    // 3. Round two.
+    present(W.u2, out3(seg(t, ...C.sent1)));
+    renderProcess('p2', t, C.r2Rows, C.r2Shown, C.r2Fold, lang);
+    const r2 = seg(t, ...C.r2Reply);
+    IN('a2').firstElementChild.innerHTML = streamHTML(REPLY2, Math.round(lengthOf(REPLY2) * r2));
+    present(W.a2, t >= C.r2Reply[0] ? 1 : 0);
+    present(W.n2, out3(seg(t, ...C.r2Card)));
+    chipsIn(chips2, t, C.r2Chips);
+    present(W.x2, out3(seg(t, ...C.r2Actions)));
+
+    // 4. Composer and chat column: the column follows the tail until the history scroll.
+    const hasText = renderDraft(t);
+    const compH = composer.offsetHeight;
+    const chatH = VH - 14 - compH - 8;
+    chat.style.height = `${chatH}px`;
+    const H = col.offsetHeight;
+    let top = chatH - H - 6;
+    if (t >= C.scroll[0]) {
+      // Scrolled up: the view keeps its top, so expanding card one grows downward.
+      const foldedH = IN('n1').querySelector('.na-sw').firstElementChild.offsetHeight + 16;
+      const extra = W.n1.offsetHeight - foldedH;
+      const base = chatH - (H - extra) - 6;
+      const lift = chatH * 0.3 - (base + W.n1.offsetTop + 16);
+      top = base + Math.max(0, lift) * inOut3(seg(t, ...C.scroll));
+    }
+    col.style.top = `${top.toFixed(2)}px`;
+
+    // 5. Spotlight while the card's anatomy is shown.
+    const dim = 0.6 * (inOut3(seg(t, ...C.dim[0])) - inOut3(seg(t, ...C.dim[1])));
+    for (const id of ['u1', 'p1', 'a1', 'f1', 'x1']) IN(id).style.opacity = (1 - dim).toFixed(3);
+    composer.style.opacity = (1 - dim).toFixed(3);
+
+    // 6. Measure.
+    const B = {
+      card1: box(card1), card2: box(card2), n1: box(IN('n1')), u2: box(W.u2), comp: box(composer), send: box(send),
+      c1a: box(chips1[0]), c1b: box(chips1[1]), c1c: box(chips1[2]), c2a: box(chips2[0]),
+      ctx1: box($('ctx1')), sumTitle: box(sum1Title), sum: box(sum1), toggle1: box(toggle1),
+    };
+
+    // 7. Pointer, clicks, hover.
+    const P = pointer(t, B);
+    const press = Math.max(...CLICKS.map((c) => bell(seg(t, c, c + 0.14))));
+    cursor.style.opacity = P.op.toFixed(3);
+    cursor.style.transform = `translate(${(P.x - 2).toFixed(2)}px, ${(P.y - 1.5).toFixed(2)}px) scale(${(1 - 0.12 * press).toFixed(3)})`;
+    const lastClick = CLICKS.filter((c) => t >= c).pop();
+    const rp = lastClick === undefined ? 1 : seg(t, lastClick, lastClick + 0.5);
     ripple.style.opacity = rp > 0 && rp < 1 ? (0.9 * (1 - rp)).toFixed(3) : '0';
-    ripple.style.transform = `translate(${(rippleAt.x).toFixed(2)}px, ${(rippleAt.y).toFixed(2)}px) scale(${(0.2 + 0.8 * out3(rp)).toFixed(3)})`;
+    if (rp < 1) ripple.style.transform = `translate(${P.x.toFixed(2)}px, ${P.y.toFixed(2)}px) scale(${(0.2 + 0.8 * out3(rp)).toFixed(3)})`;
+    const over = (b) => P.op > 0.5 && P.x >= b.x && P.x <= b.r && P.y >= b.y && P.y <= b.b;
+    [[chips1[0], B.c1a], [chips1[1], B.c1b], [chips2[0], B.c2a]].forEach(([chip, b]) => {
+      chip.style.background = over(b) ? 'var(--hover)' : 'transparent';
+    });
+    for (const [chip, at] of [[chips1[0], C.click1], [chips1[1], C.click2], [chips2[0], C.click3]]) {
+      chip.style.transform = `scale(${(1 - 0.035 * bell(seg(t, at, at + 0.16))).toFixed(4)})`;
+    }
+    sum1.style.color = over(B.sum) ? 'var(--l2)' : '';
+    toggle1.style.background = over(B.toggle1) ? 'var(--hover)' : '';
+    const ring = seg(t, ...C.ring);
+    // A soft filled pill (background + same-alpha spread) points at the row once it has folded.
+    const ringA = ring > 0 && ring < 1 ? (0.1 * bell(ring)).toFixed(3) : 0;
+    sum1.style.background = ringA ? `rgba(65,118,230,${ringA})` : '';
+    sum1.style.boxShadow = ringA ? `0 0 0 6px rgba(65,118,230,${ringA})` : 'none';
+    send.style.background = hasText && t < C.send ? (over(B.send) ? 'rgb(52,100,210)' : 'var(--send)') : (hasText ? 'var(--send)' : 'var(--send-off)');
+    send.style.transform = `scale(${(1 - 0.1 * bell(seg(t, C.sendClick, C.sendClick + 0.14))).toFixed(3)})`;
 
-    // Chip 0 states: hover (pointer inside), press, then "改后发送" (pencil).
-    const over = (b) => cOp > 0.5 && cx >= b.x && cx <= b.r && cy >= b.y && cy <= b.b;
-    chips[0].style.background = over(c0) ? '#f2f4f7' : '#fff';
-    chips[0].style.transform = `scale(${(1 - 0.035 * bell(seg(t, T.click, T.click + 0.16))).toFixed(4)})`;
-    const used = out3(seg(t, T.used, T.used + 0.3));
-    spark.style.opacity = (1 - used).toFixed(3);
-    spark.style.transform = `scale(${(1 - 0.5 * used).toFixed(3)})`;
-    pencil.style.opacity = used.toFixed(3);
-    pencil.style.transform = `scale(${(0.5 + 0.5 * used + 0.25 * bell(seg(t, T.used, T.used + 0.45))).toFixed(3)})`;
-    chip0Label.style.color = used > 0 ? `rgb(${Math.round(lerp(31, 95, used))},${Math.round(lerp(35, 102, used))},${Math.round(lerp(41, 115, used))})` : '';
-    const ring = seg(t, T.used, T.used + 0.8);
-    chips[0].style.boxShadow = ring > 0 && ring < 1 ? `0 0 0 ${(10 * out3(ring)).toFixed(2)}px rgba(51,112,255,${(0.22 * (1 - ring)).toFixed(3)})` : 'none';
+    // 8. Callouts and the native tooltip.
+    const callIn = (el, at) => {
+      const p = out3(seg(t, at, at + 0.3)) * (1 - seg(t, ...C.calloutsOut));
+      el.style.opacity = p.toFixed(3);
+      return (1 - p) * 4;
+    };
+    const dyA = callIn(callA, C.callouts[0]);
+    callA.style.transform = `translate(${(B.ctx1.x - 4).toFixed(2)}px, ${(B.card1.y - callA.offsetHeight - 7 + dyA).toFixed(2)}px)`;
+    for (const [el, b, at] of [[callB, B.c1a, C.callouts[1]], [callC, B.c1c, C.callouts[2]]]) {
+      const dy = callIn(el, at);
+      el.style.transform = `translate(${(b.cx - el.offsetWidth / 2).toFixed(2)}px, ${(b.b + 9 - dy).toFixed(2)}px)`;
+    }
+    tip.textContent = PROMPT.a;
+    tip.style.opacity = t >= C.tooltip && t < C.click1 ? '1' : '0';
+    tip.style.transform = `translate(${(P.x + 8).toFixed(2)}px, ${(P.y + 20).toFixed(2)}px)`;
 
-    const filled = hasText;
-    send.style.background = filled ? (over(sendB) ? '#2b62e6' : '#3370ff') : '#dfe2e7';
-    send.style.transform = `scale(${(1 - 0.1 * bell(seg(t, T.sendClick, T.sendClick + 0.14))).toFixed(3)})`;
+    // 9. Keycaps for Shift+Enter.
+    const kp = out3(seg(t, C.keycaps[0], C.keycaps[0] + 0.2)) * (1 - seg(t, C.keycaps[1] - 0.2, C.keycaps[1]));
+    keys.style.opacity = kp.toFixed(3);
+    keys.style.transform = `translate(${(B.comp.r - 168).toFixed(2)}px, ${(B.comp.y - 38 + (1 - kp) * 4).toFixed(2)}px)`;
+    const down = (el, a, b) => {
+      const on = t >= a && t < b;
+      el.style.transform = on ? 'translateY(1.5px)' : 'none';
+      el.style.boxShadow = on ? '0 .5px 0 rgba(0,0,0,.14)' : '';
+      el.style.background = on ? '#eef3fd' : '#fff';
+    };
+    down(kShift, C.shift, C.enter + 0.18);
+    down(kEnter, C.enter, C.enter + 0.14);
 
-    // Flying draft: chip 0 → composer text start.
-    const gp = seg(t, ...T.fly);
-    if (gp > 0 && gp < 1) {
-      const gw = ghost.offsetWidth, gh = ghost.offsetHeight;
-      const from = { x: c0.cx, y: c0.cy }, to = { x: comp.x + 16 + gw / 2 - 12, y: comp.cy };
+    // 10. Flying drafts: chip → the line the action lands on.
+    ghost.style.opacity = '0';
+    for (const f of FLIGHTS) {
+      const gp = seg(t, ...f.at);
+      if (gp <= 0 || gp >= 1) continue;
+      ghost.textContent = f.text;
+      const gw = ghost.offsetWidth, gh = ghost.offsetHeight, from = box(f.chip);
+      const to = { x: B.comp.x + 18 + gw / 2 - 12, y: B.comp.b - 57 };
       const p = inOut3(gp);
-      const gx = lerp(from.x, to.x, p), gy = lerp(from.y, to.y, p) - bell(p) * 18;
+      const gx = lerp(from.cx, to.x, p), gy = lerp(from.cy, to.y, p) - bell(p) * 18;
       ghost.style.opacity = (seg(gp, 0, 0.15) * (1 - seg(gp, 0.72, 1))).toFixed(3);
       ghost.style.transform = `translate(${(gx - gw / 2).toFixed(2)}px, ${(gy - gh / 2).toFixed(2)}px) scale(${lerp(1, 0.96, p).toFixed(3)})`;
-    } else {
-      ghost.style.opacity = '0';
     }
 
-    // 5. Camera: zoom the content layer only; title bar stays put.
-    const shots = {
-      wide: { s: lerp(1.16, 1.24, inOut3(seg(t, 0, 2.6))), x: 360, y: 392 },
-      card: { s: 1.34, x: 360, y: card.cy },
-      work: { s: 1.3, x: 360, y: (card.y + comp.b) / 2 },
-    };
-    const mix = (a, b, p) => ({ s: lerp(a.s, b.s, p), x: lerp(a.x, b.x, p), y: lerp(a.y, b.y, p) });
-    let shot;
-    if (t < 2.6) shot = shots.wide;
-    else if (t < 3.5) shot = mix(shots.wide, shots.card, inOut3(seg(t, 2.6, 3.5)));
-    else if (t < 5.15) shot = shots.card;
-    else shot = mix(shots.card, shots.work, inOut3(seg(t, 5.15, 6.0)));
-    const tx = clamp(360 - shot.x * shot.s, 720 - 720 * shot.s, 0);
-    const ty = clamp(196 - shot.y * shot.s, 392 - 392 * shot.s, 0);
+    // 11. Camera: zoom the content layer only; the title bar stays put.
+    let shot = SHOTS.wide(B);
+    for (const [at, name] of CAMERA.slice(1)) {
+      if (t < at[0]) break;
+      shot = mixShot(shot, SHOTS[name](B), inOut3(seg(t, ...at)));
+    }
+    const tx = clamp(VW / 2 - shot.x * shot.s, VW - VW * shot.s, 0);
+    const ty = clamp(VH / 2 - shot.y * shot.s, VH - VH * shot.s, 0);
     cam.style.transform = `translate(${tx.toFixed(2)}px, ${ty.toFixed(2)}px) scale(${shot.s.toFixed(4)})`;
 
-    // 6. End card.
-    const pieces = end.children;
+    // 12. Captions.
+    caps.forEach((el, i) => {
+      const [a, b] = C.captions[i];
+      const pin = out3(seg(t, a, a + 0.35)), pout = inOut3(seg(t, b - 0.25, b));
+      el.style.opacity = (pin * (1 - pout)).toFixed(3);
+      el.style.translate = `0 ${((1 - pin) * 6 - pout * 4).toFixed(2)}px`;
+    });
+    capLangs.forEach((el, i) => el.classList.toggle('on', i === lang));
+
+    // 13. Theme wipe: a dark copy of this exact frame, revealed by a circle from the top-right corner.
+    // Interpolating the tokens instead would pass every text colour through its background.
+    // The copy keeps every id so the id-based styles apply; it comes after the original, so lookups still find the original.
+    if (themeP > 0 && themeP < 1) {
+      const dark = winEl.cloneNode(true);
+      dark.classList.add('win-dark');
+      for (const [k, , b] of THEME_RGBA) dark.style.setProperty(k, `rgba(${b.join(',')})`);
+      dark.style.clipPath = `circle(${(themeP * Math.hypot(VW, 456) * 1.02).toFixed(1)}px at 780px 0px)`;
+      winEl.after(dark);
+    }
+  }
+
+  function langIndex(t) {
+    const [first, step] = C.langs;
+    if (t < first) return 0;
+    const i = Math.floor((t - first) / step) + 1;
+    return i >= LANGS.length ? 0 : i;
+  }
+
+  /** Title (before the window) and end card (after it). */
+  function renderCards(t) {
+    const [tin, tout0, tout1] = C.title;
+    const out = inOut3(seg(t, tout0, tout1));
+    [...titleEl.children].forEach((el, i) => {
+      const p = out3(seg(t, tin + i * 0.15, tin + i * 0.15 + 0.55));
+      el.style.opacity = (p * (1 - out)).toFixed(3);
+      el.style.transform = `translateY(${((1 - p) * 10 - out * 8).toFixed(2)}px)${i === 0 ? ` scale(${lerp(0.9, 1, p).toFixed(3)})` : ''}`;
+    });
+    titleEl.style.filter = out > 0 ? `blur(${(out * 4).toFixed(2)}px)` : 'none';
+
+    const pieces = endEl.children;
     const ein = (el, a, dy = 12) => {
       const p = out3(seg(t, a, a + 0.55));
       el.style.opacity = p.toFixed(3);
       el.style.transform = `translateY(${((1 - p) * dy).toFixed(2)}px)`;
     };
-    // The icon lands on the music's downbeat; the star twinkles on the two sparkle chimes.
-    const iconP = out3(seg(t, T.endHit - 0.03, T.endHit + 0.57));
+    // The icon lands on the music's final downbeat; its star twinkles once.
+    const iconP = out3(seg(t, C.end - 0.03, C.end + 0.57));
     pieces[0].style.opacity = iconP.toFixed(3);
     pieces[0].style.transform = `scale(${lerp(0.86, 1, iconP).toFixed(3)})`;
-    const [s1, s2] = T.sparkles;
-    const tw = bell(seg(t, s1 - 0.3, s1 + 0.3)) + 0.6 * bell(seg(t, s2 - 0.25, s2 + 0.25));
-    $('star').style.transform = `scale(${(1 + 0.45 * tw).toFixed(3)}) rotate(${(tw * 45).toFixed(1)}deg)`;
-    ein(pieces[1], 12.0);
-    ein(pieces[2], 12.2, 10);
-    ein(pieces[3], 12.6);
-    ein(pieces[4], 12.8, 6);
+    const tw = bell(seg(t, C.end + 0.9, C.end + 1.5));
+    pieces[0].querySelector('.star').style.transform = `scale(${(1 + 0.45 * tw).toFixed(3)}) rotate(${(tw * 45).toFixed(1)}deg)`;
+    ein(pieces[1], C.end + 0.25);
+    ein(pieces[2], C.end + 0.4, 10);
+    ein(pieces[3], C.end + 0.65, 10);
+    ein(pieces[4], C.end + 1.0);
+    ein(pieces[5], C.end + 1.2, 6);
   }
 
-  /**
-   * Intro (absolute time): 「继续」 is typed into a large input, held, erased, and the input docks into
-   * the window's composer. The dock target is measured from the composer as renderScene left it.
-   */
-  const intro = $('intro'), introDraft = $('introDraft'), introSend = $('introSend');
-  function renderIntro(tg) {
-    const out = seg(tg, I.length + 0.1, I.length + 0.4);
-    if (out >= 1) { intro.style.opacity = '0'; return; }
-    const target = composer.getBoundingClientRect(), root = $('scene').getBoundingClientRect();
-    const s1 = target.width / 520, s0 = s1 * 1.18;
-    const p = inOut3(seg(tg, ...I.dock));
-    const s = lerp(s0, s1, p);
-    const cx = lerp(480, target.left - root.left + target.width / 2, p);
-    const cy = lerp(270, target.top - root.top + target.height / 2, p) + (1 - out3(seg(tg, 0.05, 0.45))) * 12;
-    intro.style.opacity = (out3(seg(tg, 0.05, 0.4)) * (1 - out)).toFixed(3);
-    intro.style.transform = `translate(${(cx - 260 * s).toFixed(2)}px, ${(cy - 27 * s).toFixed(2)}px) scale(${s.toFixed(4)})`;
-
-    const n = I.typed.filter((x) => tg >= x).length - I.erased.filter((x) => tg >= x).length;
-    const focused = tg < I.dock[0];
-    const busy = [...I.typed, ...I.erased].some((x) => tg >= x - 0.05 && tg < x + 0.3);
-    const caretOn = focused && tg > 0.25 && (busy || (tg % 1.0) < 0.55);
-    const caret = `<span id="introCaret" style="display:inline-block;width:1.5px;height:18px;margin:0 1px;background:#1f2329;opacity:${caretOn ? 1 : 0}"></span>`;
-    // Unfocused, the input must match #composer pixel for pixel (no caret box) so the crossfade is seamless.
-    introDraft.innerHTML = n > 0 ? `${'继续'.slice(0, n)}${caret}` : `${focused ? caret : ''}<span class="ph">输入消息…</span>`;
-    introSend.style.background = n > 0 ? '#3370ff' : '#dfe2e7';
-    const ring = focused ? 1 : 1 - seg(tg, I.dock[0], I.dock[0] + 0.3);
-    intro.style.borderColor = `rgba(51,112,255,${(0.55 * ring).toFixed(3)})`;
-    intro.style.boxShadow = `0 0 0 ${(3 * ring).toFixed(2)}px rgba(51,112,255,.10), 0 18px 40px -20px rgba(30,41,80,${(0.35 * (1 - p)).toFixed(3)})`;
+  function render(t) {
+    renderScene(t);
+    renderCards(t);
   }
-
-  function render(tg) {
-    renderScene(tg - I.length);
-    renderIntro(tg);
-  }
-
   window.renderAt = render;
 
   // ---------------------------------------------------------------- drive

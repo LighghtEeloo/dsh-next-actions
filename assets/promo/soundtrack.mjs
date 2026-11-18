@@ -1,20 +1,19 @@
 #!/usr/bin/env node
-// soundtrack.mjs — 合成宣传短片的配乐与界面音效，输出 48 kHz 立体声 16-bit WAV。
+// soundtrack.mjs — 合成宣传片的配乐与界面音效，输出 48 kHz 立体声 16-bit WAV。
 //
 // 用法: node soundtrack.mjs <promo.html> <out.wav>
 //
 // 所有时间点读自 promo.html 里的 <script id="timeline">，与画面共用一份 cue sheet；
 // 改动画时间后重新运行即可保持同步。合成过程不依赖外部素材，同一输入输出按字节一致。
 //
-// 风格：lo-fi。温暖的电钢琴和弦 + 摇摆鼓组 + 圆润低音；界面音效全部是无音高的轻敲、点击和风声，
-// 不用铃音。96 BPM，一小节 2.5 s，F 大调 I–iii–vi–IV–ii–V–I。时间为成片绝对时间：
-//   0.0–2.5   开头：只有铺底缓慢升起，打出又删掉「继续」的按键声，输入框归位时一阵风声
-//   2.5–5.0   Fmaj7  电钢琴进入，窗口出现
-//   5.0–7.5   Am7    卡片出现：踩镲进入，三个按钮各一下轻敲
-//   7.5–10.0  Dm9    点击落在下拍前：底鼓、军鼓与低音进入
-//   10.0–12.5 Bbmaj7 打字声
-//   12.5–14.4 Gm7 → C9sus4，鼓组收住，反向和弦吸入
-//   14.375    Fmaj9 落点 = 片尾图标出现，随后淡出
+// 风格：lo-fi。温暖的电钢琴和弦 + 摇摆鼓组 + 圆润低音；界面音效全部是无音高的轻敲、点击、按键和风声，
+// 不用铃音。96 BPM，一小节 2.5 s，F 大调，Fmaj7–Am7–Dm9–Bbmaj7 四小节一循环。时间为成片绝对时间：
+//   0.0–2.5    标题：铺底升起，一记轻和弦
+//   2.5–7.5    回合结束出卡：电钢琴进入，第二小节起踩镲
+//   7.5–12.5   卡片结构：踩镲 + 轻底鼓
+//   12.5–35.0  点击填入到展开历史卡片：完整鼓组与低音
+//   35.0–40.0  明暗主题与语言：鼓组退场，Gm7 → C9sus4，反向和弦吸入
+//   40.0       Fmaj9 落点 = 片尾图标出现，随后淡出
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -28,36 +27,17 @@ if (!block) {
   console.error(`soundtrack: no <script id="timeline"> block in ${page}`);
   process.exit(1);
 }
-const TIMELINE = JSON.parse(block[1]);
-const I = TIMELINE.intro;
-
-// Scene cues are relative to the end of the intro; shift them onto the film's clock.
-const O = I.length;
-const S = TIMELINE.scene;
-const sh = (x) => O + x;
-const T = {
-  duration: TIMELINE.duration,
-  rowIn: S.rowIn.map(sh),
-  reveal: S.reveal.map(sh),
-  chipsIn: [sh(S.chipsIn[0]), S.chipsIn[1]],
-  click: sh(S.click),
-  fly: S.fly.map(sh),
-  fill: sh(S.fill),
-  typedAt: S.typedAt.map(sh),
-  sendClick: sh(S.sendClick),
-  send: sh(S.send),
-  used: sh(S.used),
-  endHit: sh(S.endHit),
-};
+const C = JSON.parse(block[1]);
+const T = { duration: C.duration };
 
 const SR = 48000;
 const N = Math.round(T.duration * SR);
-const BEAT = 60 / TIMELINE.bpm;
+const BEAT = 60 / C.bpm;
 const BAR = 4 * BEAT;
 const SIX = BEAT / 4;
 const SWING = SIX * 0.18;
-/** Bar 0 is the first bar of the chat scene, i.e. it starts when the intro ends. */
-const at = (bar, sixteenth) => O + bar * BAR + sixteenth * SIX;
+/** Bar 0 starts with the film. */
+const at = (bar, sixteenth) => bar * BAR + sixteenth * SIX;
 
 // ------------------------------------------------------------------ primitives
 
@@ -261,76 +241,104 @@ function boom(t0, gain = 0.3) {
 
 // ------------------------------------------------------------------ music
 
-const CHORDS = [
-  { bar: 0, notes: [53, 57, 60, 64], hits: [[0, 0.7], [10, 0.45]] },          // Fmaj7
-  { bar: 1, notes: [55, 57, 60, 64], hits: [[0, 0.9], [6, 0.5], [10, 0.65]] }, // Am7
-  { bar: 2, notes: [53, 57, 60, 64], hits: [[0, 1], [6, 0.55], [10, 0.7]] },   // Dm9 (over D)
-  { bar: 3, notes: [53, 57, 58, 62], hits: [[0, 1], [6, 0.55], [10, 0.7]] },   // Bbmaj7
-  { bar: 4, notes: [53, 55, 58, 62], hits: [[0, 1], [6, 0.55]] },              // Gm7, then C9sus4 below
-];
-for (const { bar, notes, hits } of CHORDS) {
+const FMAJ7 = [53, 57, 60, 64], AM7 = [55, 57, 60, 64], DM9 = [53, 57, 60, 64], BBMAJ7 = [53, 57, 58, 62];
+const GM7 = [53, 55, 58, 62], C9SUS4 = [53, 55, 58, 62];
+const LOOP = [FMAJ7, AM7, DM9, BBMAJ7];
+const ROOTS = [41, 45, 38, 34];                     // F2 A2 D2 Bb1, under LOOP
+const END_BAR = Math.round(C.end / BAR);            // the final chord lands on this bar
+const BREAK_BAR = END_BAR - 2;                      // drums leave for the theme / language section
+const GROOVE = Math.floor(C.click1 / BAR + 0.5);    // full groove from the first click
+
+const chordOf = (bar) => (bar < BREAK_BAR ? LOOP[(bar - 1) % 4] : bar === BREAK_BAR ? GM7 : C9SUS4);
+
+// Title: the pad swells under one soft chord.
+pad(FMAJ7, 0, at(1, 0), { attack: 1.6, gain: 0.04 });
+epChord(FMAJ7, 0.15, 2.2, 0.5);
+for (let bar = 1; bar < END_BAR; bar++) {
+  const notes = chordOf(bar);
+  const hits = bar === END_BAR - 1 ? [[0, 1], [6, 0.55]] : [[0, 0.9], [6, 0.5], [10, 0.65]];
   hits.forEach(([step, vel], i) => {
     const next = i + 1 < hits.length ? hits[i + 1][0] : 16;
-    epChord(notes, at(bar, step), (next - step) * SIX, vel);
+    epChord(notes, at(bar, step), (next - step) * SIX, vel * (bar < 3 ? 0.85 : 1));
   });
-  // The first pad starts with the film and swells slowly under the intro.
-  if (bar === 0) pad(notes, 0, at(1, 0), { attack: O + 1.0, gain: 0.04 });
-  else pad(notes, at(bar, 0), at(bar + 1, 0));
+  pad(notes, at(bar, 0), at(bar + 1, 0));
 }
-epChord([53, 55, 58, 62], at(4, 8), 0.3, 0.6);                                  // C9sus4 stab
 
 // Reverse swell of the final chord, ending exactly on the hit.
 const FINAL = [55, 57, 60, 64, 69];
 const swell = epChord(FINAL, 0, 0.9, 0.8, { bounce: true }).reverse();
 const swellLen = swell.length / SR;
 swell.forEach((s, i, a) => { a[i] = s * Math.min(1, i / (0.2 * SR)); });
-place(swell, T.endHit - swellLen, { gain: 0.12, verb: 0.3, keys: true });
+place(swell, C.end - swellLen, { gain: 0.12, verb: 0.3, keys: true });
 
-epChord(FINAL, T.endHit, 2.6, 0.9);
-pad(FINAL, T.endHit, T.duration - 1.4, { attack: 0.05, release: 1.4, gain: 0.04 });
+epChord(FINAL, C.end, 2.6, 0.9);
+pad(FINAL, C.end, T.duration - 1.4, { attack: 0.05, release: 1.4, gain: 0.04 });
 
-// Drums: swung lo-fi pattern from the click on; hats alone while the card appears.
+// Drums: hats under the first card, a light kick under its anatomy, the swung groove from the first click.
 const swing = (step) => (step % 4 === 2 ? SWING : 0);
-for (const step of [0, 2, 4, 6, 8, 10, 12, 14]) hat(at(1, step) + swing(step), step % 4 ? 0.022 : 0.012);
-for (const bar of [2, 3]) {
+const hats = (bar, gain = 1, steps = [0, 2, 4, 6, 8, 10, 12, 14]) =>
+  steps.forEach((step) => hat(at(bar, step) + swing(step), (step % 4 ? 0.035 : 0.02) * gain));
+hats(2, 0.6);
+for (let bar = 3; bar < GROOVE; bar++) {
+  hats(bar, 0.8);
+  kick(at(bar, 0), 0.3);
+  kick(at(bar, 8), 0.26);
+}
+for (let bar = GROOVE; bar < BREAK_BAR; bar++) {
   for (const step of [0, 6, 10]) kick(at(bar, step));
   for (const step of [4, 12]) snare(at(bar, step));
-  for (const step of [0, 2, 4, 6, 8, 10, 12, 14]) hat(at(bar, step) + swing(step), step % 4 ? 0.035 : 0.02);
+  hats(bar);
 }
-for (const step of [0, 6]) kick(at(4, step));
-snare(at(4, 4));
-for (const step of [0, 2, 4, 6]) hat(at(4, step) + swing(step), step % 4 ? 0.035 : 0.02);
-sweep(at(4, 8), T.endHit, 400, 2500, { gain: 0.035, q: 0.8, verb: 0.2, shape: (p) => p ** 2 });
-kick(T.endHit, 0.48);
-boom(T.endHit);
+snare(at(BREAK_BAR - 1, 14), 0.06);
+snare(at(BREAK_BAR - 1, 15), 0.08);
+hats(BREAK_BAR, 0.5, [0, 4, 8, 12]);
+hats(BREAK_BAR + 1, 0.4, [0, 4, 8]);
+sweep(at(END_BAR - 1, 8), C.end, 400, 2500, { gain: 0.035, q: 0.8, verb: 0.2, shape: (p) => p ** 2 });
+kick(C.end, 0.48);
+boom(C.end);
 
-for (const [bar, m] of [[2, 38], [3, 34]]) {
+for (let bar = GROOVE; bar < BREAK_BAR; bar++) {
+  const m = ROOTS[(bar - 1) % 4];
   bass(m, at(bar, 0), 5 * SIX);
   bass(m, at(bar, 6), 3 * SIX);
   bass(m, at(bar, 10), 5 * SIX);
 }
-bass(43, at(4, 0), 5 * SIX);
-bass(43, at(4, 6), 2 * SIX);
-bass(36, at(4, 8), T.endHit - at(4, 8) - 0.01);
-bass(29, T.endHit, 2.0, 0.2, 1.0);
+bass(43, at(BREAK_BAR, 0), 9 * SIX, 0.18);
+bass(43, at(BREAK_BAR, 10), 5 * SIX, 0.16);
+bass(36, at(END_BAR - 1, 0), C.end - at(END_BAR - 1, 0) - 0.01, 0.18);
+bass(29, C.end, 2.0, 0.2, 1.0);
 
 // ------------------------------------------------------------------ interface sounds (no pitched tones)
 
-I.typed.forEach((t) => key(t, 0.12));                                                           // 开头：打出「继续」
-I.erased.forEach((t) => key(t, 0.1));                                                           // 删掉
-sweep(I.dock[0], I.dock[1] + 0.1, 2600, 700, { gain: 0.045, q: 1.0 });                          // 输入框归位
-
-sweep(T.rowIn[0], T.reveal[0] + 0.05, 1200, 4000, { gain: 0.02, q: 2 });                       // 正在生成
-[2000, 2300, 2600].forEach((f, i) => tap(T.chipsIn[0] + i * T.chipsIn[1], 0.06, { f, pan: -0.25 + i * 0.12 })); // 三个按钮
-click(T.click, 0.28, -0.2);                                                                     // 点推荐按钮
-sweep(T.fly[0], T.fly[1], 3200, 900, { gain: 0.06, q: 1.1, pan: -0.15 });                        // 指令飞向输入框
-thump(T.fill, 220, 120, 0.05, 0.12);                                                            // 落入输入框
-noiseHit(T.fill, { len: 0.03, decay: 0.006, type: 'bp', f: 1200, q: 1, gain: 0.05 });
-T.typedAt.forEach((t) => key(t, 0.1 * (0.8 + 0.4 * rand())));                                   // 打字
-click(T.sendClick, 0.28, 0.3);                                                                  // 点发送
-sweep(T.send, T.send + 0.38, 700, 3800, { gain: 0.06, q: 1.2, pan: 0.2, shape: (p) => Math.sin(Math.PI * p) });
-tap(T.used, 0.05, { f: 2200, pan: -0.25 });                                                     // 按钮变为「改后发送」
-tap(T.used + 0.09, 0.04, { f: 2600, pan: -0.25 });
+sweep(C.winIn[0], C.winIn[1] + 0.1, 700, 2600, { gain: 0.04, q: 1.0 });                              // 窗口出现
+for (const [rows, shown, fold, chips] of [[C.r1Rows, C.r1Shown, C.r1Fold, C.r1Chips], [C.r2Rows, C.r2Shown, C.r2Fold, C.r2Chips]]) {
+  rows.forEach((t) => tap(t, 0.03, { f: 1800, pan: -0.3 }));                                          // 过程行
+  sweep(rows[rows.length - 1], shown + 0.05, 1200, 4000, { gain: 0.018, q: 2 });                      // 正在生成
+  tap(shown, 0.035, { f: 2400, pan: -0.3 });                                                          // 已生成 · 3
+  sweep(fold[0], fold[1] + 0.1, 2400, 900, { gain: 0.02, q: 1.2 });                                   // 过程收起
+  [2000, 2300, 2600].forEach((f, i) => tap(chips[0] + i * chips[1], 0.055, { f, pan: -0.25 + i * 0.12 })); // 三个按钮
+}
+C.callouts.forEach((t, i) => tap(t, 0.04, { f: 2800 + i * 200, pan: -0.2 + i * 0.2 }));             // 标注
+for (const t of [C.click1, C.click2, C.sendClick, C.click3, C.click4, C.click5]) click(t, 0.26, 0.1); // 点击
+for (const [fly, fill] of [[C.fly1, C.fill1], [C.fly2, C.fill2], [C.fly3, C.fill3]]) {
+  sweep(fly[0], fly[1], 3200, 900, { gain: 0.055, q: 1.1, pan: -0.15 });                             // 指令飞向输入框
+  thump(fill, 220, 120, 0.05, 0.12);                                                                  // 落入输入框
+  noiseHit(fill, { len: 0.03, decay: 0.006, type: 'bp', f: 1200, q: 1, gain: 0.05 });
+}
+key(C.shift, 0.12);                                                                                   // Shift + Enter
+key(C.enter, 0.14);
+[...C.editKeys, ...C.draftKeys, ...C.draftKeys2].forEach((t) => key(t, 0.1 * (0.8 + 0.4 * rand()))); // 打字
+tap(C.ref, 0.05, { f: 2600 });                                                                        // @ 引用落入
+sweep(C.send, C.send + 0.38, 700, 3800, { gain: 0.06, q: 1.2, pan: 0.2, shape: (p) => Math.sin(Math.PI * p) }); // 发送
+sweep(C.fold1[0], C.fold1[1] + 0.1, 2600, 1000, { gain: 0.025, q: 1.2 });                             // 卡片折叠
+tap(C.fold1[1], 0.05, { f: 2200, pan: -0.25 });                                                       // ✓ / ✎
+tap(C.fold1[1] + 0.09, 0.04, { f: 2600, pan: -0.25 });
+sweep(C.scroll[0], C.scroll[1], 1800, 800, { gain: 0.03, q: 1.0 });                                   // 向上滚动
+sweep(C.expand[0], C.expand[1] + 0.1, 1000, 2600, { gain: 0.025, q: 1.2 });                           // 展开
+sweep(C.collapse[0], C.collapse[1] + 0.1, 2600, 1000, { gain: 0.025, q: 1.2 });                       // 收起
+sweep(C.theme[0] - 0.1, C.theme[1] + 0.2, 300, 1600, { gain: 0.05, q: 0.9, verb: 0.4 });              // 主题擦除
+for (let k = 0; k < 8; k++) tap(C.langs[0] + k * C.langs[1], 0.025, { f: 2300 + (k % 2) * 300, pan: k % 2 ? 0.2 : -0.2 }); // 语言切换
+sweep(C.winOut[0], C.winOut[1], 2600, 700, { gain: 0.035, q: 1.0 });                                  // 窗口退场
 
 // ------------------------------------------------------------------ master
 
