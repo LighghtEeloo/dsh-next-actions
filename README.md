@@ -34,6 +34,7 @@ dsh plugin --profile desktop add link:/path/to/dsh-next-actions
 - The recommended action is pinned first, with ✦ and a brand-colored outline.
   If the next message contains a whole line equal to a suggestion → check; if sent with edits → pencil (inferred from the session log, so typing similar text by hand is marked too).
 - Clicking fills an empty draft, or inserts at the caret when the draft already has content (keeps `@` references, undoable with ⌘Z); it never sends.
+- After a card fill, adding only whitespace at the end is a signal: a newline joins the next suggestion in a new paragraph; a space joins it in the same paragraph, with one space unless both sides are CJK.
 - Risky suggestions carry a ⚠ mark and still only fill the input.
 - One row in the tool process group; subagents do not register the tool; with `enabled: false` in the Host config, zero standing tokens.
 - The card's own labels and status marks follow DSH's interface language: Chinese, English, Japanese, Spanish, French, German, Russian and Portuguese.

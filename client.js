@@ -471,27 +471,117 @@ window.__ModuleLoader__.load({
     // Card
     // -----------------------------------------------------------------------
 
+    const EMPTY_OCCURRENCES = Object.freeze([])
+
+    /**
+     * Characters on the CJK side of a sentence boundary: Chinese and Japanese
+     * text, kana, and their punctuation. Korean keeps spaces and stays on the
+     * spaced side.
+     */
+    const CJK = /[\u2e80-\u303f\u3040-\u30ff\u3100-\u312f\u3190-\u33ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uff60\uff61-\uff9f\uffe0-\uffe6]/
+
     /** Empty drafts and drafts the card wrote itself are replaced; anything else gets the action added. */
     function fillMode(draft, owned) {
       return draft.trim() === '' || draft === owned ? 'replace' : 'insert'
     }
 
+    /**
+     * Two sentences join without a space only when both sides of the boundary
+     * are CJK. Everything else, including a CJK/Latin boundary, conservatively
+     * keeps one space.
+     */
+    function joinsWithoutSpace(left, right) {
+      const last = left[left.length - 1]
+      const first = right[0]
+      return last !== undefined && first !== undefined && CJK.test(last) && CJK.test(first)
+    }
+
+    /** Detect-text length: each reference chip occupies one character in the editor. */
+    function detectLength(draft, occurrences) {
+      let length = draft.length
+      for (const occurrence of Array.isArray(occurrences) ? occurrences : EMPTY_OCCURRENCES) {
+        if (typeof occurrence?.length === 'number') length -= Math.max(0, occurrence.length - 1)
+      }
+      return length
+    }
+
+    /**
+     * Whether the captured selection is a caret at the very end of the draft.
+     * Quotes are not part of `occurrences`, so a draft holding one conservatively
+     * reads as mid-draft and keeps the default separator.
+     */
+    function caretAtEnd(insertion, draft, occurrences) {
+      return insertion !== undefined && insertion !== null
+        && insertion.start === insertion.end
+        && insertion.start === detectLength(draft, occurrences)
+    }
+
+    /**
+     * Whitespace the user appended after the card's own fill, or null. That
+     * trailing whitespace is an intent signal for the next action, so only the
+     * card's exact text followed by whitespace qualifies; user content and
+     * @ references are never rewritten.
+     */
+    function signalOf(owned, draft) {
+      if (typeof owned !== 'string' || owned === '' || !draft.startsWith(owned)) return null
+      const tail = draft.slice(owned.length)
+      return tail !== '' && /^\s+$/.test(tail) ? tail : null
+    }
+
+    /**
+     * The draft after consuming a signal. Extra newlines mean the user wanted
+     * more blank lines and are preserved; at least one blank line remains.
+     * Spaces join the same paragraph, with one space unless both sides are CJK.
+     */
+    function consumeSignal(owned, tail, prompt) {
+      const newlines = (tail.match(/\n/g) ?? []).length
+      if (newlines > 0) return `${owned}${'\n'.repeat(Math.max(2, newlines))}${prompt}`
+      return `${owned}${joinsWithoutSpace(owned, prompt) ? '' : ' '}${prompt}`
+    }
+
+    /**
+     * What to insert before an action when the card does not own the draft: a
+     * trailing newline run already starts a new line, so add only enough to
+     * leave one blank line and never more. Trailing spaces are ordinary user
+     * text here and stay untouched.
+     */
+    function separatorFor(draft) {
+      const tail = /\s*$/.exec(draft)?.[0] ?? ''
+      const newlines = (tail.match(/\n/g) ?? []).length
+      if (newlines === 0) return '\n\n'
+      return newlines >= 2 ? '' : '\n'
+    }
+
     let sharedCtx = null
 
-    function fill(actions, draft, owned, prompt, sessionId) {
-      let next = prompt
+    function fill(actions, draft, owned, prompt, sessionId, occurrences = EMPTY_OCCURRENCES) {
+      let next = null
+      let ownedNext = null
       if (fillMode(draft, owned) === 'insert') {
-        next = null
+        const appended = () => `${draft}${separatorFor(draft)}${prompt}`
         try {
-          // One editor edit at the caret: keeps @ references, undoable with ⌘Z.
-          if (actions.insertText(`\n\n${prompt}`, actions.captureInsertion()) !== true) {
-            console.warn('[dsh-next-actions] insertText declined; appending the action instead')
-            next = `${draft.trimEnd()}\n\n${prompt}`
+          const insertion = actions.captureInsertion()
+          const atEnd = caretAtEnd(insertion, draft, occurrences)
+          const signal = atEnd ? signalOf(owned, draft) : null
+          if (signal !== null) {
+            // The trailing whitespace is a signal: consume it into the
+            // separator and rewrite the card's own text as one editor edit.
+            next = consumeSignal(owned, signal, prompt)
+          } else {
+            // One editor edit at the caret: keeps @ references, undoable with ⌘Z.
+            const separator = atEnd ? separatorFor(draft) : '\n\n'
+            if (actions.insertText(`${separator}${prompt}`, insertion) !== true) {
+              console.warn('[dsh-next-actions] insertText declined; appending the action instead')
+              next = appended()
+            }
           }
         } catch (error) {
           console.warn('[dsh-next-actions] insert at caret failed; appending the action instead', error)
-          next = `${draft.trimEnd()}\n\n${prompt}`
+          next = appended()
         }
+      } else {
+        next = prompt
+        ownedNext = prompt
       }
       if (next !== null) actions.setDraft(next)
       try {
@@ -499,7 +589,7 @@ window.__ModuleLoader__.load({
       } catch {
         // Focus is a convenience; the draft is already filled.
       }
-      return next === prompt ? prompt : null
+      return ownedNext
     }
 
     function Mark({ size = 16 }) {
@@ -654,6 +744,7 @@ window.__ModuleLoader__.load({
       // This mount's explicit choice; `null` follows the session log.
       const [expandedChoice, setExpandedChoice] = React.useState(null)
       const draft = useInput?.((state) => state?.draft ?? '') ?? ''
+      const occurrences = useInput?.((state) => state?.occurrences ?? EMPTY_OCCURRENCES) ?? EMPTY_OCCURRENCES
       const sent = useChat?.((snapshot) => nextSent(snapshot, turn?.turn)) ?? null
       const subagent = useSession?.((state) => state?.subagent ?? null)
 
@@ -705,7 +796,7 @@ window.__ModuleLoader__.load({
             ? t('chip.ariaMarked', { label: suggestion.label, marks: marks.join(t('list.separator')), prompt: suggestion.prompt })
             : t('chip.aria', { label: suggestion.label, prompt: suggestion.prompt }),
           onClick: () => {
-            ownedRef.current = fill(inputActions, draft, ownedRef.current, suggestion.prompt, sessionId)
+            ownedRef.current = fill(inputActions, draft, ownedRef.current, suggestion.prompt, sessionId, occurrences)
           },
         },
         icon,
@@ -806,7 +897,7 @@ window.__ModuleLoader__.load({
       inject: ['slots', 'locale', 'uiConversation'],
       apply,
       __test: {
-        cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent,
+        cardDefinition, sentDefinition, modelOf, fillMode, fill, separatorFor, joinsWithoutSpace, rowState, usageOf, nextSent,
         tailOrder: TAIL_ORDER, styles: STYLES,
       },
     }

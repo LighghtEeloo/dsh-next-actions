@@ -47,7 +47,7 @@ function loadBundle() {
 }
 
 const plugin = loadBundle()
-const { cardDefinition, sentDefinition, modelOf, fillMode, fill, rowState, usageOf, nextSent, tailOrder, styles } = plugin.__test
+const { cardDefinition, sentDefinition, modelOf, fillMode, fill, separatorFor, joinsWithoutSpace, rowState, usageOf, nextSent, tailOrder, styles } = plugin.__test
 const rule = (selector) => new RegExp(`${selector.replace('.', '\\.')} \\{([^}]*)\\}`).exec(styles)?.[1] ?? ''
 
 const args = {
@@ -261,20 +261,44 @@ test('regression: interleaved feeds of two sessions keep their own turns', () =>
   assert.deepEqual(a, assemble(sessionA))
 })
 
-test('fillMode replaces empty or card-owned drafts and inserts otherwise', () => {
+test('fillMode replaces only empty or exactly card-owned drafts', () => {
   assert.equal(fillMode('', null), 'replace')
   assert.equal(fillMode('  \n', null), 'replace')
   assert.equal(fillMode('跑一下测试。', '跑一下测试。'), 'replace')
+  assert.equal(fillMode('跑一下测试。\n', '跑一下测试。'), 'insert')
+  assert.equal(fillMode('跑一下测试。  ', '跑一下测试。'), 'insert')
   assert.equal(fillMode('我自己写的', null), 'insert')
   assert.equal(fillMode('跑一下测试。 改过', '跑一下测试。'), 'insert')
 })
 
-function actions({ insert = true } = {}) {
+test('joinsWithoutSpace only joins CJK to CJK, keeping a space across scripts', () => {
+  assert.equal(joinsWithoutSpace('先看日志。', '跑一下测试。'), true)
+  assert.equal(joinsWithoutSpace('先看日志', '跑一下测试。'), true)
+  assert.equal(joinsWithoutSpace('次はログ。', 'テストする。'), true)
+  assert.equal(joinsWithoutSpace('Check the logs.', 'Run the tests.'), false)
+  assert.equal(joinsWithoutSpace('先看日志。', 'Run the tests.'), false)
+  assert.equal(joinsWithoutSpace('Check the logs.', '跑一下测试。'), false)
+  assert.equal(joinsWithoutSpace('看日志。', '，再看'), true)
+  assert.equal(joinsWithoutSpace('안녕하세요', '반갑습니다'), false)
+})
+
+test('separatorFor never adds newlines beyond the trailing run', () => {
+  assert.equal(separatorFor('我的草稿'), '\n\n')
+  assert.equal(separatorFor('我的草稿 '), '\n\n')
+  assert.equal(separatorFor('我的草稿\t'), '\n\n')
+  assert.equal(separatorFor('我的草稿\n'), '\n')
+  assert.equal(separatorFor('我的草稿\n\n'), '')
+  assert.equal(separatorFor('我的草稿\n\n\n'), '')
+  assert.equal(separatorFor('我的草稿 \n'), '\n')
+  assert.equal(separatorFor('我的草稿\n  '), '\n')
+})
+
+function actions({ insert = true, insertion = { start: 3, end: 3, draftRev: 7 } } = {}) {
   const calls = []
   return {
     calls,
     setDraft: (text) => calls.push(['setDraft', text]),
-    captureInsertion: () => ({ start: 3, end: 3, draftRev: 7 }),
+    captureInsertion: () => insertion,
     insertText: (text, span) => {
       calls.push(['insertText', text, span])
       return insert
@@ -294,6 +318,80 @@ test('fill inserts at the caret as one editor edit, keeping the user draft', () 
   assert.deepEqual(input.calls, [['insertText', '\n\n跑一下测试。', { start: 3, end: 3, draftRev: 7 }]])
 })
 
+test('fill applies the newline rule to any draft, without adding beyond it', () => {
+  const blank = actions({ insertion: { start: 5, end: 5, draftRev: 7 } })
+  fill(blank, '我的草稿\n', null, '跑一下测试。', 's')
+  assert.deepEqual(blank.calls, [['insertText', '\n跑一下测试。', { start: 5, end: 5, draftRev: 7 }]])
+
+  const existing = actions({ insertion: { start: 6, end: 6, draftRev: 7 } })
+  fill(existing, '我的草稿\n\n', null, '跑一下测试。', 's')
+  assert.deepEqual(existing.calls, [['insertText', '跑一下测试。', { start: 6, end: 6, draftRev: 7 }]])
+})
+
+test('fill keeps the blank-line separator when the caret is before the end', () => {
+  const input = actions({ insertion: { start: 3, end: 3, draftRev: 7 } })
+  fill(input, '我的草稿 ', null, '跑一下测试。', 's')
+  assert.deepEqual(input.calls, [['insertText', '\n\n跑一下测试。', { start: 3, end: 3, draftRev: 7 }]])
+})
+
+test('fill locates the end of a referenced draft for the newline rule', () => {
+  const input = actions({ insertion: { start: 2, end: 2, draftRev: 7 } })
+  fill(input, '@a.txt\n', null, '跑一下测试。', 's', [{ offset: 0, length: 6 }])
+  assert.deepEqual(input.calls, [['insertText', '\n跑一下测试。', { start: 2, end: 2, draftRev: 7 }]])
+})
+
+test('fill consumes a trailing space as a same-paragraph signal', () => {
+  const chinese = actions({ insertion: { start: 6, end: 6, draftRev: 7 } })
+  assert.equal(fill(chinese, '先看日志。 ', '先看日志。', '跑一下测试。', 's'), null)
+  assert.deepEqual(chinese.calls, [['setDraft', '先看日志。跑一下测试。']])
+
+  const english = actions({ insertion: { start: 12, end: 12, draftRev: 7 } })
+  fill(english, 'Check logs. ', 'Check logs.', 'Run tests.', 's')
+  assert.deepEqual(english.calls, [['setDraft', 'Check logs. Run tests.']])
+
+  const mixed = actions({ insertion: { start: 6, end: 6, draftRev: 7 } })
+  fill(mixed, '先看日志。 ', '先看日志。', 'Run tests.', 's')
+  assert.deepEqual(mixed.calls, [['setDraft', '先看日志。 Run tests.']])
+})
+
+test('fill consumes a newline signal without adding beyond the user blank lines', () => {
+  const one = actions({ insertion: { start: 6, end: 6, draftRev: 7 } })
+  fill(one, '先看日志。\n', '先看日志。', '跑一下测试。', 's')
+  assert.deepEqual(one.calls, [['setDraft', '先看日志。\n\n跑一下测试。']])
+
+  const two = actions({ insertion: { start: 7, end: 7, draftRev: 7 } })
+  fill(two, '先看日志。\n\n', '先看日志。', '跑一下测试。', 's')
+  assert.deepEqual(two.calls, [['setDraft', '先看日志。\n\n跑一下测试。']])
+
+  const three = actions({ insertion: { start: 8, end: 8, draftRev: 7 } })
+  fill(three, '先看日志。\n\n\n', '先看日志。', '跑一下测试。', 's')
+  assert.deepEqual(three.calls, [['setDraft', '先看日志。\n\n\n跑一下测试。']])
+
+  const spaced = actions({ insertion: { start: 8, end: 8, draftRev: 7 } })
+  fill(spaced, '先看日志。\n  ', '先看日志。', '跑一下测试。', 's')
+  assert.deepEqual(spaced.calls, [['setDraft', '先看日志。\n\n跑一下测试。']])
+})
+
+test('fill ignores trailing whitespace that is not a card-owned signal', () => {
+  const notOwned = actions({ insertion: { start: 6, end: 6, draftRev: 7 } })
+  fill(notOwned, '我的草稿 ', null, '跑一下测试。', 's')
+  assert.deepEqual(notOwned.calls, [['insertText', '\n\n跑一下测试。', { start: 6, end: 6, draftRev: 7 }]])
+
+  const edited = actions({ insertion: { start: 10, end: 10, draftRev: 7 } })
+  fill(edited, '先看日志。 再看 ', '先看日志。', '跑一下测试。', 's')
+  assert.deepEqual(edited.calls, [['insertText', '\n\n跑一下测试。', { start: 10, end: 10, draftRev: 7 }]])
+
+  const mid = actions({ insertion: { start: 3, end: 3, draftRev: 7 } })
+  fill(mid, '先看日志。 ', '先看日志。', '跑一下测试。', 's')
+  assert.deepEqual(mid.calls, [['insertText', '\n\n跑一下测试。', { start: 3, end: 3, draftRev: 7 }]])
+})
+
+test('after a signal the composed draft is content and the next action gets a blank line', () => {
+  const input = actions({ insertion: { start: 22, end: 22, draftRev: 7 } })
+  fill(input, 'Check logs. Run tests.', null, 'Ship it.', 's')
+  assert.deepEqual(input.calls, [['insertText', '\n\nShip it.', { start: 22, end: 22, draftRev: 7 }]])
+})
+
 function warningsFrom(run) {
   const warnings = []
   const original = console.warn
@@ -309,8 +407,8 @@ function warningsFrom(run) {
 test('fill appends with setDraft when the editor refuses or lacks insertText, and reports it', () => {
   const warnings = warningsFrom(() => {
     const refused = actions({ insert: false })
-    fill(refused, '我的草稿  ', null, '跑一下测试。', 's')
-    assert.deepEqual(refused.calls.at(-1), ['setDraft', '我的草稿\n\n跑一下测试。'])
+    fill(refused, '我的草稿 ', null, '跑一下测试。', 's')
+    assert.deepEqual(refused.calls.at(-1), ['setDraft', '我的草稿 \n\n跑一下测试。'])
     const legacy = { calls: [], setDraft(text) { this.calls.push(text) } }
     fill(legacy, '我的草稿', null, '跑一下测试。', 's')
     assert.deepEqual(legacy.calls, ['我的草稿\n\n跑一下测试。'])
@@ -337,7 +435,7 @@ const mount = () => ({ slots: [], cursor: 0, effects: [], focused: undefined })
  * later human turn); a string is turn 2's first human message. Rendering with
  * the same `hooks` again is a re-render of the same mount.
  */
-function renderCard({ sent = null, end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', lang = 'zh', memo = {}, hooks = mount() } = {}) {
+function renderCard({ sent = null, end = true, closing = true, subagent = false, model = buildModel(), inputActions = actions(), draft = '', occurrences = [], lang = 'zh', memo = {}, hooks = mount() } = {}) {
   const Card = cardComponent()
   const messages = locales[lang]
   const data = new Map([['next-actions', { model }], ['turn-tail', { closing: closing ? {} : undefined }]])
@@ -348,7 +446,7 @@ function renderCard({ sent = null, end = true, closing = true, subagent = false,
   const tree = Card({
     turn: { turn: 1, end: endInfo, data },
     inputActions,
-    useInput: (select) => select({ draft }),
+    useInput: (select) => select({ draft, occurrences }),
     useChat: (select) => select({
       timeline: { turnOrder: [1, ...later.map(([turn]) => turn)], turns: new Map(later) },
     }),
@@ -438,6 +536,35 @@ test('chips are disabled without input actions and a click fills the draft', () 
   const chips = find(renderCard({ inputActions: input }), (node) => node.props?.className === 'dshna-chip')
   chips[0].props.onClick()
   assert.deepEqual(input.calls, [['setDraft', '跑一下测试。']])
+})
+
+test('a click after a space joins the same paragraph through the card', () => {
+  const hooks = mount()
+  const model = modelOf({ shown: true, context: 'c', suggestions: [
+    { label: '看日志', prompt: '先看日志。' },
+    { label: '跑测试', prompt: '跑一下测试。' },
+  ] })
+  const input = actions({ insertion: { start: 6, end: 6, draftRev: 7 } })
+  chipsOf(renderCard({ inputActions: input, model, hooks }))[0].props.onClick()
+  chipsOf(renderCard({ inputActions: input, model, draft: '先看日志。 ', hooks }))[1].props.onClick()
+  assert.deepEqual(input.calls, [
+    ['setDraft', '先看日志。'],
+    ['setDraft', '先看日志。跑一下测试。'],
+  ])
+})
+
+test('after the signal a click without whitespace appends with a blank line', () => {
+  const hooks = mount()
+  const model = modelOf({ shown: true, context: 'c', suggestions: [
+    { label: '看日志', prompt: '先看日志。' },
+    { label: '跑测试', prompt: '跑一下测试。' },
+  ] })
+  const input = actions({ insertion: { start: 6, end: 6, draftRev: 7 } })
+  chipsOf(renderCard({ inputActions: input, model, hooks }))[0].props.onClick()
+  chipsOf(renderCard({ inputActions: input, model, draft: '先看日志。 ', hooks }))[1].props.onClick()
+  const after = actions({ insertion: { start: 11, end: 11, draftRev: 7 } })
+  chipsOf(renderCard({ inputActions: after, model, draft: '先看日志。跑一下测试。', hooks }))[0].props.onClick()
+  assert.deepEqual(after.calls, [['insertText', '\n\n先看日志。', { start: 11, end: 11, draftRev: 7 }]])
 })
 
 const chipsOf = (tree) => find(tree, (node) => node.props?.className === 'dshna-chip')
