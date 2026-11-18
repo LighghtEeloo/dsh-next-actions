@@ -1,45 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="196" viewBox="0 0 720 196" role="img" aria-label="下一步建议卡片示意：一行上下文和三个按钮，分别带推荐、已使用、需确认标记">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="428" viewBox="0 0 720 428" role="img" aria-label="下一步建议示意：上一轮的卡片已折叠成一行，标出原样发送（✓）与改后发送（✎）的建议；本轮回答末尾是当前卡片：一行上下文，推荐、普通、需确认三个按钮">
   <style>
-    text { font-family: system-ui, -apple-system, "PingFang SC", "Noto Sans CJK SC", "Helvetica Neue", sans-serif; }
-    .muted { fill: #8f959e; font-size: 12px; }
-    .reply { fill: #5f6673; font-size: 13px; }
-    .context { fill: #5f6673; font-size: 13px; }
-    .label { fill: #1f2329; font-size: 13px; }
-    .label-used { fill: #5f6673; font-size: 13px; }
+    text { font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+    .mono { font-family: Menlo, Consolas, "SF Mono", monospace; }
   </style>
-  <rect x="0.5" y="0.5" width="719" height="195" rx="14" fill="#f6f7f9" stroke="#e4e6ea" stroke-width="0.75"/>
-  <text class="reply" x="28" y="38">助手回答……</text>
-  <text class="muted" x="28" y="64">▸  下一步建议 · 已生成 · 3</text>
-  <rect x="28" y="76" width="664" height="96" rx="12" fill="#ffffff" stroke="#e0e2e6" stroke-width="0.75"/>
-  <g transform="translate(48 92) scale(0.4444)">
+  <defs><filter id="shadow" x="-10%" y="-40%" width="120%" height="180%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.1"/></filter></defs>
+  <rect x="0.5" y="0.5" width="719" height="427" rx="14" fill="#ffffff" stroke="#e4e6ea" stroke-width="0.75"/>
+  <g transform="translate(32 32) scale(0.75)"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="#81858c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></g><g transform="translate(50 31) scale(0.3889)">
     <rect x="7" y="17.5" width="19" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/>
     <rect x="7" y="24" width="13" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/>
     <rect x="7" y="7" width="22" height="8.5" rx="2.5" fill="#5685E2"/>
     <path d="M11.75 8.85C12.08 10.37 12.63 10.92 14.15 11.25C12.63 11.58 12.08 12.13 11.75 13.65C11.42 12.13 10.87 11.58 9.35 11.25C10.87 10.92 11.42 10.37 11.75 8.85Z" fill="#FFFFFF"/>
     <path d="M16 11.25H25" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
-  </g>
-  <text class="context" x="70" y="104">修复已完成，改动集中在 src/api；目前只跑了类型检查。</text>
-  <g>
-    <rect x="48" y="118" width="118" height="32" rx="6" fill="#ffffff" stroke="#7fa7ff" stroke-width="0.75"/>
-    <g transform="translate(60 128) scale(0.75)">
-      <path d="M8 2.5C8.4 5.6 10.4 7.6 13.5 8 10.4 8.4 8.4 10.4 8 13.5 7.6 10.4 5.6 8.4 2.5 8 5.6 7.6 7.6 5.6 8 2.5Z" fill="#3370ff"/>
-    </g>
-    <text class="label" x="76" y="139">跑一下测试</text>
-  </g>
-  <g>
-    <rect x="174" y="118" width="118" height="32" rx="6" fill="#ffffff" stroke="#d9dbe0" stroke-width="0.75"/>
-    <g transform="translate(186 128) scale(0.75)">
-      <path d="M3.5 8.5 6.5 11.5 12.5 4.5" fill="none" stroke="#2ea121" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-    <text class="label-used" x="202" y="139">补回归用例</text>
-  </g>
-  <g>
-    <rect x="300" y="118" width="118" height="32" rx="6" fill="#ffffff" stroke="#d9dbe0" stroke-width="0.75"/>
-    <g transform="translate(312 128) scale(0.75)">
-      <path d="M8 1.8 14.6 13.2H1.4L8 1.8Z" fill="none" stroke="#ff8800" stroke-width="1.2" stroke-linejoin="round"/>
-      <path d="M8 6v3.4" stroke="#ff8800" stroke-width="1.2" stroke-linecap="round"/>
-      <circle cx="8" cy="11.4" r="0.7" fill="#ff8800"/>
-    </g>
-    <text class="label" x="328" y="139">推送到远端</text>
-  </g>
+  </g><text x="70.0" y="42.5" font-size="13" fill="#81858c">下一步建议</text><text x="144.9" y="42.5" font-size="13" fill="#81858c">·</text><g transform="translate(154.9 32) scale(0.75)"><path d="M3.5 8.5 6.5 11.5 12.5 4.5" fill="none" stroke="#1b8642" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g><text x="170.9" y="42.5" font-size="13" fill="#81858c">跑一下测试</text><g transform="translate(249.8 32) scale(0.75)"><path d="M10.5 3 13 5.5 6 12.5 3 13l.5-3L10.5 3Z" fill="none" stroke="#1b8642" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></g><text x="265.8" y="42.5" font-size="13" fill="#81858c">补回归用例</text><rect x="377" y="76" width="311" height="84" rx="16" fill="#edf3fe"/><text x="391.0" y="101.0" font-size="14" fill="#0f1115">运行全部测试，修复失败的用例</text><text x="391.0" y="145.0" font-size="14" fill="#0f1115">为分页越界补一条回归用例，放在 test/api 下</text><text x="32.0" y="193.0" font-size="14" fill="#81858c">已完成，用时 </text><text x="123.9" y="193" font-size="13" fill="#81858c" class="mono">1m 12s</text><g transform="translate(175.92000000000002 181) scale(0.875)"><path d="M4 6l4 4 4-4" fill="none" stroke="#81858c" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></g><path d="M32 209H688" stroke="#000000" stroke-opacity="0.1" stroke-width="0.75"/><text x="32.0" y="238.0" font-size="14" fill="#0f1115">42 项测试全部通过；回归用例放在 test/api/list.test.ts。</text><rect x="32.25" y="265.25" width="655.5" height="94.5" rx="16" fill="#ffffff" stroke="#000000" stroke-opacity="0.1" stroke-width="0.75"/><g transform="translate(52 281) scale(0.4444)">
+    <rect x="7" y="17.5" width="19" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/>
+    <rect x="7" y="24" width="13" height="5" rx="2" fill="#7CB7FF" fill-opacity="0.55"/>
+    <rect x="7" y="7" width="22" height="8.5" rx="2.5" fill="#5685E2"/>
+    <path d="M11.75 8.85C12.08 10.37 12.63 10.92 14.15 11.25C12.63 11.58 12.08 12.13 11.75 13.65C11.42 12.13 10.87 11.58 9.35 11.25C10.87 10.92 11.42 10.37 11.75 8.85Z" fill="#FFFFFF"/>
+    <path d="M16 11.25H25" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  </g><text x="74.0" y="294.5" font-size="13" fill="#61666b">测试全部通过，新增 1 条回归用例；改动还没有提交。</text><rect x="52.25" y="312.25" width="93.5" height="31.5" rx="8" fill="#ffffff" stroke="#4176e6" stroke-opacity="0.6" stroke-width="0.75"/><g transform="translate(64 322) scale(0.75)"><path d="M8 2.5C8.4 5.6 10.4 7.6 13.5 8 10.4 8.4 8.4 10.4 8 13.5 7.6 10.4 5.6 8.4 2.5 8 5.6 7.6 7.6 5.6 8 2.5Z" fill="#4176e6"/></g><text x="80.0" y="332.5" font-size="13" fill="#0f1115">提交改动</text><rect x="154.25" y="312.25" width="133.5" height="31.5" rx="8" fill="#ffffff" stroke="#000000" stroke-opacity="0.12" stroke-width="0.75"/><text x="166.0" y="332.5" font-size="13" fill="#0f1115">更新 CHANGELOG</text><rect x="296.25" y="312.25" width="106.5" height="31.5" rx="8" fill="#ffffff" stroke="#000000" stroke-opacity="0.12" stroke-width="0.75"/><g transform="translate(308 322) scale(0.75)"><path d="M8 1.8 14.6 13.2H1.4L8 1.8Z" fill="none" stroke="#955d22" stroke-width="1.2" stroke-linejoin="round"/><path d="M8 6v3.4" stroke="#955d22" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="11.4" r="0.7" fill="#955d22"/></g><text x="324.0" y="332.5" font-size="13" fill="#0f1115">推送到远端</text><g transform="translate(32 386) scale(1)"><g fill="none" stroke="#81858c" stroke-width="1.2" stroke-linejoin="round"><rect x="5.25" y="5.25" width="8.5" height="8.5" rx="2"/><path d="M3 10.5V4A1.75 1.75 0 0 1 4.75 2.25h5.75" stroke-linecap="round"/></g></g><g transform="translate(68 386) scale(1)"><g fill="none" stroke="#81858c" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.2 8.6A5.25 5.25 0 1 1 11.5 4"/><path d="M12 1.8v2.7H9.3"/></g></g><text x="104.0" y="398.5" font-size="12" fill="#81858c">14:36</text>
 </svg>
