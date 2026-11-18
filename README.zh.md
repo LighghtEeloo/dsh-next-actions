@@ -8,7 +8,7 @@
 模型这时最清楚刚发生了什么，这个 DSH 插件就让它在回答末尾顺手给出一到三条下一步：
 点一下，完整的指令就放进输入框；原样用、改几个字，还是干脆不用，都由你决定。插件从不替你发送。
 
-**状态：v0.1.7（npm 包：[dsh-next-actions](https://www.npmjs.com/package/dsh-next-actions)）。** 设计与理念见 [`DESIGN.md`](DESIGN.md)，版本记录见 [`CHANGELOG.md`](CHANGELOG.md)。
+**状态：v0.1.8（npm 包：[dsh-next-actions](https://www.npmjs.com/package/dsh-next-actions)）。** 设计与理念见 [`DESIGN.md`](DESIGN.md)，版本记录见 [`CHANGELOG.md`](CHANGELOG.md)。
 
 ## 安装
 

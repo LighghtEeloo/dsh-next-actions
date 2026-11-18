@@ -8,7 +8,7 @@ When a turn wraps up, you usually have to work out what to say next and then typ
 The model knows best what just happened, so this DSH plugin has it offer one to three next steps at the end of its reply.
 Click one and the full instruction lands in your input box; use it as is, change a few words, or ignore it. The plugin never sends anything for you.
 
-**Status: v0.1.7 (npm package: [dsh-next-actions](https://www.npmjs.com/package/dsh-next-actions)).**
+**Status: v0.1.8 (npm package: [dsh-next-actions](https://www.npmjs.com/package/dsh-next-actions)).**
 See [`DESIGN.md`](DESIGN.md) for the design and rationale, and [`CHANGELOG.md`](CHANGELOG.md) for release notes.
 
 ## Install
